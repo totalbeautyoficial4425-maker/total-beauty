@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-rose-primary: #C58F9B;
+    --color-rose-light: #E8CDD2;
+    --color-rose-blush: #F4E6E8;
+    --color-beige-champagne: #E7D9C8;
+    --color-beige-light: #F5EFE7;
+    --color-brown-soft: #8A7064;
+    --color-brown-dark: #493A35;
+    --color-gray-neutral: #817A77;
+  }
+
+  body {
+    background-color: #FFFCFA;
+    color: #493A35;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  h1, h2, h3, .font-serif-brand {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F5EFE7;
+}
+::-webkit-scrollbar-thumb {
+  background: #E8CDD2;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C58F9B;
+}
+
+/* Print Styles for Reports */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  .no-print, header, aside, button, nav {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-break {
+    page-break-after: always;
+  }
+}
