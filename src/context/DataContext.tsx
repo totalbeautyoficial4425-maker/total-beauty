@@ -68,6 +68,7 @@ interface DataContextType {
     password?: string 
   }) => { success: boolean; professional?: Professional; error?: string };
   updateProfessional: (id: string, data: Partial<Professional> & { password?: string }) => { success: boolean; error?: string };
+  deleteProfessional: (id: string) => { success: boolean; error?: string };
   getProfessionalMetrics: (professionalId: string) => ProfessionalMetrics;
 
   // Appointments
@@ -363,6 +364,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const nextProfessionals = professionals.map(p => (p.id === id ? { ...p, ...data } : p));
+    setProfessionals(nextProfessionals);
+    storageService.saveProfessionals(nextProfessionals);
+    return { success: true };
+  };
+
+  const deleteProfessional = (id: string) => {
+    const prof = professionals.find(p => p.id === id);
+    if (!prof) return { success: false, error: 'Profissional não encontrada.' };
+
+    if (prof.userId) {
+      const users = storageService.getUsers();
+      const nextUsers = users.filter(u => u.id !== prof.userId);
+      storageService.saveUsers(nextUsers);
+    }
+
+    const nextProfessionals = professionals.filter(p => p.id !== id);
     setProfessionals(nextProfessionals);
     storageService.saveProfessionals(nextProfessionals);
     return { success: true };
@@ -897,6 +914,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toggleServiceActive,
         addProfessional,
         updateProfessional,
+        deleteProfessional,
         getProfessionalMetrics,
         checkConflict,
         addAppointment,

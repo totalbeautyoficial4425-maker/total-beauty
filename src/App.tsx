@@ -15,6 +15,7 @@ import { FinanceiroPage } from './pages/FinanceiroPage';
 import { RelatoriosPage } from './pages/RelatoriosPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { MinhaProducaoPage } from './pages/MinhaProducaoPage';
+import { ProfissionaisPage } from './pages/ProfissionaisPage';
 
 // Modals
 import { AppointmentModal } from './components/modals/AppointmentModal';
@@ -201,6 +202,10 @@ export const AppContent: React.FC = () => {
               onOpenNewService={handleOpenNewService}
               onEditService={handleEditService}
             />
+          )}
+
+          {currentPage === 'profissionais' && (
+            <ProfissionaisPage />
           )}
 
           {currentPage === 'atendimentos' && (

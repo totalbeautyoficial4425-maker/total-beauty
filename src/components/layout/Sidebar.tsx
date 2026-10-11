@@ -10,7 +10,8 @@ import {
   Settings, 
   X,
   Database,
-  CheckCircle2
+  CheckCircle2,
+  UserCheck
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { getFirebaseInstance } from '../../services/firebase';
@@ -45,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'agenda', label: 'Agenda', icon: CalendarDays },
         { id: 'clientes', label: 'Clientes', icon: Users },
         { id: 'servicos', label: 'Serviços', icon: Sparkles },
+        { id: 'profissionais', label: 'Profissionais', icon: UserCheck },
         { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
         { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },

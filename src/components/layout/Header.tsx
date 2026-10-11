@@ -29,6 +29,7 @@ const PAGE_TITLES: Record<NavigationPage, string> = {
   agenda: 'Agenda Inteligente',
   clientes: 'Gestão de Clientes',
   servicos: 'Catálogo de Serviços',
+  profissionais: 'Gestão da Equipe & Comissões',
   atendimentos: 'Atendimentos & Execução',
   financeiro: 'Fluxo Financeiro',
   relatorios: 'Relatórios Gerenciais',

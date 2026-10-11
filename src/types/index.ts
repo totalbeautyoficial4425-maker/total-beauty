@@ -217,6 +217,7 @@ export type NavigationPage =
   | 'agenda' 
   | 'clientes' 
   | 'servicos' 
+  | 'profissionais' 
   | 'atendimentos' 
   | 'financeiro' 
   | 'relatorios' 
