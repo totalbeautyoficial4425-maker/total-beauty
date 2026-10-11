@@ -12,14 +12,14 @@ import {
 import { getFirebaseInstance, syncCollectionToFirestore, fetchCollectionFromFirestore } from './firebase';
 
 const STORAGE_KEYS = {
-  USERS: 'tb_users_v1',
+  USERS: 'tb_users_v2', // v2 to cleanly support professional user accounts
   AUTH_SESSION: 'tb_session_v1',
   CLIENTS: 'tb_clients_v1',
-  SERVICES: 'tb_services_v1',
-  PROFESSIONALS: 'tb_professionals_v1',
+  SERVICES: 'tb_services_v2', // v2 to include commission percentages
+  PROFESSIONALS: 'tb_professionals_v2', // v2 to include login and commission
   APPOINTMENTS: 'tb_appointments_v1',
   ATTENDANCES: 'tb_attendances_v1',
-  PAYMENTS: 'tb_payments_v1',
+  PAYMENTS: 'tb_payments_v2', // v2 to include professional commission links
   EXPENSES: 'tb_expenses_v1',
   SETTINGS: 'tb_settings_v1',
   LOGIN_ATTEMPTS: 'tb_login_attempts_v1'
@@ -38,14 +38,54 @@ export function hashPassword(password: string): string {
   return `sha256_${Math.abs(hash).toString(16)}_${str.length}`;
 }
 
-const DEFAULT_USERS: User[] = [
+export const DEFAULT_USERS: User[] = [
   {
     id: 'user_admin_01',
     username: 'admin',
     email: 'gestao@totalbeautyoficial.com.br',
     name: 'Administradora Total Beauty',
     role: 'admin',
-    forcePasswordChange: true, // Requires change on first access as requested!
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_01',
+    username: 'gabriela',
+    email: 'gabriela@totalbeautyoficial.com.br',
+    name: 'Gabriela Prado',
+    role: 'profissional',
+    professionalId: 'prof_1',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_02',
+    username: 'larissa',
+    email: 'larissa@totalbeautyoficial.com.br',
+    name: 'Larissa Mendes',
+    role: 'profissional',
+    professionalId: 'prof_2',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_03',
+    username: 'camila',
+    email: 'camila@totalbeautyoficial.com.br',
+    name: 'Camila Rocha',
+    role: 'profissional',
+    professionalId: 'prof_3',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_04',
+    username: 'amanda',
+    email: 'amanda@totalbeautyoficial.com.br',
+    name: 'Amanda Valença',
+    role: 'profissional',
+    professionalId: 'prof_4',
+    forcePasswordChange: false,
     createdAt: new Date().toISOString(),
   }
 ];
@@ -58,6 +98,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Lavagem com massagem craniana, nutrição profunda e escova com acabamento premium.',
     price: 140.00,
     durationMinutes: 60,
+    commissionPercentage: 50, // 50% de comissão
     isActive: true,
   },
   {
@@ -67,6 +108,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Técnica personalizada de morena iluminada com plex reconstrutor e finalização.',
     price: 490.00,
     durationMinutes: 180,
+    commissionPercentage: 60, // 60% de comissão
     isActive: true,
   },
   {
@@ -76,6 +118,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Análise de formato facial, corte de alta precisão e styling com ondas.',
     price: 160.00,
     durationMinutes: 60,
+    commissionPercentage: 50, // 50% de comissão
     isActive: true,
   },
   {
@@ -85,6 +128,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Estrutura ultra fina, nivelamento perfeito e esmaltação em gel de alta durabilidade.',
     price: 220.00,
     durationMinutes: 120,
+    commissionPercentage: 50, // 50% de comissão
     isActive: true,
   },
   {
@@ -94,6 +138,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Esfoliação com óleos essenciais, hidratação profunda, cuticulagem e esmaltação.',
     price: 95.00,
     durationMinutes: 50,
+    commissionPercentage: 45, // 45% de comissão
     isActive: true,
   },
   {
@@ -103,6 +148,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Mapeamento facial simétrico, alinhamento dos fios e aplicação de henna orgânica.',
     price: 85.00,
     durationMinutes: 40,
+    commissionPercentage: 40, // 40% de comissão
     isActive: true,
   },
   {
@@ -112,6 +158,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Aplicação fio a fio premium, curvatura e densidade elegante e leve.',
     price: 190.00,
     durationMinutes: 90,
+    commissionPercentage: 50, // 50% de comissão
     isActive: true,
   },
   {
@@ -121,6 +168,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Pele blindada resistente à água, olhos esfumados com acabamento de alta definição.',
     price: 250.00,
     durationMinutes: 75,
+    commissionPercentage: 55, // 55% de comissão
     isActive: true,
   },
   {
@@ -130,6 +178,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Extração indolor, alta frequência, hidratação biocompatível e fototerapia.',
     price: 210.00,
     durationMinutes: 80,
+    commissionPercentage: 50, // 50% de comissão
     isActive: true,
   }
 ];
@@ -142,6 +191,9 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     phone: '(11) 98765-4301',
     color: '#C58F9B',
     isActive: true,
+    userId: 'user_prof_01',
+    username: 'gabriela',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_2',
@@ -150,6 +202,9 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     phone: '(11) 98765-4302',
     color: '#8A7064',
     isActive: true,
+    userId: 'user_prof_02',
+    username: 'larissa',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_3',
@@ -158,6 +213,9 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     phone: '(11) 98765-4303',
     color: '#E7D9C8',
     isActive: true,
+    userId: 'user_prof_03',
+    username: 'camila',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_4',
@@ -166,6 +224,9 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     phone: '(11) 98765-4304',
     color: '#E8CDD2',
     isActive: true,
+    userId: 'user_prof_04',
+    username: 'amanda',
+    commissionPercentage: 50,
   }
 ];
 
@@ -396,12 +457,16 @@ export function generateSeedPayments(): PaymentTransaction[] {
       clientId: 'cli_1',
       clientName: 'Juliana Silva Ferreira',
       serviceName: 'Escova Modelada & Nutrição Glow',
+      professionalId: 'prof_1',
+      professionalName: 'Gabriela Prado',
       description: 'Atendimento Concluído - Juliana Silva',
       grossValue: 140.00,
       discount: 0,
       netValue: 140.00,
       paidAmount: 140.00,
       pendingAmount: 0,
+      commissionPercentage: 50,
+      commissionAmount: 70.00, // 50% de R$ 140
       paymentMethod: 'pix',
       status: 'pago',
       date: today,
@@ -413,12 +478,16 @@ export function generateSeedPayments(): PaymentTransaction[] {
       clientId: 'cli_5',
       clientName: 'Carolina Martins',
       serviceName: 'Extensão de Cílios Efeito Rímel',
+      professionalId: 'prof_3',
+      professionalName: 'Camila Rocha',
       description: 'Atendimento Concluído - Carolina Martins',
       grossValue: 190.00,
       discount: 10.00,
       netValue: 180.00,
       paidAmount: 180.00,
       pendingAmount: 0,
+      commissionPercentage: 50,
+      commissionAmount: 90.00, // 50% de R$ 180
       paymentMethod: 'cartao_credito',
       status: 'pago',
       date: today,
@@ -430,12 +499,16 @@ export function generateSeedPayments(): PaymentTransaction[] {
       clientId: 'cli_4',
       clientName: 'Beatriz Fontes',
       serviceName: 'Corte Visagista & Finalização',
+      professionalId: 'prof_1',
+      professionalName: 'Gabriela Prado',
       description: 'Atendimento Realizado - Beatriz Fontes',
       grossValue: 160.00,
       discount: 0,
       netValue: 160.00,
       paidAmount: 160.00,
       pendingAmount: 0,
+      commissionPercentage: 50,
+      commissionAmount: 80.00, // 50% de R$ 160
       paymentMethod: 'cartao_debito',
       status: 'pago',
       date: '2025-02-10',
@@ -504,15 +577,26 @@ export function generateSeedExpenses(): Expense[] {
 export const storageService = {
   getUsers(): User[] {
     const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-    if (!raw) {
-      // Store default demo user
-      const users = [...DEFAULT_USERS];
+    let users: User[] = raw ? JSON.parse(raw) : [];
+
+    // Ensure all default users (Admin + Professionals) are registered
+    let modified = false;
+    DEFAULT_USERS.forEach(defUser => {
+      if (!users.some(u => u.username.toLowerCase() === defUser.username.toLowerCase())) {
+        users.push(defUser);
+        modified = true;
+        // Set initial password hash
+        if (!localStorage.getItem('tb_pwd_' + defUser.id)) {
+          const defaultPlain = defUser.role === 'admin' ? 'admin123' : `${defUser.username}123`;
+          localStorage.setItem('tb_pwd_' + defUser.id, hashPassword(defaultPlain));
+        }
+      }
+    });
+
+    if (modified || !raw) {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-      // Store initial hash
-      localStorage.setItem('tb_pwd_' + users[0].id, hashPassword('admin123'));
-      return users;
     }
-    return JSON.parse(raw);
+    return users;
   },
 
   saveUsers(users: User[]): void {
@@ -521,7 +605,9 @@ export const storageService = {
   },
 
   getUserPasswordHash(userId: string): string | null {
-    return localStorage.getItem('tb_pwd_' + userId) || hashPassword('admin123');
+    const user = this.getUsers().find(u => u.id === userId);
+    const defaultPlain = user?.role === 'admin' ? 'admin123' : `${user?.username || 'prof'}123`;
+    return localStorage.getItem('tb_pwd_' + userId) || hashPassword(defaultPlain);
   },
 
   setUserPassword(userId: string, newPlainPassword: string): void {
@@ -549,7 +635,12 @@ export const storageService = {
       localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
       return INITIAL_SERVICES;
     }
-    return JSON.parse(raw);
+    const services: Service[] = JSON.parse(raw);
+    // Ensure commission percentage is present
+    return services.map(s => ({
+      ...s,
+      commissionPercentage: s.commissionPercentage ?? 50,
+    }));
   },
 
   saveServices(services: Service[]): void {
@@ -563,7 +654,11 @@ export const storageService = {
       localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
       return INITIAL_PROFESSIONALS;
     }
-    return JSON.parse(raw);
+    const profs: Professional[] = JSON.parse(raw);
+    return profs.map(p => ({
+      ...p,
+      commissionPercentage: p.commissionPercentage ?? 50,
+    }));
   },
 
   saveProfessionals(professionals: Professional[]): void {
@@ -645,8 +740,9 @@ export const storageService = {
 
   exportFullBackup(): string {
     const data = {
-      version: '1.0',
+      version: '2.0',
       exportedAt: new Date().toISOString(),
+      users: this.getUsers(),
       clients: this.getClients(),
       services: this.getServices(),
       professionals: this.getProfessionals(),
@@ -662,6 +758,7 @@ export const storageService = {
   importFullBackup(jsonContent: string): boolean {
     try {
       const parsed = JSON.parse(jsonContent);
+      if (parsed.users) this.saveUsers(parsed.users);
       if (parsed.clients) this.saveClients(parsed.clients);
       if (parsed.services) this.saveServices(parsed.services);
       if (parsed.professionals) this.saveProfessionals(parsed.professionals);

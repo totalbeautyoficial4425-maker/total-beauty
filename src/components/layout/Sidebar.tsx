@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { getFirebaseInstance } from '../../services/firebase';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   currentPage: NavigationPage;
@@ -28,18 +29,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
+  const { currentUser } = useAuth();
   const { isConnected: isFirebaseConnected } = getFirebaseInstance();
 
-  const menuItems: { id: NavigationPage; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'agenda', label: 'Agenda', icon: CalendarDays },
-    { id: 'clientes', label: 'Clientes', icon: Users },
-    { id: 'servicos', label: 'Serviços', icon: Sparkles },
-    { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
-    { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
-    { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
-    { id: 'configuracoes', label: 'Configurações', icon: Settings },
-  ];
+  const isProfessional = currentUser?.role === 'profissional';
+
+  const menuItems: { id: NavigationPage; label: string; icon: React.FC<{ className?: string }> }[] = isProfessional
+    ? [
+        { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
+        { id: 'agenda', label: 'Agenda Geral', icon: CalendarDays },
+        { id: 'minha-producao', label: 'Minha Produção', icon: DollarSign },
+      ]
+    : [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'agenda', label: 'Agenda', icon: CalendarDays },
+        { id: 'clientes', label: 'Clientes', icon: Users },
+        { id: 'servicos', label: 'Serviços', icon: Sparkles },
+        { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
+        { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
+        { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
+        { id: 'configuracoes', label: 'Configurações', icon: Settings },
+      ];
 
   const handleItemClick = (page: NavigationPage) => {
     onNavigate(page);

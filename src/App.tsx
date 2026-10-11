@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { NavigationPage, Appointment, Client, Service, Attendance, Expense } from './types';
 import { Sidebar } from './components/layout/Sidebar';
@@ -14,6 +14,7 @@ import { AtendimentosPage } from './pages/AtendimentosPage';
 import { FinanceiroPage } from './pages/FinanceiroPage';
 import { RelatoriosPage } from './pages/RelatoriosPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
+import { MinhaProducaoPage } from './pages/MinhaProducaoPage';
 
 // Modals
 import { AppointmentModal } from './components/modals/AppointmentModal';
@@ -26,11 +27,21 @@ import { WhatsAppModal } from './components/common/WhatsAppModal';
 import { ChangePasswordModal } from './components/common/ChangePasswordModal';
 
 export const AppContent: React.FC = () => {
-  const { isAuthenticated, requiresPasswordChange } = useAuth();
+  const { isAuthenticated, requiresPasswordChange, currentUser } = useAuth();
 
   // Navigation
   const [currentPage, setCurrentPage] = useState<NavigationPage>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Role protection guard: prevent professionals from opening administrative routes
+  useEffect(() => {
+    if (currentUser?.role === 'profissional') {
+      const allowedPages: NavigationPage[] = ['dashboard', 'agenda', 'minha-producao'];
+      if (!allowedPages.includes(currentPage)) {
+        setCurrentPage('dashboard');
+      }
+    }
+  }, [currentUser, currentPage]);
 
   // Modal States
   // 1. Appointment Modal
@@ -214,6 +225,10 @@ export const AppContent: React.FC = () => {
             <ConfiguracoesPage
               onOpenChangePassword={() => setIsChangePasswordOpen(true)}
             />
+          )}
+
+          {currentPage === 'minha-producao' && (
+            <MinhaProducaoPage />
           )}
         </main>
       </div>

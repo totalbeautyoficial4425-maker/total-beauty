@@ -6,6 +6,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  professionalId?: string; // Link to professional profile if role === 'profissional'
   forcePasswordChange: boolean;
   createdAt: string;
   lastLogin?: string;
@@ -52,6 +53,7 @@ export interface Service {
   description: string;
   price: number;
   durationMinutes: number;
+  commissionPercentage: number; // Percentual de comissão do serviço (ex: 50%)
   isActive: boolean;
   internalNotes?: string;
 }
@@ -63,6 +65,9 @@ export interface Professional {
   phone: string;
   color: string;
   isActive: boolean;
+  userId?: string; // ID da conta de usuário
+  username?: string; // Nome de usuário para login
+  commissionPercentage?: number; // % padrão de comissão da profissional
 }
 
 export type AppointmentStatus = 
@@ -111,6 +116,8 @@ export interface Attendance {
   discountValue: number;
   discountType: 'fixed' | 'percentage';
   netValue: number;
+  commissionPercentage: number; // Percentual de comissão aplicada (ex: 50%)
+  commissionAmount: number; // Valor calculado em R$ da comissão
   notes?: string;
   paymentStatus: 'pago' | 'pendente' | 'parcial';
   paidAmount: number;
@@ -132,12 +139,16 @@ export interface PaymentTransaction {
   clientId?: string;
   clientName?: string;
   serviceName?: string;
+  professionalId?: string;
+  professionalName?: string;
   description: string;
   grossValue: number;
   discount: number;
   netValue: number;
   paidAmount: number;
   pendingAmount: number;
+  commissionPercentage?: number;
+  commissionAmount?: number;
   paymentMethod: PaymentMethod;
   status: 'pago' | 'pendente' | 'parcial';
   date: string; // YYYY-MM-DD
@@ -209,4 +220,5 @@ export type NavigationPage =
   | 'atendimentos' 
   | 'financeiro' 
   | 'relatorios' 
-  | 'configuracoes';
+  | 'configuracoes'
+  | 'minha-producao'; // Nova página exclusiva das profissionais

@@ -31,6 +31,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState(0);
   const [durationMinutes, setDurationMinutes] = useState(60);
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(50);
   const [isActive, setIsActive] = useState(true);
   const [internalNotes, setInternalNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
         setDescription(serviceToEdit.description);
         setPrice(serviceToEdit.price);
         setDurationMinutes(serviceToEdit.durationMinutes);
+        setCommissionPercentage(serviceToEdit.commissionPercentage ?? 50);
         setIsActive(serviceToEdit.isActive);
         setInternalNotes(serviceToEdit.internalNotes || '');
       } else {
@@ -51,6 +53,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
         setDescription('');
         setPrice(120);
         setDurationMinutes(60);
+        setCommissionPercentage(50);
         setIsActive(true);
         setInternalNotes('');
       }
@@ -82,6 +85,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
         description: description.trim(),
         price,
         durationMinutes,
+        commissionPercentage,
         isActive,
         internalNotes: internalNotes.trim(),
       });
@@ -96,6 +100,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
         description: description.trim(),
         price,
         durationMinutes,
+        commissionPercentage,
         isActive,
         internalNotes: internalNotes.trim(),
       });
@@ -210,17 +215,39 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
               />
             </div>
 
-            <div className="flex items-center pt-5">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-tb-brown-dark">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={e => setIsActive(e.target.checked)}
-                  className="rounded text-tb-rose-primary focus:ring-tb-rose-primary"
-                />
-                <span>Serviço ativo para novos agendamentos</span>
+            <div>
+              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
+                Comissão da Profissional (%) *
               </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  required
+                  value={commissionPercentage}
+                  onChange={e => setCommissionPercentage(parseFloat(e.target.value) || 0)}
+                  className="w-full text-xs sm:text-sm pl-3.5 pr-8 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary font-semibold"
+                />
+                <span className="absolute right-3.5 top-2.5 text-xs text-tb-gray-neutral font-bold">%</span>
+              </div>
+              <span className="text-[10px] text-tb-rose-primary font-semibold mt-1 block">
+                Comissão: R$ {((price * commissionPercentage) / 100).toFixed(2)} por procedimento
+              </span>
             </div>
+          </div>
+
+          <div className="flex items-center">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-tb-brown-dark">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={e => setIsActive(e.target.checked)}
+                className="rounded text-tb-rose-primary focus:ring-tb-rose-primary"
+              />
+              <span>Serviço ativo para novos agendamentos no catálogo</span>
+            </label>
           </div>
 
           <div>

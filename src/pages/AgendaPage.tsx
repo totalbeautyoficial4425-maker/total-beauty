@@ -20,6 +20,7 @@ import {
   Search
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { Appointment, AppointmentStatus } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime } from '../utils/formatters';
 
@@ -52,6 +53,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   onEditAppointment,
   onOpenWhatsApp,
 }) => {
+  const { currentUser } = useAuth();
   const { 
     appointments, 
     professionals, 
@@ -60,6 +62,13 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     cancelAppointment, 
     startAttendance 
   } = useData();
+
+  const isProfessional = currentUser?.role === 'profissional';
+  const myProfId = professionals.find(p => 
+    p.id === currentUser?.professionalId || 
+    p.userId === currentUser?.id || 
+    p.name.toLowerCase() === currentUser?.name.toLowerCase()
+  )?.id;
 
   const [viewMode, setViewMode] = useState<ViewMode>('dia');
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -230,7 +239,35 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
           />
         </div>
 
-        {/* Professional filter */}
+        {/* Quick filter toggle for professional */}
+        {isProfessional && myProfId && (
+          <div className="flex bg-tb-ivory p-1 rounded-xl border border-tb-rose-light/60">
+            <button
+              type="button"
+              onClick={() => setSelectedProfessional('todos')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedProfessional === 'todos'
+                  ? 'bg-tb-rose-primary text-white shadow-xs'
+                  : 'text-tb-brown-soft hover:text-tb-brown-dark'
+              }`}
+            >
+              Agenda Geral (Salão)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedProfessional(myProfId)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedProfessional === myProfId
+                  ? 'bg-tb-rose-primary text-white shadow-xs'
+                  : 'text-tb-brown-soft hover:text-tb-brown-dark'
+              }`}
+            >
+              Meus Atendimentos
+            </button>
+          </div>
+        )}
+
+        {/* Professional filter dropdown */}
         <select
           value={selectedProfessional}
           onChange={e => setSelectedProfessional(e.target.value)}
@@ -238,7 +275,9 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
         >
           <option value="todos">Todas as Profissionais</option>
           {professionals.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>
+              {p.name} {p.id === myProfId ? '(Você)' : ''}
+            </option>
           ))}
         </select>
 
@@ -315,6 +354,11 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                                 <span className="text-xs font-bold text-tb-brown-dark">
                                   {apt.clientName}
                                 </span>
+                                {isProfessional && apt.professionalId === myProfId && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-tb-rose-blush text-tb-rose-primary border border-tb-rose-light">
+                                    ★ Meu
+                                  </span>
+                                )}
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${statusMeta.badgeClass}`}>
                                   {statusMeta.label}
                                 </span>
@@ -328,7 +372,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                                 {apt.serviceName} • {apt.startTime} às {apt.endTime} ({apt.durationMinutes} min)
                               </p>
                               <p className="text-[10px] text-tb-gray-neutral">
-                                Profissional: <span className="font-medium text-tb-brown-dark">{apt.professionalName}</span> • {formatBRL(apt.price)}
+                                Profissional: <span className={`font-semibold ${isProfessional && apt.professionalId === myProfId ? 'text-tb-rose-primary' : 'text-tb-brown-dark'}`}>{apt.professionalName} {isProfessional && apt.professionalId === myProfId ? '(Você)' : ''}</span> • {formatBRL(apt.price)}
                               </p>
                             </div>
 

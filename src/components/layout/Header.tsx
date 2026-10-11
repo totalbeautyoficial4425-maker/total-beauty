@@ -33,6 +33,7 @@ const PAGE_TITLES: Record<NavigationPage, string> = {
   financeiro: 'Fluxo Financeiro',
   relatorios: 'Relatórios Gerenciais',
   configuracoes: 'Configurações da Empresa',
+  'minha-producao': 'Minha Produção & Comissões',
 };
 
 export const Header: React.FC<HeaderProps> = ({
@@ -103,7 +104,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div>
           <h1 className="font-serif-brand text-2xl font-bold text-tb-brown-dark leading-tight">
-            {PAGE_TITLES[currentPage]}
+            {currentUser?.role === 'profissional' && currentPage === 'dashboard'
+              ? 'Meu Painel'
+              : PAGE_TITLES[currentPage] || 'Total Beauty'}
           </h1>
           <p className="text-xs text-tb-gray-neutral capitalize flex items-center gap-1.5 mt-0.5">
             <Calendar className="w-3.5 h-3.5 text-tb-rose-primary" />
@@ -266,16 +269,29 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               <div className="py-1">
-                <button
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    onNavigate('configuracoes');
-                  }}
-                  className="w-full px-4 py-2 text-left text-xs text-tb-brown-soft hover:bg-tb-beige-light hover:text-tb-brown-dark flex items-center gap-2.5"
-                >
-                  <SettingsIcon className="w-4 h-4 text-tb-gray-neutral" />
-                  Configurações do Salão
-                </button>
+                {currentUser?.role === 'profissional' ? (
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      onNavigate('minha-producao');
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs text-tb-brown-soft hover:bg-tb-beige-light hover:text-tb-brown-dark flex items-center gap-2.5 font-medium"
+                  >
+                    <SettingsIcon className="w-4 h-4 text-tb-rose-primary" />
+                    Minha Produção & Comissões
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      onNavigate('configuracoes');
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs text-tb-brown-soft hover:bg-tb-beige-light hover:text-tb-brown-dark flex items-center gap-2.5"
+                  >
+                    <SettingsIcon className="w-4 h-4 text-tb-gray-neutral" />
+                    Configurações do Salão
+                  </button>
+                )}
 
                 <button
                   onClick={() => {

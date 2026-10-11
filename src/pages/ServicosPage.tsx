@@ -152,10 +152,17 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
                     <span className="font-semibold">{service.durationMinutes} min</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-base font-bold text-tb-rose-primary">
+                    <span className="text-base font-bold text-tb-rose-primary block">
                       {formatBRL(service.price)}
                     </span>
                   </div>
+                </div>
+
+                <div className="mt-2 px-3 py-1.5 bg-tb-rose-blush/40 rounded-xl border border-tb-rose-light/40 flex items-center justify-between text-[11px]">
+                  <span className="text-tb-brown-soft font-medium">Comissão da Profissional:</span>
+                  <span className="font-bold text-tb-brown-dark">
+                    {service.commissionPercentage ?? 50}% ({formatBRL(((service.price * (service.commissionPercentage ?? 50)) / 100))})
+                  </span>
                 </div>
 
                 {/* Card footer actions */}

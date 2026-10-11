@@ -21,6 +21,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { formatBRL, formatDateBR } from '../utils/formatters';
 import { Appointment, NavigationPage } from '../types';
 
@@ -39,7 +40,323 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onOpenWhatsApp,
   onOpenAppointmentDetails,
 }) => {
-  const { dashboardMetrics, financialSummary, appointments, clients, services, payments, expenses } = useData();
+  const { currentUser } = useAuth();
+  const { 
+    dashboardMetrics, 
+    financialSummary, 
+    appointments, 
+    clients, 
+    services, 
+    payments, 
+    expenses,
+    professionals,
+    getProfessionalMetrics 
+  } = useData();
+
+  // If logged in as professional, render individual private dashboard
+  if (currentUser?.role === 'profissional') {
+    const prof = professionals.find(p => 
+      p.id === currentUser.professionalId || 
+      p.userId === currentUser.id || 
+      p.name.toLowerCase() === currentUser.name.toLowerCase()
+    );
+    const profId = prof?.id || currentUser.professionalId || '';
+    const myMetrics = getProfessionalMetrics(profId);
+    const today = new Date().toISOString().split('T')[0];
+    const allTodayAppointments = appointments
+      .filter(a => a.date === today && !['cancelado', 'nao_compareceu'].includes(a.status))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    return (
+      <div className="space-y-8 animate-fade-in pb-12">
+        {/* Welcome Banner for Professional */}
+        <div className="rounded-3xl bg-gradient-to-r from-tb-rose-blush via-tb-beige-light to-tb-white p-6 sm:p-8 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary">
+                Painel da Profissional
+              </span>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-tb-rose-primary text-white">
+                {prof?.specialty || 'Especialista'}
+              </span>
+            </div>
+            <h2 className="font-serif-brand text-3xl sm:text-4xl font-bold text-tb-brown-dark leading-tight">
+              Olá, {currentUser.name}!
+            </h2>
+            <p className="text-xs sm:text-sm text-tb-brown-soft mt-1 max-w-xl">
+              Aqui está a sua contabilidade particular, comissões do dia e a agenda de atendimentos do salão.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <button
+              onClick={() => onNavigate('agenda')}
+              className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl border border-tb-rose-light bg-tb-white hover:bg-tb-ivory text-xs font-semibold text-tb-brown-dark transition-colors flex items-center justify-center gap-2"
+            >
+              <Calendar className="w-4 h-4 text-tb-rose-primary" />
+              Agenda Geral do Salão
+            </button>
+            <button
+              onClick={() => onNavigate('minha-producao')}
+              className="flex-1 md:flex-initial px-5 py-2.5 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-xs font-semibold text-white shadow-soft transition-all flex items-center justify-center gap-2"
+            >
+              <DollarSign className="w-4 h-4 stroke-[2.5]" />
+              Minha Produção Completa
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Cards de Métricas Particulares da Profissional */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Minha Comissão Hoje */}
+          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-tb-brown-soft">A Receber Hoje</span>
+              <div className="w-9 h-9 rounded-xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-tb-rose-primary">
+              {formatBRL(myMetrics.todayCommissions)}
+            </div>
+            <p className="text-[11px] text-tb-gray-neutral mt-1">
+              Liberado de atendimentos pagos hoje
+            </p>
+          </div>
+
+          {/* Card 2: Minha Produção no Mês */}
+          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-tb-brown-soft">Minha Comissão no Mês</span>
+              <div className="w-9 h-9 rounded-xl bg-tb-beige-light text-tb-brown-dark flex items-center justify-center">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-tb-brown-dark">
+              {formatBRL(myMetrics.monthCommissions)}
+            </div>
+            <p className="text-[11px] text-tb-gray-neutral mt-1">
+              Acumulado no mês corrente
+            </p>
+          </div>
+
+          {/* Card 3: Meus Atendimentos Hoje */}
+          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-tb-brown-soft">Meus Atendimentos Hoje</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <CalendarCheck className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-emerald-800">
+              {myMetrics.todayCompletedCount} / {myMetrics.todayAppointments.length}
+            </div>
+            <p className="text-[11px] text-tb-gray-neutral mt-1">
+              {myMetrics.todayCompletedCount} concluídos de {myMetrics.todayAppointments.length} agendados
+            </p>
+          </div>
+
+          {/* Card 4: Comissões Pendentes */}
+          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-tb-brown-soft">Comissões Pendentes</span>
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-amber-800">
+              {formatBRL(myMetrics.pendingCommissions)}
+            </div>
+            <p className="text-[11px] text-tb-gray-neutral mt-1">
+              Aguardando pagamento pelo cliente
+            </p>
+          </div>
+        </div>
+
+        {/* Grid de 2 Colunas: Meus Atendimentos vs Agenda Geral do Salão */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Coluna 1: Meus Atendimentos Hoje */}
+          <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                    Meus Agendamentos de Hoje
+                  </h3>
+                  <p className="text-[11px] text-tb-gray-neutral">
+                    Clientes sob sua responsabilidade hoje
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-tb-rose-blush text-tb-rose-primary">
+                {myMetrics.todayAppointments.length} cliente(s)
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {myMetrics.todayAppointments.length === 0 ? (
+                <div className="p-8 text-center bg-tb-ivory/50 rounded-2xl border border-tb-rose-light/30 text-xs text-tb-gray-neutral">
+                  Você não tem clientes agendadas para hoje.
+                </div>
+              ) : (
+                myMetrics.todayAppointments.map(apt => (
+                  <div
+                    key={apt.id}
+                    className="p-3.5 rounded-2xl bg-tb-ivory border border-tb-rose-light/40 flex items-center justify-between gap-3 hover:shadow-soft transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-center px-2.5 py-1 bg-tb-white rounded-xl border border-tb-rose-light/40">
+                        <span className="text-xs font-bold text-tb-brown-dark block">{apt.startTime}</span>
+                        <span className="text-[10px] text-tb-gray-neutral block">{apt.endTime}</span>
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-tb-brown-dark flex items-center gap-2">
+                          <span>{apt.clientName}</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            apt.status === 'concluido' ? 'bg-purple-100 text-purple-700' :
+                            apt.status === 'em_atendimento' ? 'bg-amber-100 text-amber-700 animate-pulse' :
+                            apt.status === 'confirmado' ? 'bg-emerald-100 text-emerald-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {apt.status === 'em_atendimento' ? 'Em atendimento' :
+                             apt.status === 'concluido' ? 'Concluído' :
+                             apt.status === 'confirmado' ? 'Confirmado' : 'Agendado'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-tb-brown-soft block mt-0.5">
+                          {apt.serviceName} • {formatBRL(apt.price)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, apt)}
+                        className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                        title="Conversar no WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Coluna 2: Agenda Geral do Salão (Hoje) */}
+          <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-tb-beige-light text-tb-brown-dark flex items-center justify-center">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                    Agenda Geral do Salão (Hoje)
+                  </h3>
+                  <p className="text-[11px] text-tb-gray-neutral">
+                    Movimento de clientes e quem vai atender
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('agenda')}
+                className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1"
+              >
+                Ver tudo <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+              {allTodayAppointments.length === 0 ? (
+                <div className="p-8 text-center bg-tb-ivory/50 rounded-2xl border border-tb-rose-light/30 text-xs text-tb-gray-neutral">
+                  Nenhum agendamento registrado no salão para hoje.
+                </div>
+              ) : (
+                allTodayAppointments.map(apt => {
+                  const isMine = apt.professionalId === profId;
+                  return (
+                    <div
+                      key={apt.id}
+                      className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                        isMine
+                          ? 'bg-tb-rose-blush/40 border-tb-rose-light/80'
+                          : 'bg-tb-ivory border-tb-rose-light/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-tb-brown-dark w-12 text-center bg-tb-white py-1 rounded-lg border border-tb-rose-light/30">
+                          {apt.startTime}
+                        </span>
+                        <div>
+                          <div className="text-xs font-bold text-tb-brown-dark flex items-center gap-2">
+                            <span>{apt.clientName}</span>
+                            <span className="text-[10px] text-tb-gray-neutral font-normal">
+                              ({apt.serviceName})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              isMine 
+                                ? 'bg-tb-rose-primary text-white' 
+                                : 'bg-tb-beige-champagne text-tb-brown-dark'
+                            }`}>
+                              Atende: {apt.professionalName} {isMine ? '★ (Você)' : ''}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                        apt.status === 'concluido' ? 'bg-purple-100 text-purple-700' :
+                        apt.status === 'em_atendimento' ? 'bg-amber-100 text-amber-700' :
+                        apt.status === 'confirmado' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {apt.status === 'em_atendimento' ? 'Em atendimento' :
+                         apt.status === 'concluido' ? 'Concluído' :
+                         apt.status === 'confirmado' ? 'Confirmado' : 'Agendado'}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Rodapé: Atalho para Minha Produção */}
+        <div className="rounded-3xl bg-tb-white border border-tb-rose-light/60 p-6 shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center shrink-0">
+              <DollarSign className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                Extrato Detalhado de Comissões & Serviços
+              </h4>
+              <p className="text-xs text-tb-brown-soft">
+                Consulte o percentual de comissão de cada atendimento, filtre por data e exporte seu recibo.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigate('minha-producao')}
+            className="px-5 py-2.5 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-semibold shadow-soft transition-all shrink-0 flex items-center gap-2"
+          >
+            Abrir Minha Produção Completa
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const [chartPeriod, setChartPeriod] = useState<'7dias' | 'mes' | 'tudo'>('mes');
 
   // Prepare chart data dynamically from real data
