@@ -191,7 +191,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribers: Array<(() => void) | null> = [
       subscribeToCollection<Client>('clients', (items) => {
-        if (items.length > 0) setClients(items);
+        if (items.length > 0) {
+          setClients((prev) => {
+            if (items.length >= prev.length) return items;
+            const itemMap = new Map(items.map(i => [i.id, i]));
+            return prev.map(p => itemMap.get(p.id) || p);
+          });
+        }
       }),
       subscribeToCollection<Service>('services', (items) => {
         if (items.length > 0) setServices(items);

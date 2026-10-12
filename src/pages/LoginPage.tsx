@@ -5,19 +5,12 @@ import { useAuth } from '../context/AuthContext';
 export const LoginPage: React.FC = () => {
   const { login, isLockedOut, lockoutRemainingSeconds, resetLockout } = useAuth();
   
-  const [usernameOrEmail, setUsernameOrEmail] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleQuickFillAdmin = () => {
-    setUsernameOrEmail('admin');
-    setPassword('admin123');
-    setErrorMessage(null);
-    if (resetLockout) resetLockout();
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,22 +56,11 @@ export const LoginPage: React.FC = () => {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+          <form onSubmit={handleSubmit} className="p-8 space-y-5" autoComplete="off">
             {errorMessage && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start justify-between gap-2.5 animate-shake">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>{errorMessage}</span>
-                </div>
-                {usernameOrEmail.toLowerCase().includes('admin') && (
-                  <button
-                    type="button"
-                    onClick={handleQuickFillAdmin}
-                    className="text-[11px] font-bold text-rose-700 underline hover:text-rose-900 shrink-0"
-                  >
-                    Restaurar admin123
-                  </button>
-                )}
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-shake">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{errorMessage}</span>
               </div>
             )}
 
@@ -108,9 +90,10 @@ export const LoginPage: React.FC = () => {
                 <input
                   type="text"
                   required
+                  autoComplete="off"
                   value={usernameOrEmail}
                   onChange={e => setUsernameOrEmail(e.target.value)}
-                  placeholder="admin ou usuário da profissional"
+                  placeholder="Digite seu usuário de acesso"
                   className="w-full text-sm pl-10 pr-4 py-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:outline-none focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary transition-all"
                 />
                 <User className="w-4 h-4 text-tb-gray-neutral absolute left-3.5 top-3.5" />
@@ -125,6 +108,7 @@ export const LoginPage: React.FC = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Digite sua senha"
@@ -149,15 +133,8 @@ export const LoginPage: React.FC = () => {
                   onChange={e => setRememberMe(e.target.checked)}
                   className="rounded text-tb-rose-primary focus:ring-tb-rose-primary"
                 />
-                <span>Lembrar meu acesso</span>
+                <span>Manter conectado neste aparelho</span>
               </label>
-              <button
-                type="button"
-                onClick={handleQuickFillAdmin}
-                className="text-tb-rose-primary font-semibold hover:underline text-[11px]"
-              >
-                Preencher Admin
-              </button>
             </div>
 
             <button
@@ -176,21 +153,12 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Initial Demo Credentials Notice */}
-          <div className="px-8 py-4 bg-tb-ivory/80 border-t border-tb-rose-light/30 text-center space-y-2">
-            <p className="text-[11px] text-tb-gray-neutral leading-relaxed">
-              <span className="font-semibold text-tb-brown-soft">Credenciais da Administradora:</span><br />
-              Usuário: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin</code> • Senha: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin123</code> (ou <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin</code>)
+          {/* Secure Access Notice */}
+          <div className="px-8 py-4 bg-tb-ivory/80 border-t border-tb-rose-light/30 text-center">
+            <p className="text-[11px] text-tb-gray-neutral leading-relaxed flex items-center justify-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-tb-rose-primary shrink-0" />
+              <span>Acesso restrito para Administração e Equipe Total Beauty.</span>
             </p>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={handleQuickFillAdmin}
-                className="px-3 py-1 bg-tb-rose-blush border border-tb-rose-light text-tb-rose-primary text-[10px] font-bold rounded-lg hover:bg-tb-rose-primary hover:text-white transition-colors"
-              >
-                1-Clique: Acessar como Administradora
-              </button>
-            </div>
           </div>
         </div>
 

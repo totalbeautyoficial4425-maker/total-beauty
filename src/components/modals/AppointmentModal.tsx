@@ -61,6 +61,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [newClientName, setNewClientName] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
   const [quickClientError, setQuickClientError] = useState<string | null>(null);
+  const [clientSearch, setClientSearch] = useState('');
 
   // Validation & Conflict
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         setIsFitIn(false);
       }
       setIsCreatingNewClient(false);
+      setClientSearch('');
       setQuickClientError(null);
       setConflictWarning(null);
       setFormError(null);
@@ -360,19 +362,50 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 </div>
               </div>
             ) : (
-              <select
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                required
-                className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary"
-              >
-                <option value="" disabled>Selecione uma cliente...</option>
-                {clients.filter(c => !c.isArchived).map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} — {c.phone}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1.5">
+                <input
+                  type="text"
+                  placeholder="Filtrar cliente por nome ou celular..."
+                  value={clientSearch}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setClientSearch(val);
+                    const q = val.trim().toLowerCase();
+                    if (q) {
+                      const firstMatch = clients.find(
+                        c => !c.isArchived && (c.name.toLowerCase().includes(q) || c.phone.includes(q))
+                      );
+                      if (firstMatch) setClientId(firstMatch.id);
+                    }
+                  }}
+                  className="w-full text-xs px-3.5 py-2 rounded-xl border border-tb-rose-light/80 bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
+                />
+                <select
+                  value={clientId}
+                  onChange={e => setClientId(e.target.value)}
+                  required
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary"
+                >
+                  <option value="" disabled>Selecione uma cliente...</option>
+                  {(() => {
+                    const q = clientSearch.trim().toLowerCase();
+                    const active = clients.filter(c => !c.isArchived);
+                    const matches = q
+                      ? active.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q))
+                      : active;
+                    const sliced = matches.slice(0, 150);
+                    const selectedObj = active.find(c => c.id === clientId);
+                    if (selectedObj && !sliced.some(c => c.id === selectedObj.id)) {
+                      sliced.unshift(selectedObj);
+                    }
+                    return sliced.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.phone ? `— ${c.phone}` : ''}
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
             )}
           </div>
 

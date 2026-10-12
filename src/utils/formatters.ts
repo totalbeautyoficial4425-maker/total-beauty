@@ -148,7 +148,7 @@ export function parseBirthMonthDay(birthDate?: string): { month: number; day: nu
     }
   } else if (clean.includes('/')) {
     const parts = clean.split('/');
-    if (parts.length === 3) {
+    if (parts.length >= 2) {
       const d = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10);
       if (!isNaN(m) && !isNaN(d)) return { month: m, day: d };

@@ -47,9 +47,14 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
   const { clients } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'todas' | 'recorrentes' | 'novas' | 'inativas' | 'aniversariantes_hoje' | 'aniversariantes_mes' | 'arquivadas'>('todas');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   // Filter clients
   const filteredClients = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const qDigits = q.replace(/\D/g, '');
+
     return clients.filter(c => {
       // Archive filter
       if (filterType === 'arquivadas') {
@@ -70,19 +75,25 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
         if (daysAgo < 30) return false;
       }
 
-      // Search query (Nome, Telefone, Email)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          c.name.toLowerCase().includes(q) ||
-          c.phone.includes(q) ||
-          (c.email && c.email.toLowerCase().includes(q))
-        );
+      // Search query (Nome, Telefone, Email, Notas/Código)
+      if (q) {
+        const nameMatch = c.name.toLowerCase().includes(q);
+        const phoneMatch = c.phone.includes(q) || (qDigits.length > 0 && c.phone.replace(/\D/g, '').includes(qDigits));
+        const emailMatch = c.email ? c.email.toLowerCase().includes(q) : false;
+        const notesMatch = c.notes ? c.notes.toLowerCase().includes(q) : false;
+        return nameMatch || phoneMatch || emailMatch || notesMatch;
       }
 
       return true;
     });
   }, [clients, filterType, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedClients = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredClients.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredClients, safePage]);
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -151,9 +162,12 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
           <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3.5 top-3" />
           <input
             type="text"
-            placeholder="Pesquisar por nome, celular com DDD ou e-mail..."
+            placeholder="Pesquisar por nome, celular com DDD, código ou e-mail..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={e => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
           />
         </div>
@@ -171,7 +185,10 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
           ].map(flt => (
             <button
               key={flt.id}
-              onClick={() => setFilterType(flt.id as any)}
+              onClick={() => {
+                setFilterType(flt.id as any);
+                setCurrentPage(1);
+              }}
               className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all ${
                 filterType === flt.id
                   ? 'bg-tb-rose-primary text-white shadow-sm'
@@ -206,7 +223,7 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredClients.map(client => (
+                paginatedClients.map(client => (
                   <tr 
                     key={client.id}
                     className="hover:bg-tb-ivory/50 transition-colors group cursor-pointer"
@@ -320,6 +337,38 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
             </tbody>
           </table>
         </div>
+
+        {filteredClients.length > ITEMS_PER_PAGE && (
+          <div className="px-6 py-4 bg-tb-ivory border-t border-tb-rose-light/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span className="text-tb-brown-soft">
+              Exibindo <strong>{(safePage - 1) * ITEMS_PER_PAGE + 1}</strong> a{' '}
+              <strong>{Math.min(safePage * ITEMS_PER_PAGE, filteredClients.length)}</strong> de{' '}
+              <strong>{filteredClients.length}</strong> clientes
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="px-3.5 py-1.5 rounded-xl border border-tb-rose-light bg-tb-white hover:bg-tb-beige-light text-tb-brown-dark font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="px-3 py-1.5 font-semibold text-tb-brown-dark">
+                Página {safePage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="px-3.5 py-1.5 rounded-xl border border-tb-rose-light bg-tb-white hover:bg-tb-beige-light text-tb-brown-dark font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

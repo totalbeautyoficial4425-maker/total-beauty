@@ -17,6 +17,7 @@ import {
   deleteDocumentFromFirestore
 } from './firebase';
 import { idbStorage } from './idbStorage';
+import avecClientsData from '../data/avecClients.json';
 
 function safeSetItem(key: string, value: string): void {
   try {
@@ -802,7 +803,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
   },
 ];
 
-export const INITIAL_CLIENTS: Client[] = [];
+export const INITIAL_CLIENTS: Client[] = avecClientsData as Client[];
 
 export const INITIAL_SETTINGS: CompanySettings = {
   name: 'TOTAL BEAUTY',
@@ -1121,6 +1122,7 @@ const CLEAN_PROD_FLAG = 'tb_clean_production_v5';
 const CATALOG_VERSION_FLAG = 'tb_official_catalog_v2';
 const PROFESSIONALS_VERSION_FLAG = 'tb_official_professionals_v3';
 const ADMIN_AUTH_SYNC_FLAG = 'tb_admin_auth_sync_v7';
+const AVEC_CLIENTS_VERSION_FLAG = 'tb_official_avec_clients_v1';
 
 export function ensureCleanProductionState(): void {
   if (typeof window === 'undefined') return;
@@ -1141,8 +1143,9 @@ export function ensureCleanProductionState(): void {
     ];
     demoKeys.forEach(k => localStorage.removeItem(k));
 
-    // Initialize clean empty data in storage, and seed the official 55 services and 8 professionals
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
+    // Initialize clean data in storage, and seed the official 3,074 clients, 55 services and 8 professionals
+    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
+    idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
@@ -1162,6 +1165,28 @@ export function ensureCleanProductionState(): void {
     localStorage.setItem(CLEAN_PROD_FLAG, 'true');
     localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
     localStorage.setItem(PROFESSIONALS_VERSION_FLAG, 'true');
+    localStorage.setItem(AVEC_CLIENTS_VERSION_FLAG, 'true');
+  }
+
+  // Ensure official 3,074 Avec clients are loaded for active browsers
+  const hasAvecClients = localStorage.getItem(AVEC_CLIENTS_VERSION_FLAG);
+  if (!hasAvecClients) {
+    let existingClients: Client[] = [];
+    try {
+      const rawCli = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+      if (rawCli) existingClients = JSON.parse(rawCli);
+    } catch {
+      existingClients = [];
+    }
+    const existingIds = new Set(existingClients.map(c => c.id));
+    const mergedClients = [
+      ...existingClients,
+      ...INITIAL_CLIENTS.filter(c => !existingIds.has(c.id))
+    ];
+    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(mergedClients));
+    idbStorage.setItem(STORAGE_KEYS.CLIENTS, mergedClients);
+    localStorage.setItem(AVEC_CLIENTS_VERSION_FLAG, 'true');
+    syncCollectionToFirestore('clients', mergedClients);
   }
 
   // Ensure official catalog of services is loaded for active browsers
@@ -1262,12 +1287,25 @@ export const storageService = {
   },
 
   getClients(): Client[] {
+    ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
     if (!raw) {
       safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
+      idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
       return INITIAL_CLIENTS;
     }
-    return JSON.parse(raw);
+    try {
+      const parsed: Client[] = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
+        idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+        return INITIAL_CLIENTS;
+      }
+      return parsed;
+    } catch {
+      safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
+      return INITIAL_CLIENTS;
+    }
   },
 
   saveClients(clients: Client[]): void {
@@ -1603,9 +1641,18 @@ export const storageService = {
       let totalRecords = 0;
 
       if (remoteClients && remoteClients.length > 0) {
-        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(remoteClients));
-        await idbStorage.setItem(STORAGE_KEYS.CLIENTS, remoteClients);
-        totalRecords += remoteClients.length;
+        const localClients = this.getClients();
+        const remoteIds = new Set(remoteClients.map(c => c.id));
+        const mergedClients = [
+          ...remoteClients,
+          ...localClients.filter(c => !remoteIds.has(c.id))
+        ];
+        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(mergedClients));
+        await idbStorage.setItem(STORAGE_KEYS.CLIENTS, mergedClients);
+        totalRecords += mergedClients.length;
+        if (mergedClients.length > remoteClients.length) {
+          syncCollectionToFirestore('clients', mergedClients);
+        }
       }
       if (remoteServices && remoteServices.length > 0) {
         safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(remoteServices));
@@ -1720,7 +1767,7 @@ export const storageService = {
   },
 
   clearAllData(): void {
-    this.saveClients([]);
+    this.saveClients(INITIAL_CLIENTS);
     this.saveServices(INITIAL_SERVICES);
     this.saveProfessionals(INITIAL_PROFESSIONALS);
     this.saveAppointments([]);

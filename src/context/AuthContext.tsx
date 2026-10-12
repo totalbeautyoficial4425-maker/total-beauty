@@ -33,10 +33,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoginAttempts(0);
   };
 
-  // Restore session
+  // Restore session (clear legacy v1 pre-saved sessions)
   useEffect(() => {
     try {
-      const sessionRaw = localStorage.getItem('tb_session_v1');
+      localStorage.removeItem('tb_session_v1');
+      sessionStorage.removeItem('tb_session_v1');
+
+      const sessionRaw = localStorage.getItem('tb_session_v2') || sessionStorage.getItem('tb_session_v2');
       if (sessionRaw) {
         const sessionUser: User = JSON.parse(sessionRaw);
         const users = storageService.getUsers();
@@ -71,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
-  const login = (usernameOrEmail: string, passwordPlain: string, rememberMe = true): { success: boolean; error?: string } => {
+  const login = (usernameOrEmail: string, passwordPlain: string, rememberMe = false): { success: boolean; error?: string } => {
     const cleanInput = (usernameOrEmail || '').trim().toLowerCase();
     const cleanPassword = (passwordPlain || '').trim();
     const isAdminAttempt = cleanInput === 'admin' || cleanInput === 'gestao@totalbeautyoficial.com.br';
@@ -162,9 +165,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRequiresPasswordChange(false);
 
     if (rememberMe) {
-      localStorage.setItem('tb_session_v1', JSON.stringify(updatedUser));
+      localStorage.setItem('tb_session_v2', JSON.stringify(updatedUser));
     } else {
-      sessionStorage.setItem('tb_session_v1', JSON.stringify(updatedUser));
+      sessionStorage.setItem('tb_session_v2', JSON.stringify(updatedUser));
     }
 
     return { success: true };
@@ -209,7 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedCurrent = { ...currentUser, forcePasswordChange: false };
     setCurrentUser(updatedCurrent);
     setRequiresPasswordChange(false);
-    localStorage.setItem('tb_session_v1', JSON.stringify(updatedCurrent));
+    sessionStorage.setItem('tb_session_v2', JSON.stringify(updatedCurrent));
 
     return { success: true };
   };
@@ -219,6 +222,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRequiresPasswordChange(false);
     localStorage.removeItem('tb_session_v1');
     sessionStorage.removeItem('tb_session_v1');
+    localStorage.removeItem('tb_session_v2');
+    sessionStorage.removeItem('tb_session_v2');
   };
 
   return (

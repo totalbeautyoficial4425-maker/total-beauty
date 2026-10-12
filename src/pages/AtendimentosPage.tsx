@@ -28,6 +28,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
   // New ad-hoc attendance state
   const [isStartingNew, setIsStartingNew] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedProfId, setSelectedProfId] = useState('');
   const [startError, setStartError] = useState<string | null>(null);
@@ -113,8 +114,25 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
+            <div className="space-y-1">
               <label className="block text-xs font-semibold text-tb-brown-dark mb-1">Cliente *</label>
+              <input
+                type="text"
+                placeholder="Filtrar cliente por nome ou celular..."
+                value={clientSearch}
+                onChange={e => {
+                  const val = e.target.value;
+                  setClientSearch(val);
+                  const q = val.trim().toLowerCase();
+                  if (q) {
+                    const firstMatch = clients.find(
+                      c => !c.isArchived && (c.name.toLowerCase().includes(q) || c.phone.includes(q))
+                    );
+                    if (firstMatch) setSelectedClientId(firstMatch.id);
+                  }
+                }}
+                className="w-full text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light/80 bg-tb-white"
+              />
               <select
                 value={selectedClientId}
                 onChange={e => setSelectedClientId(e.target.value)}
@@ -122,9 +140,21 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                 className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
               >
                 <option value="">Selecione a cliente...</option>
-                {clients.filter(c => !c.isArchived).map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {(() => {
+                  const q = clientSearch.trim().toLowerCase();
+                  const active = clients.filter(c => !c.isArchived);
+                  const matches = q
+                    ? active.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q))
+                    : active;
+                  const sliced = matches.slice(0, 150);
+                  const selectedObj = active.find(c => c.id === selectedClientId);
+                  if (selectedObj && !sliced.some(c => c.id === selectedObj.id)) {
+                    sliced.unshift(selectedObj);
+                  }
+                  return sliced.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} {c.phone ? `— ${c.phone}` : ''}</option>
+                  ));
+                })()}
               </select>
             </div>
 
