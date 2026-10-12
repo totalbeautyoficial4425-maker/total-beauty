@@ -47,7 +47,87 @@ export const DEFAULT_USERS: User[] = [
     role: 'admin',
     forcePasswordChange: false,
     createdAt: new Date().toISOString(),
-  }
+  },
+  {
+    id: 'user_prof_geovana',
+    username: 'geovana',
+    email: 'geovana@totalbeautyoficial.com.br',
+    name: 'Geovana',
+    role: 'profissional',
+    professionalId: 'prof_geovana',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_thalita',
+    username: 'thalita',
+    email: 'thalita@totalbeautyoficial.com.br',
+    name: 'Thálita',
+    role: 'profissional',
+    professionalId: 'prof_thalita',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_talitha',
+    username: 'talitha',
+    email: 'talitha@totalbeautyoficial.com.br',
+    name: 'Talitha',
+    role: 'profissional',
+    professionalId: 'prof_talitha',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_rose',
+    username: 'rose',
+    email: 'rose@totalbeautyoficial.com.br',
+    name: 'Rose',
+    role: 'profissional',
+    professionalId: 'prof_rose',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_elizama',
+    username: 'elizama',
+    email: 'elizama@totalbeautyoficial.com.br',
+    name: 'Elizama',
+    role: 'profissional',
+    professionalId: 'prof_elizama',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_leila',
+    username: 'leila',
+    email: 'leila@totalbeautyoficial.com.br',
+    name: 'Leila',
+    role: 'profissional',
+    professionalId: 'prof_leila',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_deborah',
+    username: 'deborah',
+    email: 'deborah@totalbeautyoficial.com.br',
+    name: 'Deborah',
+    role: 'profissional',
+    professionalId: 'prof_deborah',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'user_prof_thais',
+    username: 'thais',
+    email: 'thais@totalbeautyoficial.com.br',
+    name: 'Thaís',
+    role: 'profissional',
+    professionalId: 'prof_thais',
+    forcePasswordChange: false,
+    createdAt: new Date().toISOString(),
+  },
 ];
 
 export const INITIAL_SERVICES: Service[] = [
@@ -610,7 +690,105 @@ export const INITIAL_SERVICES: Service[] = [
   },
 ];
 
-export const INITIAL_PROFESSIONALS: Professional[] = [];
+export const INITIAL_PROFESSIONALS: Professional[] = [
+  // --- MANICURES ---
+  {
+    id: 'prof_geovana',
+    name: 'Geovana',
+    specialty: 'Manicure & Pedicure',
+    phone: '',
+    color: '#D98880',
+    isActive: true,
+    userId: 'user_prof_geovana',
+    username: 'geovana',
+    commissionPercentage: 50,
+  },
+  {
+    id: 'prof_thalita',
+    name: 'Thálita',
+    specialty: 'Manicure & Nail Designer',
+    phone: '',
+    color: '#C58F9B',
+    isActive: true,
+    userId: 'user_prof_thalita',
+    username: 'thalita',
+    commissionPercentage: 50,
+  },
+  {
+    id: 'prof_talitha',
+    name: 'Talitha',
+    specialty: 'Manicure & Spa dos Pés',
+    phone: '',
+    color: '#E59866',
+    isActive: true,
+    userId: 'user_prof_talitha',
+    username: 'talitha',
+    commissionPercentage: 50,
+  },
+
+  // --- ESTETICISTA ---
+  {
+    id: 'prof_rose',
+    name: 'Rose',
+    specialty: 'Esteticista & Depilação',
+    phone: '',
+    color: '#5DADE2',
+    isActive: true,
+    userId: 'user_prof_rose',
+    username: 'rose',
+    commissionPercentage: 50,
+  },
+
+  // --- CABELEIREIRAS ---
+  {
+    id: 'prof_elizama',
+    name: 'Elizama',
+    specialty: 'Cabeleireira & Maquiagem',
+    phone: '',
+    color: '#AF7AC5',
+    isActive: true,
+    userId: 'user_prof_elizama',
+    username: 'elizama',
+    commissionPercentage: 50,
+  },
+  {
+    id: 'prof_leila',
+    name: 'Leila',
+    specialty: 'Cabeleireira & Terapeuta Capilar',
+    phone: '',
+    color: '#48C9B0',
+    isActive: true,
+    userId: 'user_prof_leila',
+    username: 'leila',
+    commissionPercentage: 50,
+  },
+
+  // --- LASH ---
+  {
+    id: 'prof_deborah',
+    name: 'Deborah',
+    specialty: 'Lash Designer',
+    phone: '',
+    color: '#F48FB1',
+    isActive: true,
+    userId: 'user_prof_deborah',
+    username: 'deborah',
+    commissionPercentage: 50,
+  },
+
+  // --- MAQUIAGEM ---
+  {
+    id: 'prof_thais',
+    name: 'Thaís',
+    specialty: 'Maquiagem & Visagismo',
+    phone: '',
+    color: '#F1948A',
+    isActive: true,
+    userId: 'user_prof_thais',
+    username: 'thais',
+    commissionPercentage: 50,
+  },
+];
 
 export const INITIAL_CLIENTS: Client[] = [];
 
@@ -664,6 +842,7 @@ export function generateSeedExpenses(): Expense[] {
 // Clean production migration helper to ensure previously cached demo data in user's browser is completely wiped
 const CLEAN_PROD_FLAG = 'tb_clean_production_v5';
 const CATALOG_VERSION_FLAG = 'tb_official_catalog_v2';
+const PROFESSIONALS_VERSION_FLAG = 'tb_official_professionals_v2';
 
 export function ensureCleanProductionState(): void {
   if (typeof window === 'undefined') return;
@@ -684,23 +863,27 @@ export function ensureCleanProductionState(): void {
     ];
     demoKeys.forEach(k => localStorage.removeItem(k));
 
-    // Initialize clean empty data in storage, and seed the official 55 services
+    // Initialize clean empty data in storage, and seed the official 55 services and 8 professionals
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
-    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
 
-    // Ensure admin user password hash exists
-    if (!localStorage.getItem('tb_pwd_user_admin_01')) {
-      localStorage.setItem('tb_pwd_user_admin_01', hashPassword('admin123'));
-    }
+    // Set passwords for all default users
+    DEFAULT_USERS.forEach(u => {
+      const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
+      if (!localStorage.getItem('tb_pwd_' + u.id)) {
+        localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
+      }
+    });
 
     localStorage.setItem(CLEAN_PROD_FLAG, 'true');
     localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
+    localStorage.setItem(PROFESSIONALS_VERSION_FLAG, 'true');
   }
 
   // Ensure official catalog of services is loaded for active browsers
@@ -709,6 +892,24 @@ export function ensureCleanProductionState(): void {
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
     syncCollectionToFirestore('services', INITIAL_SERVICES);
+  }
+
+  // Ensure official professionals are loaded for active browsers
+  const hasProfessionals = localStorage.getItem(PROFESSIONALS_VERSION_FLAG);
+  if (!hasProfessionals) {
+    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+
+    DEFAULT_USERS.forEach(u => {
+      const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
+      if (!localStorage.getItem('tb_pwd_' + u.id)) {
+        localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
+      }
+    });
+
+    localStorage.setItem(PROFESSIONALS_VERSION_FLAG, 'true');
+    syncCollectionToFirestore('professionals', INITIAL_PROFESSIONALS);
+    syncCollectionToFirestore('users', DEFAULT_USERS);
   }
 }
 
@@ -719,15 +920,22 @@ export const storageService = {
     const raw = localStorage.getItem(STORAGE_KEYS.USERS);
     let users: User[] = raw ? JSON.parse(raw) : [];
 
-    // Ensure admin user is registered
-    if (!users.some(u => u.username.toLowerCase() === 'admin')) {
-      users.push(DEFAULT_USERS[0]);
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    }
+    // Ensure all default users (admin and registered professionals) exist
+    let modified = false;
+    DEFAULT_USERS.forEach(defUser => {
+      if (!users.some(u => u.username.toLowerCase() === defUser.username.toLowerCase())) {
+        users.push(defUser);
+        modified = true;
+      }
+      // Ensure password hash exists
+      const pwd = defUser.role === 'admin' ? 'admin123' : `${defUser.username}123`;
+      if (!localStorage.getItem('tb_pwd_' + defUser.id)) {
+        localStorage.setItem('tb_pwd_' + defUser.id, hashPassword(pwd));
+      }
+    });
 
-    // Set initial password hash for admin if not present
-    if (!localStorage.getItem('tb_pwd_user_admin_01')) {
-      localStorage.setItem('tb_pwd_user_admin_01', hashPassword('admin123'));
+    if (modified || !raw) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
     }
 
     return users;
@@ -788,12 +996,17 @@ export const storageService = {
   },
 
   getProfessionals(): Professional[] {
+    ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.PROFESSIONALS);
     if (!raw) {
       localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
       return INITIAL_PROFESSIONALS;
     }
-    const profs: Professional[] = JSON.parse(raw);
+    let profs: Professional[] = JSON.parse(raw);
+    if (profs.length === 0) {
+      profs = INITIAL_PROFESSIONALS;
+      localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
+    }
     return profs.map(p => ({
       ...p,
       commissionPercentage: p.commissionPercentage ?? 50,
@@ -916,21 +1129,25 @@ export const storageService = {
   clearAllData(): void {
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
-    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
 
-    if (!localStorage.getItem('tb_pwd_user_admin_01')) {
-      localStorage.setItem('tb_pwd_user_admin_01', hashPassword('admin123'));
-    }
+    DEFAULT_USERS.forEach(u => {
+      const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
+      if (!localStorage.getItem('tb_pwd_' + u.id)) {
+        localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
+      }
+    });
 
-    // Clear Firestore collections if connected, keeping official services
+    // Clear Firestore collections if connected, keeping official services & professionals
     syncCollectionToFirestore('clients', []);
     syncCollectionToFirestore('services', INITIAL_SERVICES);
-    syncCollectionToFirestore('professionals', []);
+    syncCollectionToFirestore('professionals', INITIAL_PROFESSIONALS);
+    syncCollectionToFirestore('users', DEFAULT_USERS);
     syncCollectionToFirestore('appointments', []);
     syncCollectionToFirestore('attendances', []);
     syncCollectionToFirestore('payments', []);

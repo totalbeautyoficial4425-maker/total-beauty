@@ -49,6 +49,22 @@ export const ProfissionaisPage: React.FC = () => {
   const [periodFilter, setPeriodFilter] = useState<'hoje' | 'mes' | 'todos'>('mes');
   const [transactionSearch, setTransactionSearch] = useState('');
 
+  // Category filter for team list
+  const [profCategoryFilter, setProfCategoryFilter] = useState<'todas' | 'manicure' | 'cabelo' | 'estetica' | 'lash' | 'maquiagem'>('todas');
+
+  const filteredProfessionals = useMemo(() => {
+    return professionals.filter(p => {
+      if (profCategoryFilter === 'todas') return true;
+      const spec = (p.specialty || '').toLowerCase();
+      if (profCategoryFilter === 'manicure') return spec.includes('manicure') || spec.includes('unha') || spec.includes('pés');
+      if (profCategoryFilter === 'cabelo') return spec.includes('cabel') || spec.includes('cabeleireira');
+      if (profCategoryFilter === 'estetica') return spec.includes('estet') || spec.includes('depil');
+      if (profCategoryFilter === 'lash') return spec.includes('lash') || spec.includes('cílio');
+      if (profCategoryFilter === 'maquiagem') return spec.includes('maquia');
+      return true;
+    });
+  }, [professionals, profCategoryFilter]);
+
   // Modal: Add / Edit Professional
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -373,19 +389,44 @@ export const ProfissionaisPage: React.FC = () => {
               </p>
             </div>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-tb-rose-blush text-tb-rose-primary">
-              {professionals.length}
+              {filteredProfessionals.length} de {professionals.length}
             </span>
           </div>
 
+          {/* Team Category Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+            {[
+              { id: 'todas', label: 'Todas' },
+              { id: 'manicure', label: 'Manicures' },
+              { id: 'cabelo', label: 'Cabeleireiras' },
+              { id: 'estetica', label: 'Esteticista' },
+              { id: 'lash', label: 'Lash' },
+              { id: 'maquiagem', label: 'Maquiagem' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setProfCategoryFilter(tab.id as any)}
+                className={`px-2.5 py-1 rounded-xl font-semibold whitespace-nowrap transition-all ${
+                  profCategoryFilter === tab.id
+                    ? 'bg-tb-rose-primary text-white shadow-2xs'
+                    : 'bg-tb-ivory text-tb-brown-soft hover:bg-tb-beige-light border border-tb-rose-light/40'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
-            {professionals.length === 0 ? (
+            {filteredProfessionals.length === 0 ? (
               <div className="p-6 text-center text-xs text-tb-gray-neutral border border-dashed border-tb-rose-light/70 rounded-2xl bg-tb-ivory/50">
                 <Users className="w-8 h-8 text-tb-rose-light mx-auto mb-2" />
-                <p className="font-semibold text-tb-brown-dark">Nenhuma profissional</p>
-                <p className="text-[11px] mt-1">Clique em "Cadastrar Profissional" para cadastrar sua equipe.</p>
+                <p className="font-semibold text-tb-brown-dark">Nenhuma profissional nessa categoria</p>
+                <p className="text-[11px] mt-1">Selecione "Todas" ou cadastre uma nova profissional.</p>
               </div>
             ) : (
-              professionals.map(p => {
+              filteredProfessionals.map(p => {
               const isSelected = p.id === activeProf?.id;
               const pMetrics = getProfessionalMetrics(p.id);
 
