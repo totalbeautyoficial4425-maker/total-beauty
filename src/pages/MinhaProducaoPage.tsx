@@ -133,7 +133,7 @@ export const MinhaProducaoPage: React.FC = () => {
             Minha Produção — {loggedProf?.name || currentUser?.name}
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            {loggedProf?.specialty || 'Profissional'} • Comissão base configurada: <span className="font-semibold text-tb-brown-dark">{loggedProf?.commissionPercentage || 50}%</span>
+            {loggedProf?.specialty || 'Profissional'} • Comissões calculadas por serviço realizado
           </p>
         </div>
 

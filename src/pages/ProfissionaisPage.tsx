@@ -459,11 +459,11 @@ export const ProfissionaisPage: React.FC = () => {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-bold text-tb-rose-primary block">
-                        {p.commissionPercentage ?? 50}%
+                      <span className="text-[11px] font-semibold text-tb-brown-soft block">
+                        Comissão
                       </span>
-                      <span className="text-[9px] text-tb-gray-neutral block">
-                        comissão
+                      <span className="text-[10px] text-tb-rose-primary font-bold block">
+                        Por Serviço
                       </span>
                     </div>
                   </div>
@@ -509,7 +509,7 @@ export const ProfissionaisPage: React.FC = () => {
                     <span>•</span>
                     <span>Usuário: <code className="font-mono text-tb-brown-dark font-bold bg-tb-ivory px-1.5 py-0.5 rounded border border-tb-rose-light/40">@{activeProf.username || activeProf.name.toLowerCase().split(' ')[0]}</code></span>
                     <span>•</span>
-                    <span>Comissão padrão: <strong className="text-tb-rose-primary">{activeProf.commissionPercentage ?? 50}%</strong></span>
+                    <span>Comissão: <strong className="text-tb-rose-primary">Personalizada por Serviço</strong></span>
                   </div>
                 </div>
               </div>
@@ -780,26 +780,9 @@ export const ProfissionaisPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                   <div>
-                    <label className="block font-semibold text-tb-brown-dark mb-1">Comissão Padrão (%) *</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        required
-                        value={commissionPercentage}
-                        onChange={e => setCommissionPercentage(parseFloat(e.target.value) || 0)}
-                        className="w-full pl-3.5 pr-8 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark text-xs sm:text-sm font-bold focus:ring-2 focus:ring-tb-rose-primary/20"
-                      />
-                      <span className="absolute right-3.5 top-2.5 text-xs font-bold text-tb-gray-neutral">%</span>
-                    </div>
-                    <span className="text-[10px] text-tb-gray-neutral mt-0.5 block">Aplicado aos atendimentos dela</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-tb-brown-dark mb-1">Cor na Agenda</label>
+                    <label className="block font-semibold text-tb-brown-dark mb-1">Cor Identificadora na Agenda</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
@@ -809,6 +792,11 @@ export const ProfissionaisPage: React.FC = () => {
                       />
                       <span className="text-xs text-tb-brown-soft font-mono uppercase">{color}</span>
                     </div>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-tb-ivory border border-tb-rose-light/50 text-[11px] text-tb-brown-soft">
+                    <strong className="text-tb-brown-dark block mb-0.5">Comissão por Serviço:</strong>
+                    Calculada automaticamente de acordo com o percentual configurado em cada serviço do catálogo.
                   </div>
                 </div>
 

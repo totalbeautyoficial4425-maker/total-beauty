@@ -75,7 +75,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [profName, setProfName] = useState('');
   const [profSpecialty, setProfSpecialty] = useState('');
   const [profPhone, setProfPhone] = useState('');
-  const [profCommission, setProfCommission] = useState(50);
   const [profUsername, setProfUsername] = useState('');
   const [profPassword, setProfPassword] = useState('');
   const [profColor, setProfColor] = useState('#C58F9B');
@@ -203,7 +202,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     setProfName('');
     setProfSpecialty('');
     setProfPhone('');
-    setProfCommission(50);
     setProfUsername('');
     setProfPassword('');
     setProfColor('#C58F9B');
@@ -216,7 +214,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     setProfName(p.name);
     setProfSpecialty(p.specialty);
     setProfPhone(p.phone);
-    setProfCommission(p.commissionPercentage ?? 50);
     setProfUsername(p.username || '');
     setProfPassword('');
     setProfColor(p.color || '#C58F9B');
@@ -243,7 +240,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
         specialty: profSpecialty.trim(),
         phone: profPhone.trim(),
         color: profColor,
-        commissionPercentage: profCommission,
         username: profUsername.trim(),
         password: profPassword.trim() || undefined,
       });
@@ -264,7 +260,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
         color: profColor,
         username: profUsername.trim(),
         password: profPassword.trim(),
-        commissionPercentage: profCommission,
       });
       if (!res.success) {
         setProfError(res.error || 'Erro ao cadastrar profissional.');
@@ -408,20 +403,6 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-tb-brown-dark mb-1">Comissão Padrão (%) *</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  required
-                  value={profCommission}
-                  onChange={e => setProfCommission(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark font-bold focus:ring-2 focus:ring-tb-rose-primary/30"
-                />
-              </div>
-
-              <div>
                 <label className="block font-semibold text-tb-brown-dark mb-1">Usuário para Login *</label>
                 <input
                   type="text"
@@ -500,9 +481,9 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] text-tb-gray-neutral">Comissão Padrão:</span>
-                    <span className="font-bold text-tb-rose-primary">
-                      {p.commissionPercentage ?? 50}%
+                    <span className="text-[11px] text-tb-gray-neutral">Regra de Comissão:</span>
+                    <span className="font-bold text-tb-rose-primary text-[11px]">
+                      Por Serviço Realizado
                     </span>
                   </div>
                 </div>

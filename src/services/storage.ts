@@ -701,7 +701,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_geovana',
     username: 'geovana',
-    commissionPercentage: 50,
   },
   {
     id: 'prof_thalita',
@@ -712,7 +711,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_thalita',
     username: 'thalita',
-    commissionPercentage: 50,
   },
   {
     id: 'prof_talitha',
@@ -723,7 +721,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_talitha',
     username: 'talitha',
-    commissionPercentage: 50,
   },
 
   // --- ESTETICISTA ---
@@ -736,7 +733,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_rose',
     username: 'rose',
-    commissionPercentage: 50,
   },
 
   // --- CABELEIREIRAS ---
@@ -749,7 +745,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_elizama',
     username: 'elizama',
-    commissionPercentage: 50,
   },
   {
     id: 'prof_leila',
@@ -760,7 +755,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_leila',
     username: 'leila',
-    commissionPercentage: 50,
   },
 
   // --- LASH ---
@@ -773,7 +767,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_deborah',
     username: 'deborah',
-    commissionPercentage: 50,
   },
 
   // --- MAQUIAGEM ---
@@ -786,7 +779,6 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_thais',
     username: 'thais',
-    commissionPercentage: 50,
   },
 ];
 
@@ -842,7 +834,7 @@ export function generateSeedExpenses(): Expense[] {
 // Clean production migration helper to ensure previously cached demo data in user's browser is completely wiped
 const CLEAN_PROD_FLAG = 'tb_clean_production_v5';
 const CATALOG_VERSION_FLAG = 'tb_official_catalog_v2';
-const PROFESSIONALS_VERSION_FLAG = 'tb_official_professionals_v2';
+const PROFESSIONALS_VERSION_FLAG = 'tb_official_professionals_v3';
 
 export function ensureCleanProductionState(): void {
   if (typeof window === 'undefined') return;
@@ -1007,10 +999,7 @@ export const storageService = {
       profs = INITIAL_PROFESSIONALS;
       localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     }
-    return profs.map(p => ({
-      ...p,
-      commissionPercentage: p.commissionPercentage ?? 50,
-    }));
+    return profs;
   },
 
   saveProfessionals(professionals: Professional[]): void {

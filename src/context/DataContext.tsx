@@ -584,7 +584,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Dados da cliente ou do serviço não encontrados.' };
     }
 
-    const commPercent = serviceObj.commissionPercentage ?? profObj?.commissionPercentage ?? 50;
+    const commPercent = serviceObj.commissionPercentage ?? 50;
 
     const newAttendance: Attendance = {
       id: generateId('atd'),
@@ -633,10 +633,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const finishedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Calculate commission
+    // Calculate commission directly from the service
     const srv = services.find(s => s.id === atd.serviceId);
-    const prof = professionals.find(p => p.id === atd.professionalId);
-    const commPercent = srv?.commissionPercentage ?? prof?.commissionPercentage ?? 50;
+    const commPercent = srv?.commissionPercentage ?? 50;
     
     // Commission is calculated based on received payment (if paid) or net value
     const effectiveCommission = options.paymentStatus === 'pago'
