@@ -343,16 +343,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const prof = professionals.find(p => p.id === id);
     if (!prof) return { success: false, error: 'Profissional não encontrada.' };
 
+    const users = storageService.getUsers();
+    let targetUserId = prof.userId;
+    if (!targetUserId) {
+      const match = users.find(u => 
+        u.professionalId === prof.id || 
+        u.username.toLowerCase() === (prof.username || '').toLowerCase()
+      );
+      if (match) {
+        targetUserId = match.id;
+      }
+    }
+
     // If password provided, update user password
-    if (data.password && prof.userId) {
-      storageService.setUserPassword(prof.userId, data.password.trim());
+    if (data.password && targetUserId) {
+      storageService.setUserPassword(targetUserId, data.password.trim());
     }
 
     // Update user display name or username if changed
-    if (prof.userId && (data.name || data.username)) {
-      const users = storageService.getUsers();
+    if (targetUserId && (data.name || data.username)) {
       const nextUsers = users.map(u => {
-        if (u.id === prof.userId) {
+        if (u.id === targetUserId) {
           return {
             ...u,
             name: data.name || u.name,
@@ -364,7 +375,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storageService.saveUsers(nextUsers);
     }
 
-    const nextProfessionals = professionals.map(p => (p.id === id ? { ...p, ...data } : p));
+    const nextProfessionals = professionals.map(p => (p.id === id ? { ...p, ...data, userId: targetUserId || p.userId } : p));
     setProfessionals(nextProfessionals);
     storageService.saveProfessionals(nextProfessionals);
     return { success: true };

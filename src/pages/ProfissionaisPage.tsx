@@ -22,7 +22,9 @@ import {
   UserCheck,
   Phone,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { Professional } from '../types';
@@ -81,6 +83,16 @@ export const ProfissionaisPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [copiedProfId, setCopiedProfId] = useState<string | null>(null);
+
+  // Copy access credentials for WhatsApp
+  const handleCopyAccess = (p: Professional) => {
+    const profUsername = p.username || p.name.toLowerCase().replace(/\s+/g, '');
+    const message = `✨ *Acesso ao Sistema Total Beauty* ✨\n\nOlá, ${p.name}! Aqui estão suas credenciais para acessar o sistema:\n\n🌐 *Link de Acesso:* https://total-beauty-black.vercel.app\n👤 *Usuário:* ${profUsername}\n🔑 *Senha padrão:* ${profUsername}123\n\nNo seu painel exclusivo você tem acesso aos agendamentos, serviços disponíveis e controle particular de comissões do dia e do mês!\nQualquer dúvida, fale com a administração.`;
+    navigator.clipboard.writeText(message);
+    setCopiedProfId(p.id);
+    setTimeout(() => setCopiedProfId(null), 3000);
+  };
 
   // Modal: Delete Confirmation
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -535,6 +547,66 @@ export const ProfissionaisPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Cartão de Acesso e Credenciais da Profissional (Login & Senha) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-tb-rose-blush/40 via-tb-ivory to-tb-white border border-tb-rose-light/70 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-tb-rose-primary shrink-0" />
+                  <span className="text-xs font-bold text-tb-brown-dark">
+                    Acesso Exclusivo da Profissional ao Sistema
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Acesso Ativo
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-tb-brown-soft">
+                  <span>
+                    Usuário: <code className="font-mono font-bold text-tb-brown-dark bg-white px-2 py-0.5 rounded border border-tb-rose-light/50">@{activeProf.username || activeProf.name.toLowerCase().replace(/\s+/g, '')}</code>
+                  </span>
+                  <span>
+                    Senha padrão: <code className="font-mono font-bold text-tb-brown-dark bg-white px-2 py-0.5 rounded border border-tb-rose-light/50">{activeProf.username || activeProf.name.toLowerCase().replace(/\s+/g, '')}123</code>
+                  </span>
+                  <span className="text-[11px] text-tb-gray-neutral">
+                    (Liberado apenas: <strong>Meu Painel</strong>, <strong>Agendamentos</strong> e <strong>Serviços</strong>)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => handleCopyAccess(activeProf)}
+                  className={`flex-1 md:flex-initial px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs ${
+                    copiedProfId === activeProf.id
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white hover:bg-tb-beige-light border border-tb-rose-light text-tb-brown-dark'
+                  }`}
+                  title="Copiar dados de login para enviar à profissional pelo WhatsApp"
+                >
+                  {copiedProfId === activeProf.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Copiado p/ WhatsApp!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-tb-rose-primary" />
+                      <span>Copiar Acesso (WhatsApp)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditModal(activeProf)}
+                  className="flex-1 md:flex-initial px-3.5 py-2 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-semibold transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Redefinir Senha</span>
+                </button>
+              </div>
+            </div>
+
             {/* Individual Metrics Cards of this Professional */}
             {selectedMetrics && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -843,6 +915,10 @@ export const ProfissionaisPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  <p className="text-[11px] text-tb-brown-soft leading-relaxed pt-1 border-t border-tb-rose-light/40">
+                    A profissional terá acesso restrito exclusivamente aos módulos: <strong>Meu Painel</strong> (comissões diárias particulares), <strong>Agendamentos</strong> e <strong>Serviços Disponíveis</strong>. Áreas financeiras gerais e configurações permanecem 100% protegidas para a administração.
+                  </p>
                 </div>
               </div>
 

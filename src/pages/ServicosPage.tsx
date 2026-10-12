@@ -13,6 +13,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { Service, ServiceCategory } from '../types';
 import { formatBRL } from '../utils/formatters';
 
@@ -35,6 +36,8 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
   onOpenNewService,
   onEditService,
 }) => {
+  const { currentUser } = useAuth();
+  const isProfessional = currentUser?.role === 'profissional';
   const { services, toggleServiceActive } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('todas');
@@ -60,23 +63,32 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
       <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary block mb-1">
-            Catálogo Oficial de Procedimentos
+            {isProfessional ? 'Serviços Disponíveis para Atendimento' : 'Catálogo Oficial de Procedimentos'}
           </span>
           <h2 className="font-serif-brand text-3xl font-bold text-tb-brown-dark">
             Serviços & Procedimentos
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            Controle de preços padrão, duração em minutos para a agenda e comissões do salão.
+            {isProfessional
+              ? 'Consulte os procedimentos disponíveis no salão, duração em minutos e valores para atendimento de clientes.'
+              : 'Controle de preços padrão, duração em minutos para a agenda e comissões do salão.'}
           </p>
         </div>
 
-        <button
-          onClick={onOpenNewService}
-          className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs sm:text-sm font-semibold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          Adicionar Serviço
-        </button>
+        {!isProfessional ? (
+          <button
+            onClick={onOpenNewService}
+            className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs sm:text-sm font-semibold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Adicionar Serviço
+          </button>
+        ) : (
+          <div className="px-4 py-2 rounded-2xl bg-tb-rose-blush border border-tb-rose-light text-tb-rose-primary text-xs font-semibold flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            <span>Catálogo Liberado para Consulta</span>
+          </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}
@@ -188,22 +200,34 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
                 </div>
 
                 {/* Card footer actions */}
-                <div className="pt-3 border-t border-tb-rose-light/30 flex items-center justify-between">
-                  <button
-                    onClick={() => toggleServiceActive(service.id)}
-                    className="text-xs font-medium text-tb-gray-neutral hover:text-tb-brown-dark transition-colors"
-                  >
-                    {service.isActive ? 'Desativar' : 'Ativar no catálogo'}
-                  </button>
+                {!isProfessional ? (
+                  <div className="pt-3 border-t border-tb-rose-light/30 flex items-center justify-between">
+                    <button
+                      onClick={() => toggleServiceActive(service.id)}
+                      className="text-xs font-medium text-tb-gray-neutral hover:text-tb-brown-dark transition-colors"
+                    >
+                      {service.isActive ? 'Desativar' : 'Ativar no catálogo'}
+                    </button>
 
-                  <button
-                    onClick={() => onEditService(service)}
-                    className="px-3 py-1.5 text-xs font-semibold bg-tb-beige-light hover:bg-tb-beige-champagne text-tb-brown-dark rounded-xl transition-colors flex items-center gap-1"
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    Editar
-                  </button>
-                </div>
+                    <button
+                      onClick={() => onEditService(service)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-tb-beige-light hover:bg-tb-beige-champagne text-tb-brown-dark rounded-xl transition-colors flex items-center gap-1"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      Editar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-3 border-t border-tb-rose-light/30 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Disponível na Agenda
+                    </span>
+                    <span className="text-[11px] font-semibold text-tb-brown-soft">
+                      {service.durationMinutes} min de atendimento
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           ))

@@ -13,6 +13,7 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
+import { useAuth } from '../../context/AuthContext';
 import { Appointment } from '../../types';
 import { addMinutesToTime, formatBRL } from '../../utils/formatters';
 
@@ -33,6 +34,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   initialTime,
   initialClientId,
 }) => {
+  const { currentUser } = useAuth();
   const { 
     clients, 
     services, 
@@ -93,9 +95,14 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           setPrice(firstService.price);
         }
 
-        const firstProf = professionals.find(p => p.isActive);
-        if (firstProf) {
-          setProfessionalId(firstProf.id);
+        const loggedProf = professionals.find(p => 
+          p.id === currentUser?.professionalId || 
+          p.userId === currentUser?.id || 
+          p.username === currentUser?.username
+        );
+        const selectedProf = loggedProf || professionals.find(p => p.isActive);
+        if (selectedProf) {
+          setProfessionalId(selectedProf.id);
         }
 
         setNotes('');

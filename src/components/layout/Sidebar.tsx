@@ -38,8 +38,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems: { id: NavigationPage; label: string; icon: React.FC<{ className?: string }> }[] = isProfessional
     ? [
         { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
-        { id: 'agenda', label: 'Agenda Geral', icon: CalendarDays },
-        { id: 'minha-producao', label: 'Minha Produção', icon: DollarSign },
+        { id: 'agenda', label: 'Agendamentos', icon: CalendarDays },
+        { id: 'servicos', label: 'Serviços Disponíveis', icon: Sparkles },
       ]
     : [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

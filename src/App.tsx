@@ -37,7 +37,7 @@ export const AppContent: React.FC = () => {
   // Role protection guard: prevent professionals from opening administrative routes
   useEffect(() => {
     if (currentUser?.role === 'profissional') {
-      const allowedPages: NavigationPage[] = ['dashboard', 'agenda', 'minha-producao'];
+      const allowedPages: NavigationPage[] = ['dashboard', 'agenda', 'servicos', 'minha-producao'];
       if (!allowedPages.includes(currentPage)) {
         setCurrentPage('dashboard');
       }
