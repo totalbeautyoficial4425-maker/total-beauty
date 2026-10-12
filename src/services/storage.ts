@@ -7,7 +7,8 @@ import {
   PaymentTransaction, 
   Expense, 
   CompanySettings,
-  User 
+  User,
+  InventoryItem
 } from '../types';
 import { getFirebaseInstance, syncCollectionToFirestore, fetchCollectionFromFirestore } from './firebase';
 
@@ -21,6 +22,7 @@ const STORAGE_KEYS = {
   ATTENDANCES: 'tb_attendances_v3',
   PAYMENTS: 'tb_payments_v3',
   EXPENSES: 'tb_expenses_v3',
+  INVENTORY: 'tb_inventory_v3',
   SETTINGS: 'tb_settings_v3',
   LOGIN_ATTEMPTS: 'tb_login_attempts_v1'
 };
@@ -815,6 +817,270 @@ export const INITIAL_SETTINGS: CompanySettings = {
   }
 };
 
+export const INITIAL_INVENTORY: InventoryItem[] = [
+  // 1. Tintas & Colorações (Wella)
+  {
+    id: 'inv_wella_cp_60',
+    name: 'Color Perfect 6.0 Louro Escuro 60g',
+    brand: 'Wella',
+    category: 'Tintas & Colorações',
+    currentStock: 6,
+    minStock: 3,
+    unit: 'tubo',
+    costPrice: 38.50,
+    supplier: 'Representante Wella Professional',
+    location: 'Armário das Tintas',
+    notes: 'Base fundamental para cobertura de fios brancos',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_wella_cp_71',
+    name: 'Color Perfect 7.1 Louro Médio Acinzentado 60g',
+    brand: 'Wella',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 3,
+    unit: 'tubo',
+    costPrice: 38.50,
+    supplier: 'Representante Wella Professional',
+    location: 'Armário das Tintas',
+    notes: 'Muito utilizado para neutralização de tons quentes',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_wella_cp_80',
+    name: 'Color Perfect 8.0 Louro Claro 60g',
+    brand: 'Wella',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'tubo',
+    costPrice: 38.50,
+    supplier: 'Representante Wella Professional',
+    location: 'Armário das Tintas',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_wella_cp_50',
+    name: 'Color Perfect 5.0 Castanho Claro 60g',
+    brand: 'Wella',
+    category: 'Tintas & Colorações',
+    currentStock: 0,
+    minStock: 2,
+    unit: 'tubo',
+    costPrice: 38.50,
+    supplier: 'Representante Wella Professional',
+    location: 'Armário das Tintas',
+    notes: 'Urgente para retoque de raiz de clientes agendadas',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+
+  // 2. Pó Descolorante (Wella & Lowell)
+  {
+    id: 'inv_wella_blondor',
+    name: 'Blondor Multi Blonde Pó Descolorante 800g',
+    brand: 'Wella',
+    category: 'Pó Descolorante',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'pote',
+    costPrice: 145.00,
+    supplier: 'Representante Wella Professional',
+    location: 'Bancada Química',
+    notes: 'Abre até 7 tons, clareamento limpo e seguro',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_lowell_descolorante',
+    name: 'Pó Descolorante Lowell Protect Care 500g',
+    brand: 'Lowell',
+    category: 'Pó Descolorante',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'pote',
+    costPrice: 78.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Bancada Química',
+    notes: 'Ação rápida com queratina protetora',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+
+  // 3. Água Oxigenada (Wella & Lowell)
+  {
+    id: 'inv_wella_ox_20',
+    name: 'Welloxon Perfect 20 Volumes (6%) 1000ml',
+    brand: 'Wella',
+    category: 'Água Oxigenada',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'frasco',
+    costPrice: 49.00,
+    supplier: 'Representante Wella Professional',
+    location: 'Lavatório / Bancada',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_wella_ox_30',
+    name: 'Welloxon Perfect 30 Volumes (9%) 1000ml',
+    brand: 'Wella',
+    category: 'Água Oxigenada',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'frasco',
+    costPrice: 49.00,
+    supplier: 'Representante Wella Professional',
+    location: 'Lavatório / Bancada',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_lowell_ox_20',
+    name: 'Emulsão Reveladora Lowell 20 Vol 900ml',
+    brand: 'Lowell',
+    category: 'Água Oxigenada',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'frasco',
+    costPrice: 34.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Lavatório / Bancada',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+
+  // 4. Hidratações & Máscaras (Lowell, Wella & Erick Kenedy)
+  {
+    id: 'inv_lowell_protect_mask',
+    name: 'Máscara Protect Care Power Nutri 450g',
+    brand: 'Lowell',
+    category: 'Hidratações & Máscaras',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'pote',
+    costPrice: 88.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Lavatório - Tratamentos',
+    notes: 'Nutrição profunda para cabelos ressecados',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_erick_mascara_rec',
+    name: 'Máscara Reconstrutora Erick Kenedy 500g',
+    brand: 'Erick Kenedy',
+    category: 'Hidratações & Máscaras',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'pote',
+    costPrice: 95.00,
+    supplier: 'Erick Kenedy Cosméticos',
+    location: 'Lavatório - Tratamentos',
+    notes: 'Reconstrução com aminoácidos pós-química',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_wella_oil_mask',
+    name: 'Wella Oil Reflections Máscara 500ml',
+    brand: 'Wella',
+    category: 'Hidratações & Máscaras',
+    currentStock: 2,
+    minStock: 1,
+    unit: 'pote',
+    costPrice: 135.00,
+    supplier: 'Representante Wella Professional',
+    location: 'Lavatório - Premium',
+    notes: 'Luminosidade e maciez extrema com óleos preciosos',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+
+  // 5. Shampoos & Condicionadores (Lowell & Erick Kenedy)
+  {
+    id: 'inv_lowell_shampoo_lav',
+    name: 'Shampoo Lavatório Protect Care 2.5L',
+    brand: 'Lowell',
+    category: 'Shampoos',
+    currentStock: 2,
+    minStock: 1,
+    unit: 'frasco',
+    costPrice: 98.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Lavatório Principal',
+    notes: 'Galão grande de uso profissional diário',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_lowell_cond_lav',
+    name: 'Condicionador Lavatório Protect Care 2.5L',
+    brand: 'Lowell',
+    category: 'Condicionadores',
+    currentStock: 2,
+    minStock: 1,
+    unit: 'frasco',
+    costPrice: 98.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Lavatório Principal',
+    notes: 'Galão grande de uso profissional diário',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_erick_shampoo_nutri',
+    name: 'Shampoo Nutritivo Erick Kenedy 1000ml',
+    brand: 'Erick Kenedy',
+    category: 'Shampoos',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'frasco',
+    costPrice: 72.00,
+    supplier: 'Erick Kenedy Cosméticos',
+    location: 'Lavatório',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+
+  // 6. Progressivas & Alinhamento Sem Formol (Erick Kenedy & Lowell)
+  {
+    id: 'inv_erick_alinhamento',
+    name: 'Alinhamento Térmico Sem Formol 1000ml',
+    brand: 'Erick Kenedy',
+    category: 'Progressivas & Alinhamentos',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'frasco',
+    costPrice: 195.00,
+    supplier: 'Erick Kenedy Cosméticos',
+    location: 'Armário de Químicas',
+    notes: 'Zero formol, alinhamento perfeito compatível com loiras e morenas',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+  {
+    id: 'inv_lowell_bioplastia',
+    name: 'Bioplastia Selagem / Alinhamento 1000ml',
+    brand: 'Lowell',
+    category: 'Progressivas & Alinhamentos',
+    currentStock: 2,
+    minStock: 1,
+    unit: 'frasco',
+    costPrice: 165.00,
+    supplier: 'Distribuidora Lowell',
+    location: 'Armário de Químicas',
+    notes: 'Redução de volume e blindagem dos fios',
+    createdAt: '2026-10-01T10:00:00Z',
+    updatedAt: '2026-10-01T10:00:00Z',
+  },
+];
+
 export function getTodayDate(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -1087,6 +1353,30 @@ export const storageService = {
     syncCollectionToFirestore('expenses', expenses);
   },
 
+  getInventory(): InventoryItem[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      return INITIAL_INVENTORY;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+        return INITIAL_INVENTORY;
+      }
+      return parsed;
+    } catch {
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      return INITIAL_INVENTORY;
+    }
+  },
+
+  saveInventory(inventory: InventoryItem[]): void {
+    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+    syncCollectionToFirestore('inventory', inventory);
+  },
+
   getSettings(): CompanySettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) {
@@ -1122,6 +1412,7 @@ export const storageService = {
       attendances: this.getAttendances(),
       payments: this.getPayments(),
       expenses: this.getExpenses(),
+      inventory: this.getInventory(),
       settings: this.getSettings(),
     };
     return JSON.stringify(data, null, 2);
@@ -1138,6 +1429,7 @@ export const storageService = {
       if (parsed.attendances) this.saveAttendances(parsed.attendances);
       if (parsed.payments) this.savePayments(parsed.payments);
       if (parsed.expenses) this.saveExpenses(parsed.expenses);
+      if (parsed.inventory) this.saveInventory(parsed.inventory);
       if (parsed.settings) this.saveSettings(parsed.settings);
       return true;
     } catch (e) {
@@ -1154,6 +1446,7 @@ export const storageService = {
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
 
     DEFAULT_USERS.forEach(u => {
@@ -1163,10 +1456,11 @@ export const storageService = {
       }
     });
 
-    // Clear Firestore collections if connected, keeping official services & professionals
+    // Clear Firestore collections if connected, keeping official services & professionals & inventory
     syncCollectionToFirestore('clients', []);
     syncCollectionToFirestore('services', INITIAL_SERVICES);
     syncCollectionToFirestore('professionals', INITIAL_PROFESSIONALS);
+    syncCollectionToFirestore('inventory', INITIAL_INVENTORY);
     syncCollectionToFirestore('users', DEFAULT_USERS);
     syncCollectionToFirestore('appointments', []);
     syncCollectionToFirestore('attendances', []);

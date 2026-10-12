@@ -10,7 +10,8 @@ import {
   CompanySettings,
   AppointmentStatus,
   PaymentMethod,
-  User
+  User,
+  InventoryItem
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
 import { 
@@ -44,6 +45,10 @@ interface DataContextType {
   attendances: Attendance[];
   payments: PaymentTransaction[];
   expenses: Expense[];
+  inventory: InventoryItem[];
+  lowStockCount: number;
+  outOfStockCount: number;
+  totalInventoryValue: number;
   settings: CompanySettings;
   
   // Clients
@@ -97,6 +102,12 @@ interface DataContextType {
   deleteExpense: (id: string) => void;
   addPayment: (paymentData: Omit<PaymentTransaction, 'id' | 'createdAt' | 'type'>) => { success: boolean; payment?: PaymentTransaction; error?: string };
 
+  // Inventory
+  addInventoryItem: (itemData: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => { success: boolean; item?: InventoryItem; error?: string };
+  updateInventoryItem: (id: string, itemData: Partial<InventoryItem>) => { success: boolean; error?: string };
+  deleteInventoryItem: (id: string) => { success: boolean; error?: string };
+  adjustStock: (id: string, quantityChange: number, reason?: string, type?: 'entrada' | 'saida' | 'ajuste') => { success: boolean; error?: string };
+
   // Settings & Utilities
   updateSettings: (newSettings: CompanySettings) => void;
   refreshData: () => void;
@@ -142,6 +153,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [settings, setSettings] = useState<CompanySettings>(storageService.getSettings());
 
   const loadAllData = useCallback(() => {
@@ -152,6 +164,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendances(storageService.getAttendances());
     setPayments(storageService.getPayments());
     setExpenses(storageService.getExpenses());
+    setInventory(storageService.getInventory());
     setSettings(storageService.getSettings());
   }, []);
 
@@ -797,6 +810,99 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageService.saveSettings(newSettings);
   };
 
+  // INVENTORY MANAGEMENT
+  const addInventoryItem = (itemData: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const now = new Date().toISOString();
+      const newItem: InventoryItem = {
+        ...itemData,
+        id: generateId('inv'),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const nextInventory = [newItem, ...inventory];
+      setInventory(nextInventory);
+      storageService.saveInventory(nextInventory);
+      return { success: true, item: newItem };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Erro ao adicionar item ao estoque' };
+    }
+  };
+
+  const updateInventoryItem = (id: string, itemData: Partial<InventoryItem>) => {
+    try {
+      const now = new Date().toISOString();
+      const nextInventory = inventory.map(item =>
+        item.id === id ? { ...item, ...itemData, updatedAt: now } : item
+      );
+      setInventory(nextInventory);
+      storageService.saveInventory(nextInventory);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Erro ao atualizar produto do estoque' };
+    }
+  };
+
+  const deleteInventoryItem = (id: string) => {
+    try {
+      const nextInventory = inventory.filter(item => item.id !== id);
+      setInventory(nextInventory);
+      storageService.saveInventory(nextInventory);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Erro ao remover produto do estoque' };
+    }
+  };
+
+  const adjustStock = (id: string, quantityChange: number, reason?: string, type: 'entrada' | 'saida' | 'ajuste' = 'ajuste') => {
+    try {
+      const now = new Date().toISOString();
+      const target = inventory.find(i => i.id === id);
+      if (!target) {
+        return { success: false, error: 'Item não localizado no estoque' };
+      }
+
+      let newStock = target.currentStock;
+      if (type === 'ajuste') {
+        newStock = Math.max(0, quantityChange);
+      } else if (type === 'entrada') {
+        newStock = Math.max(0, target.currentStock + Math.abs(quantityChange));
+      } else if (type === 'saida') {
+        newStock = Math.max(0, target.currentStock - Math.abs(quantityChange));
+      }
+
+      const nextInventory = inventory.map(item => {
+        if (item.id === id) {
+          return {
+            ...item,
+            currentStock: newStock,
+            lastRestockedAt: (type === 'entrada' || (type === 'ajuste' && newStock > item.currentStock)) ? now : item.lastRestockedAt,
+            updatedAt: now,
+          };
+        }
+        return item;
+      });
+
+      setInventory(nextInventory);
+      storageService.saveInventory(nextInventory);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Erro ao movimentar estoque' };
+    }
+  };
+
+  const lowStockCount = useMemo(() => {
+    return inventory.filter(item => item.currentStock <= item.minStock && item.currentStock > 0).length;
+  }, [inventory]);
+
+  const outOfStockCount = useMemo(() => {
+    return inventory.filter(item => item.currentStock <= 0).length;
+  }, [inventory]);
+
+  const totalInventoryValue = useMemo(() => {
+    return inventory.reduce((acc, item) => acc + (item.currentStock * (item.costPrice || 0)), 0);
+  }, [inventory]);
+
   const clearAllData = useCallback(() => {
     storageService.clearAllData();
     loadAllData();
@@ -920,6 +1026,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attendances,
         payments,
         expenses,
+        inventory,
+        lowStockCount,
+        outOfStockCount,
+        totalInventoryValue,
         settings,
         addClient,
         updateClient,
@@ -943,6 +1053,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateExpense,
         deleteExpense,
         addPayment,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
+        adjustStock,
         updateSettings,
         refreshData: loadAllData,
         clearAllData,

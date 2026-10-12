@@ -11,11 +11,13 @@ import {
   X,
   Database,
   CheckCircle2,
-  UserCheck
+  UserCheck,
+  Package
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { getFirebaseInstance } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 
 interface SidebarProps {
   currentPage: NavigationPage;
@@ -31,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { currentUser } = useAuth();
+  const { lowStockCount, outOfStockCount } = useData();
   const { isConnected: isFirebaseConnected } = getFirebaseInstance();
 
   const isProfessional = currentUser?.role === 'profissional';
@@ -48,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'servicos', label: 'Serviços', icon: Sparkles },
         { id: 'profissionais', label: 'Profissionais', icon: UserCheck },
         { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
+        { id: 'estoque', label: 'Estoque do Salão', icon: Package },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
         { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
         { id: 'configuracoes', label: 'Configurações', icon: Settings },
@@ -126,6 +130,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }`}
                 />
                 <span className="flex-1 text-left">{item.label}</span>
+                {item.id === 'estoque' && (lowStockCount > 0 || outOfStockCount > 0) && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200/80 animate-pulse">
+                    {lowStockCount + outOfStockCount} repor
+                  </span>
+                )}
                 {isActive && (
                   <span className="w-1.5 h-4 rounded-full bg-tb-rose-primary" />
                 )}

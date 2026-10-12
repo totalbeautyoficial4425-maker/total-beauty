@@ -220,7 +220,51 @@ export type NavigationPage =
   | 'servicos' 
   | 'profissionais' 
   | 'atendimentos' 
+  | 'estoque'
   | 'financeiro' 
   | 'relatorios' 
   | 'configuracoes'
-  | 'minha-producao'; // Nova página exclusiva das profissionais
+  | 'minha-producao'; // Página exclusiva das profissionais
+
+export type InventoryCategory =
+  | 'Tintas & Colorações'
+  | 'Pó Descolorante'
+  | 'Água Oxigenada'
+  | 'Hidratações & Máscaras'
+  | 'Shampoos'
+  | 'Condicionadores'
+  | 'Progressivas & Alinhamentos'
+  | 'Finalizadores & Óleos'
+  | 'Esmaltes & Manicure'
+  | 'Descartáveis & Higiene'
+  | 'Outros'
+  | string;
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  type: 'entrada' | 'saida' | 'ajuste';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason?: string;
+  createdAt: string;
+  userName?: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  brand: string; // Ex: 'Lowell', 'Wella', 'Erick Kenedy'
+  category: InventoryCategory;
+  currentStock: number;
+  minStock: number; // Dispara alerta quando currentStock <= minStock
+  unit: string; // 'un', 'tubo', 'frasco', 'pote', 'litro', 'kg', 'cx'
+  costPrice?: number; // Preço de custo unitário em R$
+  supplier?: string; // Fornecedor / Representante
+  location?: string; // Local de armazenamento (ex: Armário das Tintas, Lavatório)
+  notes?: string;
+  lastRestockedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

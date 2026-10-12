@@ -16,6 +16,7 @@ import { RelatoriosPage } from './pages/RelatoriosPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { MinhaProducaoPage } from './pages/MinhaProducaoPage';
 import { ProfissionaisPage } from './pages/ProfissionaisPage';
+import { EstoquePage } from './pages/EstoquePage';
 
 // Modals
 import { AppointmentModal } from './components/modals/AppointmentModal';
@@ -236,6 +237,10 @@ export const AppContent: React.FC = () => {
 
           {currentPage === 'minha-producao' && (
             <MinhaProducaoPage />
+          )}
+
+          {currentPage === 'estoque' && (
+            <EstoquePage />
           )}
         </main>
       </div>

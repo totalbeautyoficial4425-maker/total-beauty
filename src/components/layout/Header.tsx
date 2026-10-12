@@ -11,7 +11,8 @@ import {
   ChevronDown,
   Calendar,
   X,
-  Cake
+  Cake,
+  Package
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -33,6 +34,7 @@ const PAGE_TITLES: Record<NavigationPage, string> = {
   servicos: 'Catálogo de Serviços',
   profissionais: 'Gestão da Equipe & Comissões',
   atendimentos: 'Atendimentos & Execução',
+  estoque: 'Controle de Estoque & Materiais',
   financeiro: 'Fluxo Financeiro',
   relatorios: 'Relatórios Gerenciais',
   configuracoes: 'Configurações da Empresa',
@@ -47,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenChangePassword,
 }) => {
   const { currentUser, logout } = useAuth();
-  const { clients, services, appointments } = useData();
+  const { clients, services, lowStockCount, outOfStockCount } = useData();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -248,6 +250,29 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <p className="text-[11px] text-tb-brown-soft mt-1">
                       Envie felicitações com 1 clique pelo WhatsApp e encante suas clientes.
+                    </p>
+                  </button>
+                )}
+
+                {(lowStockCount + outOfStockCount) > 0 && (
+                  <button
+                    onClick={() => {
+                      onNavigate('estoque');
+                      setNotificationsOpen(false);
+                    }}
+                    className="w-full text-left p-3 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100/70 transition-colors block"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-800 font-bold text-xs">
+                        <Package className="w-4 h-4 text-amber-600" />
+                        <span>{lowStockCount + outOfStockCount} {lowStockCount + outOfStockCount === 1 ? 'Produto no Fim!' : 'Produtos Acabando!'}</span>
+                      </div>
+                      <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-bold">
+                        Repor
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-tb-brown-soft mt-1">
+                      Materiais atingiram o estoque mínimo. Veja a lista para comprar novamente.
                     </p>
                   </button>
                 )}

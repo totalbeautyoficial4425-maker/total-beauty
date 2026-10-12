@@ -16,7 +16,9 @@ import {
   ChevronRight,
   Plus,
   Cake,
-  Gift
+  Gift,
+  Package,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -59,7 +61,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     payments, 
     expenses,
     professionals,
-    getProfessionalMetrics 
+    getProfessionalMetrics,
+    lowStockCount,
+    outOfStockCount
   } = useData();
 
   // Filter clients by birthdays
@@ -562,6 +566,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Banner Alerta de Reposição de Estoque do Salão */}
+      {(lowStockCount + outOfStockCount > 0) && (
+        <div className="rounded-3xl bg-gradient-to-r from-amber-50 via-orange-50/70 to-rose-50/50 p-5 sm:p-6 border-2 border-amber-300/80 shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shrink-0">
+              <Package className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
+                  Alerta de Estoque: Reposição Necessária
+                </h3>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-sm">
+                  {lowStockCount + outOfStockCount} {lowStockCount + outOfStockCount === 1 ? 'item' : 'itens'}
+                </span>
+              </div>
+              <p className="text-xs text-tb-brown-soft mt-0.5">
+                {outOfStockCount > 0 ? `${outOfStockCount} esgotado(s) e ` : ''}
+                {lowStockCount} produto(s) atingiram a quantidade mínima (tintas, descolorantes, progressivas, etc.).
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigate('estoque')}
+            className="px-4 py-2.5 rounded-xl bg-tb-brown-dark hover:bg-tb-brown-primary text-white text-xs font-semibold flex items-center gap-2 shadow-soft hover:shadow transition-all shrink-0"
+          >
+            <Package className="w-4 h-4 text-amber-400" />
+            Gerenciar Estoque & Compras
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       )}
 
