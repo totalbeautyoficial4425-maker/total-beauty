@@ -22,12 +22,12 @@ interface ServicosPageProps {
 }
 
 const CATEGORY_NAMES: Record<string, string> = {
-  cabelo: 'Cabelos & Terapias',
-  unhas: 'Unhas & Spa dos Pés',
-  sobrancelhas: 'Design de Sobrancelhas',
-  cilios: 'Extensão de Cílios',
-  maquiagem: 'Maquiagem & Visagismo',
-  estetica: 'Estética & Cuidados Faciais',
+  cabelo: 'Cabeleireiras & Cabelos',
+  unhas: 'Manicures & Unhas',
+  estetica: 'Esteticista & Depilação',
+  sobrancelhas: 'Designer Sobrancelhas',
+  cilios: 'Lash Designer',
+  maquiagem: 'Maquiagem & Penteado',
   outros: 'Outros Procedimentos',
 };
 
@@ -60,13 +60,13 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
       <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary block mb-1">
-            Catálogo Oficial
+            Catálogo Oficial de Procedimentos
           </span>
           <h2 className="font-serif-brand text-3xl font-bold text-tb-brown-dark">
             Serviços & Procedimentos
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            Gerencie preços padrão, durações estimadas e disponibilidade de agendamento.
+            Controle de preços padrão, duração em minutos para a agenda e comissões do salão.
           </p>
         </div>
 
@@ -80,32 +80,54 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-tb-white rounded-2xl p-4 border border-tb-rose-light/40 shadow-soft flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Buscar por nome do serviço ou descrição..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
-          />
+      <div className="bg-tb-white rounded-2xl p-4 border border-tb-rose-light/40 shadow-soft space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Buscar por nome do serviço ou procedimento..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
+            />
+          </div>
+
+          <span className="text-xs font-semibold text-tb-gray-neutral ml-auto">
+            {filteredServices.length} serviço(s) exibido(s)
+          </span>
         </div>
 
-        <select
-          value={selectedCategory}
-          onChange={e => setSelectedCategory(e.target.value)}
-          className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
-        >
-          <option value="todas">Todas as Categorias</option>
-          {Object.entries(CATEGORY_NAMES).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-
-        <span className="text-xs font-semibold text-tb-gray-neutral ml-auto">
-          {filteredServices.length} serviço(s)
-        </span>
+        {/* Category Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none">
+          <button
+            onClick={() => setSelectedCategory('todas')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              selectedCategory === 'todas'
+                ? 'bg-tb-rose-primary text-white shadow-soft'
+                : 'bg-tb-ivory border border-tb-rose-light/60 text-tb-brown-soft hover:bg-tb-beige-light'
+            }`}
+          >
+            Todos ({services.length})
+          </button>
+          {Object.entries(CATEGORY_NAMES).map(([catKey, label]) => {
+            const count = services.filter(s => s.category === catKey).length;
+            if (count === 0 && selectedCategory !== catKey) return null;
+            return (
+              <button
+                key={catKey}
+                onClick={() => setSelectedCategory(catKey)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  selectedCategory === catKey
+                    ? 'bg-tb-rose-primary text-white shadow-soft'
+                    : 'bg-tb-ivory border border-tb-rose-light/60 text-tb-brown-soft hover:bg-tb-beige-light'
+                }`}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Services Grid */}

@@ -50,7 +50,565 @@ export const DEFAULT_USERS: User[] = [
   }
 ];
 
-export const INITIAL_SERVICES: Service[] = [];
+export const INITIAL_SERVICES: Service[] = [
+  // --- CABELEIREIRAS ---
+  {
+    id: 'srv_cab_01',
+    name: 'Ultra gloss raiz',
+    category: 'cabelo',
+    description: 'Aplicação de ultra gloss na raiz para alinhamento e brilho espelhado',
+    price: 170.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_02',
+    name: 'Ultra gloss raiz + tratamento + escova',
+    category: 'cabelo',
+    description: 'Ultra gloss na raiz combinado com tratamento profundo e escova finalizadora',
+    price: 250.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_03',
+    name: 'Banho de brilho',
+    category: 'cabelo',
+    description: 'Banho de brilho capilar revitalizante e intensificador de cor',
+    price: 150.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_04',
+    name: 'Camuflagem dos brilhos',
+    category: 'cabelo',
+    description: 'Camuflagem e uniformização dos fios com reflexos naturais',
+    price: 170.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_05',
+    name: 'Ultra gloss cabelo todo',
+    category: 'cabelo',
+    description: 'Ultra gloss completo em toda a extensão dos cabelos',
+    price: 220.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_06',
+    name: 'Coloração/ tonalização',
+    category: 'cabelo',
+    description: 'Coloração ou tonalização profissional completa',
+    price: 150.00,
+    durationMinutes: 50,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_07',
+    name: 'Aplic.coloração da cliente',
+    category: 'cabelo',
+    description: 'Aplicação técnica da coloração trazida pela cliente',
+    price: 100.00,
+    durationMinutes: 50,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_08',
+    name: 'Combo corte',
+    category: 'cabelo',
+    description: 'Combo de corte feminino completo com finalização',
+    price: 150.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_09',
+    name: 'Corte masculino',
+    category: 'cabelo',
+    description: 'Corte masculino moderno com tesoura e máquina',
+    price: 70.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_10',
+    name: 'Corte franja',
+    category: 'cabelo',
+    description: 'Aparação, alinhamento e modelagem de franja',
+    price: 50.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_11',
+    name: 'Combo nutrição/hidratacao curto',
+    category: 'cabelo',
+    description: 'Combo intensivo de nutrição e hidratação para cabelos curtos',
+    price: 160.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_12',
+    name: 'Combo nutrição/hidratacao médio',
+    category: 'cabelo',
+    description: 'Combo intensivo de nutrição e hidratação para cabelos médios',
+    price: 180.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_13',
+    name: 'Combo nutrição/hidratacao longo',
+    category: 'cabelo',
+    description: 'Combo intensivo de nutrição e hidratação para cabelos longos',
+    price: 200.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_14',
+    name: 'Combo reconstrução curto',
+    category: 'cabelo',
+    description: 'Reconstrução capilar profunda com reposição de massa para cabelos curtos',
+    price: 220.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_15',
+    name: 'Combo reconstrução médio',
+    category: 'cabelo',
+    description: 'Reconstrução capilar profunda com reposição de massa para cabelos médios',
+    price: 260.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_16',
+    name: 'Combo reconstrução longo',
+    category: 'cabelo',
+    description: 'Reconstrução capilar profunda com reposição de massa para cabelos longos',
+    price: 280.00,
+    durationMinutes: 45,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_17',
+    name: 'Ozônio terapia',
+    category: 'cabelo',
+    description: 'Ozonioterapia para oxigenação do couro cabeludo e fortalecimento dos fios',
+    price: 20.00,
+    durationMinutes: 20,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_18',
+    name: 'Escova curto',
+    category: 'cabelo',
+    description: 'Lavagem e escova modelada para cabelos curtos',
+    price: 70.00,
+    durationMinutes: 40,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_19',
+    name: 'Escova médio',
+    category: 'cabelo',
+    description: 'Lavagem e escova modelada para cabelos médios',
+    price: 85.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_20',
+    name: 'Escova longo',
+    category: 'cabelo',
+    description: 'Lavagem e escova modelada para cabelos longos',
+    price: 100.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_21',
+    name: 'Cachos e ondas',
+    category: 'cabelo',
+    description: 'Finalização e modelagem térmica de cachos ou ondas com babyliss',
+    price: 20.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_22',
+    name: 'Pranchas',
+    category: 'cabelo',
+    description: 'Alinhamento liso com prancha térmica de alta performance',
+    price: 20.00,
+    durationMinutes: 40,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_23',
+    name: 'Secagem simples',
+    category: 'cabelo',
+    description: 'Lavagem e secagem simples com secador profissional',
+    price: 50.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_24',
+    name: 'Higienização',
+    category: 'cabelo',
+    description: 'Higienização e lavagem capilar com produtos premium',
+    price: 30.00,
+    durationMinutes: 15,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_25',
+    name: 'Higienização especial',
+    category: 'cabelo',
+    description: 'Higienização especial com massagem capilar revigorante',
+    price: 40.00,
+    durationMinutes: 15,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_26',
+    name: 'Matização',
+    category: 'cabelo',
+    description: 'Matização para neutralizar e realçar os reflexos claros ou loiros',
+    price: 60.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_27',
+    name: 'Mechas curto parcial',
+    category: 'cabelo',
+    description: 'Técnica de mechas parciais em cabelos de comprimento curto',
+    price: 290.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_28',
+    name: 'Mechas médio parcial',
+    category: 'cabelo',
+    description: 'Técnica de mechas parciais em cabelos de comprimento médio',
+    price: 390.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_29',
+    name: 'Mechas longo parcial',
+    category: 'cabelo',
+    description: 'Técnica de mechas parciais em cabelos de comprimento longo',
+    price: 490.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_30',
+    name: 'Mechas curto global',
+    category: 'cabelo',
+    description: 'Técnica de mechas globais completas em cabelos curtos',
+    price: 520.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_31',
+    name: 'Mechas médio global',
+    category: 'cabelo',
+    description: 'Técnica de mechas globais completas em cabelos médios',
+    price: 620.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_32',
+    name: 'Mechas longo global',
+    category: 'cabelo',
+    description: 'Técnica de mechas globais completas em cabelos longos',
+    price: 720.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_33',
+    name: 'Progressiva/selagem curto',
+    category: 'cabelo',
+    description: 'Alinhamento térmico progressiva ou selagem para cabelos curtos',
+    price: 250.00,
+    durationMinutes: 50,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_34',
+    name: 'Progressiva/selagem médio',
+    category: 'cabelo',
+    description: 'Alinhamento térmico progressiva ou selagem para cabelos médios',
+    price: 300.00,
+    durationMinutes: 50,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_35',
+    name: 'Progressiva/selagem longo',
+    category: 'cabelo',
+    description: 'Alinhamento térmico progressiva ou selagem para cabelos longos',
+    price: 350.00,
+    durationMinutes: 50,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_36',
+    name: 'Maquiagem',
+    category: 'maquiagem',
+    description: 'Maquiagem social completa para ocasiões e festas',
+    price: 160.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_37',
+    name: 'Maquiagem mais cabelo',
+    category: 'maquiagem',
+    description: 'Combo completo de maquiagem profissional com produção de cabelo',
+    price: 250.00,
+    durationMinutes: 120,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_cab_38',
+    name: 'Penteado',
+    category: 'cabelo',
+    description: 'Penteado elaborado para eventos e ocasiões especiais',
+    price: 250.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+
+  // --- MANICURES ---
+  {
+    id: 'srv_man_01',
+    name: 'Manicure',
+    category: 'unhas',
+    description: 'Cutilagem e esmaltação tradicional das mãos',
+    price: 40.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_02',
+    name: 'Pedicure',
+    category: 'unhas',
+    description: 'Cutilagem, lixamento e esmaltação tradicional dos pés',
+    price: 45.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_03',
+    name: 'Pedicure e manicure',
+    category: 'unhas',
+    description: 'Combo completo de cuidados para mãos e pés',
+    price: 70.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_04',
+    name: 'Esmaltação',
+    category: 'unhas',
+    description: 'Aplicação e troca de esmalte simples',
+    price: 25.00,
+    durationMinutes: 15,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_05',
+    name: 'Blindagem mão',
+    category: 'unhas',
+    description: 'Camada de proteção e fortalecimento em gel nas unhas das mãos',
+    price: 120.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_06',
+    name: 'Blindagem pé',
+    category: 'unhas',
+    description: 'Camada de proteção e fortalecimento em gel nas unhas dos pés',
+    price: 90.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_07',
+    name: 'Remoção',
+    category: 'unhas',
+    description: 'Remoção cuidadosa de blindagem, gel ou esmaltação prolongada',
+    price: 30.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_08',
+    name: 'SPA',
+    category: 'unhas',
+    description: 'Spa dos pés completo com esfoliação, imersão relaxante e hidratação profunda',
+    price: 130.00,
+    durationMinutes: 120,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_man_09',
+    name: 'Higienização especial (unhas)',
+    category: 'unhas',
+    description: 'Higienização e assepsia profunda especializada para unhas',
+    price: 80.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+
+  // --- ESTETICISTA ---
+  {
+    id: 'srv_est_01',
+    name: 'Depilação cava',
+    category: 'estetica',
+    description: 'Depilação da virilha / cava com cera descartável higiênica',
+    price: 70.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_02',
+    name: 'Depilação perna inteira',
+    category: 'estetica',
+    description: 'Depilação completa de pernas inteiras',
+    price: 70.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_03',
+    name: 'Depilação meia perna',
+    category: 'estetica',
+    description: 'Depilação de meia perna com cera morna',
+    price: 45.00,
+    durationMinutes: 20,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_04',
+    name: 'Depilação axilas',
+    category: 'estetica',
+    description: 'Depilação de axilas com cera higiênica e calmante pós-depilatório',
+    price: 35.00,
+    durationMinutes: 15,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_05',
+    name: 'Depilação buço',
+    category: 'estetica',
+    description: 'Depilação facial delicada da região do buço',
+    price: 25.00,
+    durationMinutes: 10,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_06',
+    name: 'Designer sobrancelha',
+    category: 'sobrancelhas',
+    description: 'Design de sobrancelhas personalizado com pinça e alinhamento',
+    price: 40.00,
+    durationMinutes: 30,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+  {
+    id: 'srv_est_07',
+    name: 'Micropigmentação',
+    category: 'sobrancelhas',
+    description: 'Micropigmentação de sobrancelhas com técnica natural e durabilidade',
+    price: 300.00,
+    durationMinutes: 180,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+
+  // --- LASH ---
+  {
+    id: 'srv_lash_01',
+    name: 'Lash designer',
+    category: 'cilios',
+    description: 'Extensão de cílios fio a fio personalizada com mapeamento do olhar',
+    price: 160.00,
+    durationMinutes: 240,
+    commissionPercentage: 50,
+    isActive: true,
+  },
+];
 
 export const INITIAL_PROFESSIONALS: Professional[] = [];
 
@@ -105,6 +663,7 @@ export function generateSeedExpenses(): Expense[] {
 
 // Clean production migration helper to ensure previously cached demo data in user's browser is completely wiped
 const CLEAN_PROD_FLAG = 'tb_clean_production_v5';
+const CATALOG_VERSION_FLAG = 'tb_official_catalog_v2';
 
 export function ensureCleanProductionState(): void {
   if (typeof window === 'undefined') return;
@@ -125,9 +684,9 @@ export function ensureCleanProductionState(): void {
     ];
     demoKeys.forEach(k => localStorage.removeItem(k));
 
-    // Initialize clean empty data in storage
+    // Initialize clean empty data in storage, and seed the official 55 services
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
@@ -141,6 +700,15 @@ export function ensureCleanProductionState(): void {
     }
 
     localStorage.setItem(CLEAN_PROD_FLAG, 'true');
+    localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
+  }
+
+  // Ensure official catalog of services is loaded for active browsers
+  const hasCatalog = localStorage.getItem(CATALOG_VERSION_FLAG);
+  if (!hasCatalog) {
+    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
+    localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
+    syncCollectionToFirestore('services', INITIAL_SERVICES);
   }
 }
 
@@ -196,12 +764,17 @@ export const storageService = {
   },
 
   getServices(): Service[] {
+    ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.SERVICES);
     if (!raw) {
       localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
       return INITIAL_SERVICES;
     }
-    const services: Service[] = JSON.parse(raw);
+    let services: Service[] = JSON.parse(raw);
+    if (services.length === 0) {
+      services = INITIAL_SERVICES;
+      localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
+    }
     // Ensure commission percentage is present
     return services.map(s => ({
       ...s,
@@ -342,7 +915,7 @@ export const storageService = {
 
   clearAllData(): void {
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
@@ -354,9 +927,9 @@ export const storageService = {
       localStorage.setItem('tb_pwd_user_admin_01', hashPassword('admin123'));
     }
 
-    // Clear Firestore collections if connected
+    // Clear Firestore collections if connected, keeping official services
     syncCollectionToFirestore('clients', []);
-    syncCollectionToFirestore('services', []);
+    syncCollectionToFirestore('services', INITIAL_SERVICES);
     syncCollectionToFirestore('professionals', []);
     syncCollectionToFirestore('appointments', []);
     syncCollectionToFirestore('attendances', []);

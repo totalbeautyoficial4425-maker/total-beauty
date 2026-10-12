@@ -137,7 +137,27 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                 className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
               >
                 <option value="">Selecione o serviço...</option>
-                {services.filter(s => s.isActive).map(s => (
+                {Object.entries({
+                  cabelo: 'Cabeleireiras & Cabelos',
+                  unhas: 'Manicures & Unhas',
+                  estetica: 'Esteticista & Depilação',
+                  sobrancelhas: 'Designer Sobrancelhas',
+                  cilios: 'Lash Designer',
+                  maquiagem: 'Maquiagem & Penteado',
+                }).map(([catKey, catLabel]) => {
+                  const catServices = services.filter(s => s.isActive && s.category === catKey);
+                  if (catServices.length === 0) return null;
+                  return (
+                    <optgroup key={catKey} label={catLabel}>
+                      {catServices.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} — {s.durationMinutes} min ({formatBRL(s.price)})
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+                {services.filter(s => s.isActive && !['cabelo', 'unhas', 'estetica', 'sobrancelhas', 'cilios', 'maquiagem'].includes(s.category)).map(s => (
                   <option key={s.id} value={s.id}>{s.name} ({formatBRL(s.price)})</option>
                 ))}
               </select>
