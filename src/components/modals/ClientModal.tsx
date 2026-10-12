@@ -242,8 +242,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
-                  Data de Nascimento
+                <label className="block text-xs font-semibold text-tb-brown-dark mb-1 flex items-center justify-between">
+                  <span>Data de Nascimento</span>
+                  <span className="text-[10px] text-pink-600 font-medium">🎂 Parabéns no WhatsApp</span>
                 </label>
                 <input
                   type="date"

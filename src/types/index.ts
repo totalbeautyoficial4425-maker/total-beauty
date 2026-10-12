@@ -201,6 +201,7 @@ export interface CompanySettings {
     agradecimento: string;
     retorno: string;
     inativa: string;
+    aniversario: string;
   };
   firebaseConfig?: {
     apiKey: string;

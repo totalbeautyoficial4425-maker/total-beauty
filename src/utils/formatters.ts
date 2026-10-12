@@ -135,3 +135,44 @@ export function getTodayDateString(): string {
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+export function parseBirthMonthDay(birthDate?: string): { month: number; day: number } | null {
+  if (!birthDate) return null;
+  const clean = birthDate.trim();
+  if (clean.includes('-')) {
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(m) && !isNaN(d)) return { month: m, day: d };
+    }
+  } else if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(m) && !isNaN(d)) return { month: m, day: d };
+    }
+  }
+  return null;
+}
+
+export function isClientBirthdayToday(birthDate?: string): boolean {
+  const parsed = parseBirthMonthDay(birthDate);
+  if (!parsed) return false;
+  const now = new Date();
+  return parsed.month === (now.getMonth() + 1) && parsed.day === now.getDate();
+}
+
+export function isClientBirthdayThisMonth(birthDate?: string): boolean {
+  const parsed = parseBirthMonthDay(birthDate);
+  if (!parsed) return false;
+  const now = new Date();
+  return parsed.month === (now.getMonth() + 1);
+}
+
+export function formatBirthdayDayMonth(birthDate?: string): string {
+  const parsed = parseBirthMonthDay(birthDate);
+  if (!parsed) return '';
+  return `${String(parsed.day).padStart(2, '0')}/${String(parsed.month).padStart(2, '0')}`;
+}

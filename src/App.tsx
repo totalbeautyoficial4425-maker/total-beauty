@@ -77,6 +77,7 @@ export const AppContent: React.FC = () => {
   const [whatsAppClientName, setWhatsAppClientName] = useState('');
   const [whatsAppClientPhone, setWhatsAppClientPhone] = useState('');
   const [whatsAppData, setWhatsAppData] = useState<any>(null);
+  const [whatsAppTemplateKey, setWhatsAppTemplateKey] = useState<any>('confirmacao');
 
   // 8. Voluntary Change Password Modal
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -135,10 +136,11 @@ export const AppContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
-  const handleOpenWhatsApp = (name: string, phone: string, extraData?: any) => {
+  const handleOpenWhatsApp = (name: string, phone: string, extraData?: any, templateKey?: any) => {
     setWhatsAppClientName(name);
     setWhatsAppClientPhone(phone);
     setWhatsAppData(extraData);
+    setWhatsAppTemplateKey(templateKey || (extraData?.isBirthday ? 'aniversario' : 'confirmacao'));
     setIsWhatsAppModalOpen(true);
   };
 
@@ -311,6 +313,7 @@ export const AppContent: React.FC = () => {
         clientName={whatsAppClientName}
         clientPhone={whatsAppClientPhone}
         appointmentData={whatsAppData}
+        defaultTemplateKey={whatsAppTemplateKey}
       />
     </div>
   );

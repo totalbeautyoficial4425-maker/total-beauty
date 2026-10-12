@@ -15,18 +15,19 @@ import {
   MapPin, 
   HeartHandshake,
   CheckCircle2,
-  CalendarCheck
+  CalendarCheck,
+  Cake
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Client } from '../../types';
-import { formatBRL, formatDateBR, maskPhoneBR } from '../../utils/formatters';
+import { formatBRL, formatDateBR, maskPhoneBR, isClientBirthdayToday } from '../../utils/formatters';
 
 interface ClientDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   client: Client | null;
   onEditClient: (client: Client) => void;
-  onOpenWhatsApp: (clientName: string, clientPhone: string) => void;
+  onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any, templateKey?: any) => void;
   onNewAppointmentForClient: (clientId: string) => void;
 }
 
@@ -90,15 +91,26 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* WhatsApp Action */}
-            <button
-              onClick={() => onOpenWhatsApp(client.name, client.phone)}
-              className="p-2 sm:px-3 sm:py-2 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex items-center gap-1.5 transition-colors"
-              title="Conversar no WhatsApp"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
-              <span className="hidden sm:inline">WhatsApp</span>
-            </button>
+            {/* WhatsApp Action / Birthday Action */}
+            {isClientBirthdayToday(client.birthDate) ? (
+              <button
+                onClick={() => onOpenWhatsApp(client.name, client.phone, { isBirthday: true }, 'aniversario')}
+                className="px-3 py-2 text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white rounded-xl flex items-center gap-1.5 shadow-sm transition-all animate-pulse"
+                title="Parabenizar no WhatsApp Hoje"
+              >
+                <Cake className="w-4 h-4" />
+                <span>Parabenizar Hoje!</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenWhatsApp(client.name, client.phone)}
+                className="p-2 sm:px-3 sm:py-2 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex items-center gap-1.5 transition-colors"
+                title="Conversar no WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </button>
+            )}
 
             {/* New Appointment Action */}
             <button
@@ -187,9 +199,14 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                       <Mail className="w-3.5 h-3.5 text-tb-rose-primary" />
                       <span className="font-semibold">E-mail:</span> {client.email || 'Não informado'}
                     </p>
-                    <p className="flex items-center gap-2 text-tb-brown-dark">
+                    <p className="flex items-center gap-2 text-tb-brown-dark flex-wrap">
                       <Calendar className="w-3.5 h-3.5 text-tb-rose-primary" />
                       <span className="font-semibold">Nascimento:</span> {formatDateBR(client.birthDate)}
+                      {isClientBirthdayToday(client.birthDate) && (
+                        <span className="text-[10px] bg-pink-100 text-pink-700 font-bold px-2 py-0.5 rounded-full border border-pink-200">
+                          🎂 Aniversariante Hoje!
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>

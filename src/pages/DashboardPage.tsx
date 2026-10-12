@@ -14,7 +14,9 @@ import {
   BarChart3,
   CalendarCheck,
   ChevronRight,
-  Plus
+  Plus,
+  Cake,
+  Gift
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -22,13 +24,20 @@ import {
 } from 'recharts';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { formatBRL, formatDateBR } from '../utils/formatters';
+import { 
+  formatBRL, 
+  formatDateBR, 
+  isClientBirthdayToday, 
+  isClientBirthdayThisMonth, 
+  formatBirthdayDayMonth,
+  parseBirthMonthDay
+} from '../utils/formatters';
 import { Appointment, NavigationPage } from '../types';
 
 interface DashboardPageProps {
   onNavigate: (page: NavigationPage) => void;
   onOpenNewAppointment: () => void;
-  onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any) => void;
+  onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any, templateKey?: any) => void;
   onOpenAppointmentDetails: (appointment: Appointment) => void;
 }
 
@@ -52,6 +61,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     professionals,
     getProfessionalMetrics 
   } = useData();
+
+  // Filter clients by birthdays
+  const birthdayClientsToday = clients.filter(c => isClientBirthdayToday(c.birthDate));
+  const birthdayClientsThisMonth = clients.filter(c => isClientBirthdayThisMonth(c.birthDate));
+  const upcomingMonthBirthdays = birthdayClientsThisMonth
+    .map(c => {
+      const parsed = parseBirthMonthDay(c.birthDate);
+      return { client: c, day: parsed?.day || 0 };
+    })
+    .sort((a, b) => a.day - b.day);
 
   // If logged in as professional, render individual private dashboard
   if (currentUser?.role === 'profissional') {
@@ -105,6 +124,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Banner Aniversariantes de Hoje para a Profissional */}
+        {birthdayClientsToday.length > 0 && (
+          <div className="rounded-3xl bg-gradient-to-r from-pink-500/10 via-rose-50 to-amber-50/60 p-5 sm:p-6 border border-pink-200/80 shadow-soft space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-400 text-white flex items-center justify-center shadow-sm">
+                  <Cake className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-serif-brand text-base sm:text-lg font-bold text-tb-brown-dark">
+                      🎂 Aniversariantes do Dia ({birthdayClientsToday.length})
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">
+                      Felicitações
+                    </span>
+                  </div>
+                  <p className="text-xs text-tb-brown-soft">
+                    Envie os parabéns para as clientes da Total Beauty e torne o dia delas especial!
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {birthdayClientsToday.map(c => (
+                <div key={c.id} className="bg-white/95 rounded-2xl p-3 border border-pink-100 shadow-sm flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-tb-brown-dark truncate">{c.name}</p>
+                    <p className="text-[11px] text-tb-gray-neutral">{c.phone}</p>
+                  </div>
+                  <button
+                    onClick={() => onOpenWhatsApp(c.name, c.phone, { isBirthday: true }, 'aniversario')}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    Parabenizar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 4 Cards de Métricas Particulares da Profissional */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -444,6 +507,64 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
+      {/* Banner Comemorativo: Aniversariantes de Hoje */}
+      {birthdayClientsToday.length > 0 && (
+        <div className="rounded-3xl bg-gradient-to-r from-pink-50 via-rose-50/80 to-amber-50/60 p-6 border-2 border-pink-200/90 shadow-soft space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-400 text-white flex items-center justify-center shadow-md animate-pulse shrink-0">
+                <Cake className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
+                    🎂 Aniversariantes de Hoje ({birthdayClientsToday.length})
+                  </h3>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-pink-500 text-white shadow-sm">
+                    Hoje é dia de festa!
+                  </span>
+                </div>
+                <p className="text-xs text-tb-brown-soft mt-0.5">
+                  Parabenize via WhatsApp com 1 clique usando a mensagem personalizada do salão.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => onNavigate('clientes')}
+              className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1 shrink-0"
+            >
+              Ver clientes <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {birthdayClientsToday.map(c => (
+              <div
+                key={c.id}
+                className="bg-white rounded-2xl p-4 border border-pink-200/80 shadow-sm flex items-center justify-between gap-3 hover:border-pink-300 transition-all"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">🎉</span>
+                    <p className="text-sm font-bold text-tb-brown-dark truncate">{c.name}</p>
+                  </div>
+                  <p className="text-xs text-tb-gray-neutral mt-0.5">{c.phone}</p>
+                </div>
+                <button
+                  onClick={() => onOpenWhatsApp(c.name, c.phone, { isBirthday: true }, 'aniversario')}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:shadow transition-all shrink-0"
+                  title="Enviar parabéns pelo WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Parabenizar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards Grid (10 Indicadores Reais) */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4">
         {/* Card 1: Agendamentos Hoje */}
@@ -609,105 +730,188 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
       {/* Main Grid: Agenda Resumida de Hoje + Gráficos Principais */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Agenda Resumida de Hoje */}
-        <div className="lg:col-span-1 bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-                Agenda de Hoje
-              </h3>
-              <p className="text-xs text-tb-gray-neutral">
-                Próximos atendimentos programados
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate('agenda')}
-              className="text-xs text-tb-rose-primary hover:text-tb-brown-dark font-medium flex items-center gap-1"
-            >
-              Ver todos <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto max-h-[460px]">
-            {dashboardMetrics.upcomingTodayAppointments.length === 0 ? (
-              <div className="p-8 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/30">
-                <Calendar className="w-8 h-8 text-tb-gray-neutral/60 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-tb-brown-dark">Nenhum compromisso agendado para hoje.</p>
-                <p className="text-[11px] text-tb-gray-neutral mt-1">
-                  Clique abaixo para agendar a primeira cliente do dia.
+        {/* Left Column: Agenda Resumida de Hoje + Aniversariantes do Mês */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Card: Agenda Resumida de Hoje */}
+          <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
+                  Agenda de Hoje
+                </h3>
+                <p className="text-xs text-tb-gray-neutral">
+                  Próximos atendimentos programados
                 </p>
-                <button
-                  onClick={onOpenNewAppointment}
-                  className="mt-3 px-4 py-2 text-xs font-medium bg-tb-rose-primary text-white rounded-xl"
-                >
-                  Agendar Horário
-                </button>
               </div>
-            ) : (
-              dashboardMetrics.upcomingTodayAppointments.map(apt => (
-                <div
-                  key={apt.id}
-                  className="p-3.5 rounded-2xl bg-tb-ivory border border-tb-rose-light/40 hover:border-tb-rose-primary/50 transition-all flex items-center justify-between gap-3 group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 py-1 px-1.5 rounded-xl bg-tb-white border border-tb-rose-light text-center shadow-2xs">
-                      <span className="text-xs font-bold text-tb-brown-dark block">
-                        {apt.startTime}
-                      </span>
-                      <span className="text-[10px] text-tb-gray-neutral block">
-                        {apt.endTime}
-                      </span>
-                    </div>
+              <button
+                onClick={() => onNavigate('agenda')}
+                className="text-xs text-tb-rose-primary hover:text-tb-brown-dark font-medium flex items-center gap-1"
+              >
+                Ver todos <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-                    <div>
-                      <p className="text-xs font-bold text-tb-brown-dark group-hover:text-tb-rose-primary transition-colors">
-                        {apt.clientName}
-                      </p>
-                      <p className="text-[11px] text-tb-brown-soft mt-0.5">
-                        {apt.serviceName} • com {apt.professionalName}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${
-                          apt.status === 'confirmado' ? 'bg-emerald-100 text-emerald-800' :
-                          apt.status === 'em_atendimento' ? 'bg-amber-100 text-amber-800' :
-                          apt.status === 'concluido' ? 'bg-purple-100 text-purple-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {apt.status}
+            <div className="flex-1 space-y-3 overflow-y-auto max-h-[460px]">
+              {dashboardMetrics.upcomingTodayAppointments.length === 0 ? (
+                <div className="p-8 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/30">
+                  <Calendar className="w-8 h-8 text-tb-gray-neutral/60 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-tb-brown-dark">Nenhum compromisso agendado para hoje.</p>
+                  <p className="text-[11px] text-tb-gray-neutral mt-1">
+                    Clique abaixo para agendar a primeira cliente do dia.
+                  </p>
+                  <button
+                    onClick={onOpenNewAppointment}
+                    className="mt-3 px-4 py-2 text-xs font-medium bg-tb-rose-primary text-white rounded-xl"
+                  >
+                    Agendar Horário
+                  </button>
+                </div>
+              ) : (
+                dashboardMetrics.upcomingTodayAppointments.map(apt => (
+                  <div
+                    key={apt.id}
+                    className="p-3.5 rounded-2xl bg-tb-ivory border border-tb-rose-light/40 hover:border-tb-rose-primary/50 transition-all flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 py-1 px-1.5 rounded-xl bg-tb-white border border-tb-rose-light text-center shadow-2xs">
+                        <span className="text-xs font-bold text-tb-brown-dark block">
+                          {apt.startTime}
                         </span>
-                        <span className="text-[10px] font-semibold text-tb-gray-neutral">
-                          {formatBRL(apt.price)}
+                        <span className="text-[10px] text-tb-gray-neutral block">
+                          {apt.endTime}
                         </span>
                       </div>
+
+                      <div>
+                        <p className="text-xs font-bold text-tb-brown-dark group-hover:text-tb-rose-primary transition-colors">
+                          {apt.clientName}
+                        </p>
+                        <p className="text-[11px] text-tb-brown-soft mt-0.5">
+                          {apt.serviceName} • com {apt.professionalName}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold ${
+                            apt.status === 'confirmado' ? 'bg-emerald-100 text-emerald-800' :
+                            apt.status === 'em_atendimento' ? 'bg-amber-100 text-amber-800' :
+                            apt.status === 'concluido' ? 'bg-purple-100 text-purple-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {apt.status}
+                          </span>
+                          <span className="text-[10px] font-semibold text-tb-gray-neutral">
+                            {formatBRL(apt.price)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, {
+                          date: apt.date,
+                          time: apt.startTime,
+                          service: apt.serviceName,
+                          professional: apt.professionalName,
+                          price: apt.price,
+                        })}
+                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
+                        title="Conversar no WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onOpenAppointmentDetails(apt)}
+                        className="p-2 text-tb-brown-soft hover:bg-tb-beige-light rounded-xl transition-colors"
+                        title="Ver Detalhes"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
+                ))
+              )}
+            </div>
+          </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, {
-                        date: apt.date,
-                        time: apt.startTime,
-                        service: apt.serviceName,
-                        professional: apt.professionalName,
-                        price: apt.price,
-                      })}
-                      className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
-                      title="Conversar no WhatsApp"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onOpenAppointmentDetails(apt)}
-                      className="p-2 text-tb-brown-soft hover:bg-tb-beige-light rounded-xl transition-colors"
-                      title="Ver Detalhes"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+          {/* Card: Aniversariantes do Mês */}
+          <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-tb-rose-light/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-pink-100 text-pink-600 flex items-center justify-center">
+                  <Cake className="w-4 h-4" />
                 </div>
-              ))
-            )}
+                <div>
+                  <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                    Aniversariantes do Mês
+                  </h3>
+                  <p className="text-[11px] text-tb-gray-neutral">
+                    {birthdayClientsThisMonth.length} clientes comemorando este mês
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('clientes')}
+                className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1"
+              >
+                Ver todos <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+              {birthdayClientsThisMonth.length === 0 ? (
+                <div className="p-6 text-center bg-tb-ivory/50 rounded-2xl border border-tb-rose-light/30 text-xs text-tb-gray-neutral">
+                  Nenhum cliente cadastrado faz aniversário neste mês.
+                </div>
+              ) : (
+                upcomingMonthBirthdays.map(({ client: c, day }) => {
+                  const isToday = isClientBirthdayToday(c.birthDate);
+                  return (
+                    <div
+                      key={c.id}
+                      className={`p-3 rounded-2xl border flex items-center justify-between gap-2.5 transition-all ${
+                        isToday
+                          ? 'bg-pink-50/70 border-pink-300 shadow-2xs'
+                          : 'bg-tb-ivory/70 border-tb-rose-light/40 hover:bg-tb-ivory'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`text-xs font-bold w-14 text-center py-1 rounded-lg border shrink-0 ${
+                          isToday
+                            ? 'bg-pink-500 text-white border-pink-500 font-extrabold animate-pulse'
+                            : 'bg-tb-white text-tb-brown-dark border-tb-rose-light/40'
+                        }`}>
+                          Dia {day}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-tb-brown-dark truncate flex items-center gap-1.5">
+                            <span className="truncate">{c.name}</span>
+                            {isToday && (
+                              <span className="text-[9px] bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded-full font-bold shrink-0">
+                                Hoje!
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-tb-gray-neutral truncate">{c.phone}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => onOpenWhatsApp(c.name, c.phone, { isBirthday: true }, 'aniversario')}
+                        className={`p-2 rounded-xl transition-all shrink-0 ${
+                          isToday
+                            ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-2xs'
+                            : 'bg-tb-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200'
+                        }`}
+                        title="Enviar parabéns pelo WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 

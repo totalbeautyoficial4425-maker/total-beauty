@@ -8,7 +8,7 @@ interface WhatsAppModalProps {
   onClose: () => void;
   clientName: string;
   clientPhone: string;
-  defaultTemplateKey?: 'confirmacao' | 'lembrete' | 'agradecimento' | 'retorno' | 'inativa';
+  defaultTemplateKey?: 'confirmacao' | 'lembrete' | 'agradecimento' | 'retorno' | 'inativa' | 'aniversario';
   appointmentData?: {
     date: string;
     time: string;
@@ -126,6 +126,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 { key: 'agradecimento', label: 'Agradecimento' },
                 { key: 'retorno', label: 'Retorno' },
                 { key: 'inativa', label: 'Cliente Inativa' },
+                { key: 'aniversario', label: '🎂 Aniversário' },
               ].map(tpl => (
                 <button
                   key={tpl.key}

@@ -769,6 +769,20 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
               className="w-full text-xs p-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
             />
           </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-tb-brown-dark mb-1 flex items-center gap-1.5">
+              <span>🎂 Felicitação de Aniversário (Parabéns via WhatsApp)</span>
+              <span className="text-[10px] text-pink-600 font-bold bg-pink-100 px-2 py-0.5 rounded-full">Novo</span>
+            </label>
+            <textarea
+              rows={3}
+              value={whatsappTemplates.aniversario || ''}
+              onChange={e => setWhatsappTemplates({ ...whatsappTemplates, aniversario: e.target.value })}
+              className="w-full text-xs p-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
+              placeholder="Ex: Parabéns, [NOME]! Toda a equipe da Total Beauty deseja a você um feliz aniversário..."
+            />
+          </div>
         </div>
 
         <div className="pt-2 flex justify-end">

@@ -10,11 +10,13 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   Calendar,
-  X
+  X,
+  Cake
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { isClientBirthdayToday } from '../../utils/formatters';
 
 interface HeaderProps {
   currentPage: NavigationPage;
@@ -90,6 +92,8 @@ export const Header: React.FC<HeaderProps> = ({
         s.name.toLowerCase().includes(searchQuery.toLowerCase())
       ).slice(0, 3)
     : [];
+
+  const birthdayTodayCount = clients.filter(c => isClientBirthdayToday(c.birthDate)).length;
 
   return (
     <header className="h-20 bg-tb-white border-b border-tb-rose-light/40 sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between">
@@ -219,22 +223,45 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {notificationsOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-tb-white rounded-2xl shadow-premium border border-tb-rose-light/50 p-4 z-50">
+            <div className="absolute right-0 mt-2 w-80 bg-tb-white rounded-2xl shadow-premium border border-tb-rose-light/50 p-4 z-50">
               <div className="flex items-center justify-between pb-2 border-b border-tb-rose-light/30">
                 <span className="text-xs font-semibold text-tb-brown-dark">Lembretes do Sistema</span>
                 <span className="text-[10px] text-tb-rose-primary font-medium">Hoje</span>
               </div>
-              <div className="py-3 space-y-2 text-xs text-tb-brown-soft">
-                <div className="p-2 rounded-lg bg-tb-ivory border border-tb-rose-light/30">
+              <div className="py-3 space-y-2.5 text-xs text-tb-brown-soft">
+                {birthdayTodayCount > 0 && (
+                  <button
+                    onClick={() => {
+                      onNavigate('clientes');
+                      setNotificationsOpen(false);
+                    }}
+                    className="w-full text-left p-3 rounded-xl bg-pink-50 border border-pink-200 hover:bg-pink-100/70 transition-colors block"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-pink-700 font-bold text-xs">
+                        <Cake className="w-4 h-4 text-pink-600 animate-bounce" />
+                        <span>{birthdayTodayCount} {birthdayTodayCount === 1 ? 'Aniversariante Hoje!' : 'Aniversariantes Hoje!'}</span>
+                      </div>
+                      <span className="text-[10px] bg-pink-500 text-white px-2 py-0.5 rounded-full font-bold">
+                        Felicitar
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-tb-brown-soft mt-1">
+                      Envie felicitações com 1 clique pelo WhatsApp e encante suas clientes.
+                    </p>
+                  </button>
+                )}
+
+                <div className="p-2.5 rounded-xl bg-tb-ivory border border-tb-rose-light/30">
                   <p className="font-medium text-tb-brown-dark">Próximos atendimentos</p>
                   <p className="text-[11px] text-tb-gray-neutral mt-0.5">
-                    Você tem clientes agendadas para o período da tarde.
+                    Acompanhe a agenda geral e os horários das clientes.
                   </p>
                 </div>
-                <div className="p-2 rounded-lg bg-tb-ivory border border-tb-rose-light/30">
+                <div className="p-2.5 rounded-xl bg-tb-ivory border border-tb-rose-light/30">
                   <p className="font-medium text-tb-brown-dark">Backup e Sincronização</p>
                   <p className="text-[11px] text-tb-gray-neutral mt-0.5">
-                    Dados salvos com segurança localmente e prontos para sincronizar no Firebase.
+                    Dados salvos com segurança localmente e prontos para o Firebase.
                   </p>
                 </div>
               </div>

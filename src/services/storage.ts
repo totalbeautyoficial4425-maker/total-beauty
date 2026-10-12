@@ -810,7 +810,8 @@ export const INITIAL_SETTINGS: CompanySettings = {
     lembrete: 'Olá, [NOME]! Passando para lembrar do seu horário especial hoje, às [HORÁRIO], na Total Beauty ([SERVIÇO]). Estamos preparando tudo com muito carinho para você!',
     agradecimento: 'Querida [NOME], foi maravilhoso ter você conosco hoje na Total Beauty! Esperamos que tenha amado sua experiência. Se precisar de qualquer cuidado adicional, estamos à disposição.',
     retorno: 'Olá, [NOME]! Já faz um tempinho desde sua última visita na Total Beauty ([SERVIÇO]). Que tal reservar um tempinho para renovar seu autocuidado esta semana? Me avise qual horário fica melhor para você!',
-    inativa: 'Olá, [NOME]! Sentimos sua falta aqui na Total Beauty! Preparamos um mimo exclusivo para o seu retorno neste mês. Vamos agendar seu momento de bem-estar?'
+    inativa: 'Olá, [NOME]! Sentimos sua falta aqui na Total Beauty! Preparamos um mimo exclusivo para o seu retorno neste mês. Vamos agendar seu momento de bem-estar?',
+    aniversario: 'Parabéns, [NOME]! 🎂✨ Toda a equipe da Total Beauty deseja a você um feliz aniversário, com muita saúde, luz e momentos especiais! Para comemorar essa data tão especial, preparamos um carinho exclusivo no seu próximo atendimento conosco. Vamos agendar seu momento de bem-estar?'
   }
 };
 
@@ -1092,7 +1093,13 @@ export const storageService = {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
       return INITIAL_SETTINGS;
     }
-    return JSON.parse(raw);
+    const parsed: CompanySettings = JSON.parse(raw);
+    if (!parsed.whatsappTemplates) {
+      parsed.whatsappTemplates = INITIAL_SETTINGS.whatsappTemplates;
+    } else if (!parsed.whatsappTemplates.aniversario) {
+      parsed.whatsappTemplates.aniversario = INITIAL_SETTINGS.whatsappTemplates.aniversario;
+    }
+    return parsed;
   },
 
   saveSettings(settings: CompanySettings): void {

@@ -14,17 +14,26 @@ import {
   Filter,
   CheckCircle2,
   Clock,
-  Sparkles
+  Sparkles,
+  Cake
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { Client } from '../types';
-import { formatBRL, formatDateBR, maskPhoneBR, downloadCSV } from '../utils/formatters';
+import { 
+  formatBRL, 
+  formatDateBR, 
+  maskPhoneBR, 
+  downloadCSV,
+  isClientBirthdayToday,
+  isClientBirthdayThisMonth,
+  formatBirthdayDayMonth
+} from '../utils/formatters';
 
 interface ClientesPageProps {
   onOpenNewClient: () => void;
   onEditClient: (client: Client) => void;
   onViewClientDetails: (client: Client) => void;
-  onOpenWhatsApp: (clientName: string, clientPhone: string) => void;
+  onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any, templateKey?: any) => void;
   onNewAppointmentForClient: (clientId: string) => void;
 }
 
@@ -37,7 +46,7 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
 }) => {
   const { clients } = useData();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'todas' | 'recorrentes' | 'novas' | 'inativas' | 'arquivadas'>('todas');
+  const [filterType, setFilterType] = useState<'todas' | 'recorrentes' | 'novas' | 'inativas' | 'aniversariantes_hoje' | 'aniversariantes_mes' | 'arquivadas'>('todas');
 
   // Filter clients
   const filteredClients = useMemo(() => {
@@ -52,6 +61,8 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
       // Category filters
       if (filterType === 'novas' && c.totalVisits > 1) return false;
       if (filterType === 'recorrentes' && c.totalVisits < 2) return false;
+      if (filterType === 'aniversariantes_hoje' && !isClientBirthdayToday(c.birthDate)) return false;
+      if (filterType === 'aniversariantes_mes' && !isClientBirthdayThisMonth(c.birthDate)) return false;
       if (filterType === 'inativas') {
         if (!c.lastVisit) return false;
         const lastVisitDate = new Date(c.lastVisit);
@@ -151,6 +162,8 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
         <div className="flex flex-wrap gap-1.5">
           {[
             { id: 'todas', label: 'Todas Ativas' },
+            { id: 'aniversariantes_hoje', label: '🎂 Aniversário Hoje' },
+            { id: 'aniversariantes_mes', label: '🎉 Niver no Mês' },
             { id: 'recorrentes', label: 'Recorrentes (2+ visitas)' },
             { id: 'novas', label: 'Novas Clientes' },
             { id: 'inativas', label: 'Sem retorno (+30 dias)' },
@@ -202,13 +215,26 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
                     {/* Name + Monogram */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center font-bold text-xs border border-tb-rose-light">
+                        <div className="w-9 h-9 rounded-xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center font-bold text-xs border border-tb-rose-light shrink-0">
                           {client.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-tb-brown-dark group-hover:text-tb-rose-primary transition-colors">
-                            {client.name}
-                          </p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-tb-brown-dark group-hover:text-tb-rose-primary transition-colors">
+                              {client.name}
+                            </p>
+                            {isClientBirthdayToday(client.birthDate) && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 flex items-center gap-1 shrink-0 animate-pulse border border-pink-200">
+                                <Cake className="w-3 h-3 text-pink-600" />
+                                Aniversariante Hoje!
+                              </span>
+                            )}
+                            {isClientBirthdayThisMonth(client.birthDate) && !isClientBirthdayToday(client.birthDate) && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-pink-50 text-pink-600 flex items-center gap-1 shrink-0 border border-pink-100">
+                                🎂 {formatBirthdayDayMonth(client.birthDate)}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-tb-gray-neutral">
                             {client.email || 'Sem e-mail cadastrado'}
                           </p>
@@ -247,13 +273,24 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
                     {/* Actions */}
                     <td className="px-6 py-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => onOpenWhatsApp(client.name, client.phone)}
-                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
-                          title="WhatsApp"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </button>
+                        {isClientBirthdayToday(client.birthDate) ? (
+                          <button
+                            onClick={() => onOpenWhatsApp(client.name, client.phone, { isBirthday: true }, 'aniversario')}
+                            className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all flex items-center gap-1 text-[11px] font-semibold shadow-2xs"
+                            title="Parabenizar no WhatsApp"
+                          >
+                            <Cake className="w-3.5 h-3.5" />
+                            <span>Parabéns</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => onOpenWhatsApp(client.name, client.phone)}
+                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
+                            title="WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => onNewAppointmentForClient(client.id)}
                           className="p-2 text-tb-rose-primary hover:bg-tb-rose-blush rounded-xl transition-colors"
