@@ -428,10 +428,10 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 required
                 className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary"
               >
-                <option value="" disabled>Selecione o profissional...</option>
+                <option value="" disabled>Selecione a profissional...</option>
                 {professionals.filter(p => p.isActive).map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.specialty})
+                    {p.name}
                   </option>
                 ))}
               </select>
