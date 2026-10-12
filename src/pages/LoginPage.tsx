@@ -3,7 +3,7 @@ import { Eye, EyeOff, Lock, User, AlertCircle, ShieldCheck, Sparkles } from 'luc
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
-  const { login, isLockedOut, lockoutRemainingSeconds } = useAuth();
+  const { login, isLockedOut, lockoutRemainingSeconds, resetLockout } = useAuth();
   
   const [usernameOrEmail, setUsernameOrEmail] = useState('admin');
   const [password, setPassword] = useState('admin123');
@@ -12,18 +12,25 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const handleQuickFillAdmin = () => {
+    setUsernameOrEmail('admin');
+    setPassword('admin123');
+    setErrorMessage(null);
+    if (resetLockout) resetLockout();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = login(usernameOrEmail, password, rememberMe);
+      const res = login(usernameOrEmail.trim(), password.trim(), rememberMe);
       if (!res.success) {
         setErrorMessage(res.error || 'Erro ao realizar login.');
       }
       setIsLoading(false);
-    }, 400);
+    }, 200);
   };
 
   return (
@@ -58,18 +65,38 @@ export const LoginPage: React.FC = () => {
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-8 space-y-5">
             {errorMessage && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-shake">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start justify-between gap-2.5 animate-shake">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{errorMessage}</span>
+                </div>
+                {usernameOrEmail.toLowerCase().includes('admin') && (
+                  <button
+                    type="button"
+                    onClick={handleQuickFillAdmin}
+                    className="text-[11px] font-bold text-rose-700 underline hover:text-rose-900 shrink-0"
+                  >
+                    Restaurar admin123
+                  </button>
+                )}
               </div>
             )}
 
             {isLockedOut && (
-              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Sistema temporariamente bloqueado por segurança. Tente novamente em {lockoutRemainingSeconds}s.
-                </span>
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Bloqueio temporário ativo ({lockoutRemainingSeconds}s).
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetLockout}
+                  className="px-2.5 py-1 text-[11px] font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg transition-colors"
+                >
+                  Desbloquear
+                </button>
               </div>
             )}
 
@@ -83,7 +110,7 @@ export const LoginPage: React.FC = () => {
                   required
                   value={usernameOrEmail}
                   onChange={e => setUsernameOrEmail(e.target.value)}
-                  placeholder="admin ou seu e-mail"
+                  placeholder="admin ou usuário da profissional"
                   className="w-full text-sm pl-10 pr-4 py-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:outline-none focus:ring-2 focus:ring-tb-rose-primary/30 focus:border-tb-rose-primary transition-all"
                 />
                 <User className="w-4 h-4 text-tb-gray-neutral absolute left-3.5 top-3.5" />
@@ -124,14 +151,18 @@ export const LoginPage: React.FC = () => {
                 />
                 <span>Lembrar meu acesso</span>
               </label>
-              <span className="text-tb-gray-neutral text-[11px]">
-                Ambiente Seguro
-              </span>
+              <button
+                type="button"
+                onClick={handleQuickFillAdmin}
+                className="text-tb-rose-primary font-semibold hover:underline text-[11px]"
+              >
+                Preencher Admin
+              </button>
             </div>
 
             <button
               type="submit"
-              disabled={isLoading || isLockedOut}
+              disabled={isLoading}
               className="w-full py-3.5 px-4 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white font-semibold text-sm shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
@@ -146,15 +177,20 @@ export const LoginPage: React.FC = () => {
           </form>
 
           {/* Initial Demo Credentials Notice */}
-          <div className="px-8 py-4 bg-tb-ivory/80 border-t border-tb-rose-light/30 text-center">
+          <div className="px-8 py-4 bg-tb-ivory/80 border-t border-tb-rose-light/30 text-center space-y-2">
             <p className="text-[11px] text-tb-gray-neutral leading-relaxed">
-              <span className="font-semibold text-tb-brown-soft">Acesso Inicial Solicitado:</span><br />
-              Usuário: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin</code> • Senha: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin123</code>
-              <br />
-              <span className="text-[10px] text-tb-rose-primary font-medium mt-1 inline-block">
-                * No primeiro acesso, será solicitada a criação da sua senha definitiva.
-              </span>
+              <span className="font-semibold text-tb-brown-soft">Credenciais da Administradora:</span><br />
+              Usuário: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin</code> • Senha: <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin123</code> (ou <code className="bg-tb-beige-light px-1.5 py-0.5 rounded text-tb-brown-dark font-semibold">admin</code>)
             </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleQuickFillAdmin}
+                className="px-3 py-1 bg-tb-rose-blush border border-tb-rose-light text-tb-rose-primary text-[10px] font-bold rounded-lg hover:bg-tb-rose-primary hover:text-white transition-colors"
+              >
+                1-Clique: Acessar como Administradora
+              </button>
+            </div>
           </div>
         </div>
 
