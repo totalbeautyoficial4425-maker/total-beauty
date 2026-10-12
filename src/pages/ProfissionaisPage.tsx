@@ -378,7 +378,14 @@ export const ProfissionaisPage: React.FC = () => {
           </div>
 
           <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
-            {professionals.map(p => {
+            {professionals.length === 0 ? (
+              <div className="p-6 text-center text-xs text-tb-gray-neutral border border-dashed border-tb-rose-light/70 rounded-2xl bg-tb-ivory/50">
+                <Users className="w-8 h-8 text-tb-rose-light mx-auto mb-2" />
+                <p className="font-semibold text-tb-brown-dark">Nenhuma profissional</p>
+                <p className="text-[11px] mt-1">Clique em "Cadastrar Profissional" para cadastrar sua equipe.</p>
+              </div>
+            ) : (
+              professionals.map(p => {
               const isSelected = p.id === activeProf?.id;
               const pMetrics = getProfessionalMetrics(p.id);
 
@@ -430,8 +437,9 @@ export const ProfissionaisPage: React.FC = () => {
                   </div>
                 </div>
               );
-            })}
-          </div>
+            })
+          )}
+        </div>
         </div>
 
         {/* Right Column: Individual Professional Dossier & Commission Statement (8 cols) */}
@@ -644,8 +652,17 @@ export const ProfissionaisPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="lg:col-span-8 p-12 text-center text-xs text-tb-gray-neutral bg-tb-white rounded-3xl border border-tb-rose-light/50">
-            Nenhuma profissional selecionada. Cadastre sua primeira profissional para começar.
+          <div className="lg:col-span-8 p-12 text-center text-xs text-tb-gray-neutral bg-tb-white rounded-3xl border border-tb-rose-light/50 flex flex-col items-center justify-center">
+            <Users className="w-12 h-12 text-tb-rose-light mb-3" />
+            <h4 className="font-serif-brand text-xl font-bold text-tb-brown-dark mb-1">Nenhuma Profissional Cadastrada</h4>
+            <p className="max-w-md text-tb-brown-soft mb-4">Cadastre as profissionais da Total Beauty com usuário e senha para que elas possam acessar a agenda do salão e acompanhar suas comissões particulares.</p>
+            <button
+              onClick={handleOpenAddModal}
+              className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-semibold shadow-soft flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              Cadastrar Primeira Profissional
+            </button>
           </div>
         )}
       </div>

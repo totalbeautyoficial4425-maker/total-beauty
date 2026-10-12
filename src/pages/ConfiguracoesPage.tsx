@@ -20,7 +20,8 @@ import {
   Lock,
   Sparkles,
   X,
-  Check
+  Check,
+  Trash2
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { storageService } from '../services/storage';
@@ -53,8 +54,20 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     professionals, 
     addProfessional, 
     updateProfessional, 
-    refreshData 
+    refreshData,
+    clearAllData
   } = useData();
+
+  // Clear data confirmation modal state
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearSuccess, setClearSuccess] = useState(false);
+
+  const handleExecuteClearAll = () => {
+    clearAllData();
+    setShowClearConfirm(false);
+    setClearSuccess(true);
+    setTimeout(() => setClearSuccess(false), 4000);
+  };
 
   // Professional Form State
   const [isProfFormOpen, setIsProfFormOpen] = useState(false);
@@ -822,7 +835,24 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
               Restaurar Backup
               <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
             </label>
+
+            <button
+              type="button"
+              onClick={() => setShowClearConfirm(true)}
+              className="px-4 py-2.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl flex items-center gap-1.5 transition-colors"
+              title="Excluir todos os registros e deixar o sistema pronto para dados reais"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              Limpar / Zerar Dados
+            </button>
           </div>
+
+          {clearSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-2xl flex items-center gap-2 animate-fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Todos os dados foram excluídos com sucesso! O sistema está zerado e pronto para dados reais.
+            </div>
+          )}
         </div>
 
         {/* Segurança de Acesso & Vercel */}
@@ -865,6 +895,46 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL: ZERAR DADOS DO SISTEMA */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-tb-white rounded-3xl shadow-premium border border-tb-rose-light/50 w-full max-w-md overflow-hidden">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-14 h-14 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                <Trash2 className="w-7 h-7" />
+              </div>
+              <h3 className="font-serif-brand text-2xl font-bold text-tb-brown-dark">
+                Zerar Todos os Dados?
+              </h3>
+              <p className="text-xs text-tb-brown-soft leading-relaxed">
+                Esta ação apagará <strong>todos os clientes, serviços, profissionais de demonstração, agendamentos e transações financeiras</strong>, deixando o sistema totalmente limpo para você inserir os dados reais da Total Beauty.
+              </p>
+              <p className="text-[11px] text-tb-gray-neutral bg-tb-ivory p-3 rounded-xl border border-tb-rose-light/40">
+                A sua conta de administradora (<strong>admin</strong>) será mantida com segurança.
+              </p>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark text-xs font-semibold hover:bg-tb-ivory transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteClearAll}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-soft transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Sim, Zerar Dados
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -100,6 +100,7 @@ interface DataContextType {
   // Settings & Utilities
   updateSettings: (newSettings: CompanySettings) => void;
   refreshData: () => void;
+  clearAllData: () => void;
 
   // Real-time Calculators
   financialSummary: {
@@ -786,6 +787,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageService.saveSettings(newSettings);
   };
 
+  const clearAllData = useCallback(() => {
+    storageService.clearAllData();
+    loadAllData();
+  }, [loadAllData]);
+
   // METRICS & INDICATORS
   const financialSummary = useMemo(() => {
     let grossRevenue = 0;
@@ -929,6 +935,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addPayment,
         updateSettings,
         refreshData: loadAllData,
+        clearAllData,
         financialSummary,
         dashboardMetrics,
       }}
