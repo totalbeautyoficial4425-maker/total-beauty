@@ -14,6 +14,7 @@ import {
   InventoryItem
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
+import { getFirebaseInstance, subscribeToCollection } from '../services/firebase';
 import { 
   addMinutesToTime, 
   isTimeOverlapping, 
@@ -170,6 +171,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     loadAllData();
+
+    // 1. Hydrate from High-Capacity IndexedDB if needed
+    storageService.hydrateFromIndexedDB().then((restored) => {
+      if (restored) {
+        loadAllData();
+      }
+    });
+
+    // 2. If Firebase Cloud Firestore is connected, pull latest data & subscribe to real-time updates
+    const { isConnected } = getFirebaseInstance();
+    if (!isConnected) return;
+
+    storageService.pullAllFromFirestore().then((res) => {
+      if (res.success) {
+        loadAllData();
+      }
+    });
+
+    const unsubscribers: Array<(() => void) | null> = [
+      subscribeToCollection<Client>('clients', (items) => {
+        if (items.length > 0) setClients(items);
+      }),
+      subscribeToCollection<Service>('services', (items) => {
+        if (items.length > 0) setServices(items);
+      }),
+      subscribeToCollection<Professional>('professionals', (items) => {
+        if (items.length > 0) setProfessionals(items);
+      }),
+      subscribeToCollection<Appointment>('appointments', (items) => {
+        if (items.length > 0) setAppointments(items);
+      }),
+      subscribeToCollection<Attendance>('attendances', (items) => {
+        if (items.length > 0) setAttendances(items);
+      }),
+      subscribeToCollection<PaymentTransaction>('payments', (items) => {
+        if (items.length > 0) setPayments(items);
+      }),
+      subscribeToCollection<Expense>('expenses', (items) => {
+        if (items.length > 0) setExpenses(items);
+      }),
+      subscribeToCollection<InventoryItem>('inventory', (items) => {
+        if (items.length > 0) setInventory(items);
+      }),
+    ];
+
+    return () => {
+      unsubscribers.forEach((unsub) => {
+        if (unsub) unsub();
+      });
+    };
   }, [loadAllData]);
 
   // Recalculate client statistics based on completed payments and attendances
@@ -407,6 +458,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextProfessionals = professionals.filter(p => p.id !== id);
     setProfessionals(nextProfessionals);
     storageService.saveProfessionals(nextProfessionals);
+    storageService.deleteFromCloud('professionals', id);
     return { success: true };
   };
 
@@ -784,6 +836,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextExpenses = expenses.filter(e => e.id !== id);
     setExpenses(nextExpenses);
     storageService.saveExpenses(nextExpenses);
+    storageService.deleteFromCloud('expenses', id);
   };
 
   const addPayment = (paymentData: Omit<PaymentTransaction, 'id' | 'createdAt' | 'type'>) => {
@@ -848,6 +901,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const nextInventory = inventory.filter(item => item.id !== id);
       setInventory(nextInventory);
       storageService.saveInventory(nextInventory);
+      storageService.deleteFromCloud('inventory', id);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Erro ao remover produto do estoque' };

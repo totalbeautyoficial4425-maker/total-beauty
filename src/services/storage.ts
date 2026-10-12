@@ -10,9 +10,27 @@ import {
   User,
   InventoryItem
 } from '../types';
-import { getFirebaseInstance, syncCollectionToFirestore, fetchCollectionFromFirestore } from './firebase';
+import { 
+  getFirebaseInstance, 
+  syncCollectionToFirestore, 
+  fetchCollectionFromFirestore,
+  deleteDocumentFromFirestore
+} from './firebase';
+import { idbStorage } from './idbStorage';
 
-const STORAGE_KEYS = {
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err: any) {
+    if (err?.name === 'QuotaExceededError' || err?.code === 22) {
+      console.warn(`LocalStorage quota exceeded for ${key}. Persisting via High-Capacity IndexedDB & Firebase Cloud.`);
+    } else {
+      console.warn(`Error writing to localStorage for ${key}:`, err);
+    }
+  }
+}
+
+export const STORAGE_KEYS = {
   USERS: 'tb_users_v3',
   AUTH_SESSION: 'tb_session_v1',
   CLIENTS: 'tb_clients_v3',
@@ -1218,14 +1236,16 @@ export const storageService = {
     });
 
     if (modified || !raw) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      idbStorage.setItem(STORAGE_KEYS.USERS, users);
     }
 
     return users;
   },
 
   saveUsers(users: User[]): void {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    idbStorage.setItem(STORAGE_KEYS.USERS, users);
     syncCollectionToFirestore('users', users);
   },
 
@@ -1237,20 +1257,22 @@ export const storageService = {
 
   setUserPassword(userId: string, newPlainPassword: string): void {
     const hashed = hashPassword(newPlainPassword);
-    localStorage.setItem('tb_pwd_' + userId, hashed);
+    safeSetItem('tb_pwd_' + userId, hashed);
+    idbStorage.setItem('tb_pwd_' + userId, hashed);
   },
 
   getClients(): Client[] {
     const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
+      safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
       return INITIAL_CLIENTS;
     }
     return JSON.parse(raw);
   },
 
   saveClients(clients: Client[]): void {
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    idbStorage.setItem(STORAGE_KEYS.CLIENTS, clients);
     syncCollectionToFirestore('clients', clients);
   },
 
@@ -1258,13 +1280,13 @@ export const storageService = {
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.SERVICES);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
+      safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
       return INITIAL_SERVICES;
     }
     let services: Service[] = JSON.parse(raw);
     if (services.length === 0) {
       services = INITIAL_SERVICES;
-      localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
+      safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     }
     // Ensure commission percentage is present
     return services.map(s => ({
@@ -1274,7 +1296,8 @@ export const storageService = {
   },
 
   saveServices(services: Service[]): void {
-    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+    safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+    idbStorage.setItem(STORAGE_KEYS.SERVICES, services);
     syncCollectionToFirestore('services', services);
   },
 
@@ -1282,19 +1305,20 @@ export const storageService = {
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.PROFESSIONALS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
+      safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
       return INITIAL_PROFESSIONALS;
     }
     let profs: Professional[] = JSON.parse(raw);
     if (profs.length === 0) {
       profs = INITIAL_PROFESSIONALS;
-      localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
+      safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     }
     return profs;
   },
 
   saveProfessionals(professionals: Professional[]): void {
-    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
+    safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
+    idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, professionals);
     syncCollectionToFirestore('professionals', professionals);
   },
 
@@ -1302,14 +1326,15 @@ export const storageService = {
     const raw = localStorage.getItem(STORAGE_KEYS.APPOINTMENTS);
     if (!raw) {
       const initial = generateSeedAppointments();
-      localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(initial));
+      safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
   },
 
   saveAppointments(appointments: Appointment[]): void {
-    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
+    safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
+    idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, appointments);
     syncCollectionToFirestore('appointments', appointments);
   },
 
@@ -1319,7 +1344,8 @@ export const storageService = {
   },
 
   saveAttendances(attendances: Attendance[]): void {
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attendances));
+    safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attendances));
+    idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, attendances);
     syncCollectionToFirestore('attendances', attendances);
   },
 
@@ -1327,14 +1353,15 @@ export const storageService = {
     const raw = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
     if (!raw) {
       const initial = generateSeedPayments();
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(initial));
+      safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
   },
 
   savePayments(payments: PaymentTransaction[]): void {
-    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+    safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+    idbStorage.setItem(STORAGE_KEYS.PAYMENTS, payments);
     syncCollectionToFirestore('payments', payments);
   },
 
@@ -1342,45 +1369,47 @@ export const storageService = {
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     if (!raw) {
       const initial = generateSeedExpenses();
-      localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(initial));
+      safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(initial));
       return initial;
     }
     return JSON.parse(raw);
   },
 
   saveExpenses(expenses: Expense[]): void {
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    idbStorage.setItem(STORAGE_KEYS.EXPENSES, expenses);
     syncCollectionToFirestore('expenses', expenses);
   },
 
   getInventory(): InventoryItem[] {
     const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
       return INITIAL_INVENTORY;
     }
     try {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
         return INITIAL_INVENTORY;
       }
       return parsed;
     } catch {
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
       return INITIAL_INVENTORY;
     }
   },
 
   saveInventory(inventory: InventoryItem[]): void {
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+    safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+    idbStorage.setItem(STORAGE_KEYS.INVENTORY, inventory);
     syncCollectionToFirestore('inventory', inventory);
   },
 
   getSettings(): CompanySettings {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
+      safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
       return INITIAL_SETTINGS;
     }
     const parsed: CompanySettings = JSON.parse(raw);
@@ -1393,16 +1422,268 @@ export const storageService = {
   },
 
   saveSettings(settings: CompanySettings): void {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    idbStorage.setItem(STORAGE_KEYS.SETTINGS, settings);
     const { db, isConnected } = getFirebaseInstance();
     if (isConnected && db) {
       syncCollectionToFirestore('settings', [{ id: 'general', ...settings }]);
     }
   },
 
+  deleteFromCloud(collectionName: string, docId: string): void {
+    deleteDocumentFromFirestore(collectionName, docId);
+  },
+
+  /**
+   * Hydrate collections from High-Capacity IndexedDB into memory/localStorage
+   */
+  async hydrateFromIndexedDB(): Promise<boolean> {
+    try {
+      const keys = [
+        STORAGE_KEYS.CLIENTS,
+        STORAGE_KEYS.SERVICES,
+        STORAGE_KEYS.PROFESSIONALS,
+        STORAGE_KEYS.APPOINTMENTS,
+        STORAGE_KEYS.ATTENDANCES,
+        STORAGE_KEYS.PAYMENTS,
+        STORAGE_KEYS.EXPENSES,
+        STORAGE_KEYS.INVENTORY,
+        STORAGE_KEYS.USERS,
+        STORAGE_KEYS.SETTINGS,
+      ];
+
+      let restoredAny = false;
+      for (const key of keys) {
+        const idbVal = await idbStorage.getItem<any>(key);
+        if (idbVal !== null && idbVal !== undefined) {
+          const localRaw = localStorage.getItem(key);
+          if (!localRaw) {
+            safeSetItem(key, JSON.stringify(idbVal));
+            restoredAny = true;
+          } else if (Array.isArray(idbVal)) {
+            try {
+              const localArr = JSON.parse(localRaw);
+              if (Array.isArray(localArr) && idbVal.length > localArr.length) {
+                safeSetItem(key, JSON.stringify(idbVal));
+                restoredAny = true;
+              }
+            } catch {
+              // ignore parse error
+            }
+          }
+        } else {
+          // Ensure existing localStorage data is backed up into IndexedDB
+          const localRaw = localStorage.getItem(key);
+          if (localRaw) {
+            try {
+              await idbStorage.setItem(key, JSON.parse(localRaw));
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+      return restoredAny;
+    } catch (err) {
+      console.warn('Hydrate from IndexedDB error:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Upload all local collections to Firebase Cloud Firestore
+   */
+  async pushAllToFirestore(): Promise<{
+    success: boolean;
+    totalRecords: number;
+    message: string;
+  }> {
+    const { isConnected } = getFirebaseInstance();
+    if (!isConnected) {
+      return {
+        success: false,
+        totalRecords: 0,
+        message: 'Conecte e salve as credenciais do Firebase primeiro.',
+      };
+    }
+
+    try {
+      const clients = this.getClients();
+      const services = this.getServices();
+      const professionals = this.getProfessionals();
+      const appointments = this.getAppointments();
+      const attendances = this.getAttendances();
+      const payments = this.getPayments();
+      const expenses = this.getExpenses();
+      const inventory = this.getInventory();
+      const users = this.getUsers();
+      const settings = this.getSettings();
+
+      await Promise.all([
+        syncCollectionToFirestore('clients', clients),
+        syncCollectionToFirestore('services', services),
+        syncCollectionToFirestore('professionals', professionals),
+        syncCollectionToFirestore('appointments', appointments),
+        syncCollectionToFirestore('attendances', attendances),
+        syncCollectionToFirestore('payments', payments),
+        syncCollectionToFirestore('expenses', expenses),
+        syncCollectionToFirestore('inventory', inventory),
+        syncCollectionToFirestore('users', users),
+        syncCollectionToFirestore('settings', [{ id: 'general', ...settings }]),
+      ]);
+
+      const totalRecords =
+        clients.length +
+        services.length +
+        professionals.length +
+        appointments.length +
+        attendances.length +
+        payments.length +
+        expenses.length +
+        inventory.length +
+        users.length +
+        1;
+
+      return {
+        success: true,
+        totalRecords,
+        message: `Sincronização concluída! ${totalRecords} registros salvos no banco de dados Firebase Firestore.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        totalRecords: 0,
+        message: `Erro ao enviar dados para o Firebase: ${err?.message || 'Falha de rede'}`,
+      };
+    }
+  },
+
+  /**
+   * Download all collections from Firebase Cloud Firestore into local & IndexedDB storage
+   */
+  async pullAllFromFirestore(): Promise<{
+    success: boolean;
+    totalRecords: number;
+    message: string;
+  }> {
+    const { isConnected } = getFirebaseInstance();
+    if (!isConnected) {
+      return {
+        success: false,
+        totalRecords: 0,
+        message: 'Firebase não está conectado.',
+      };
+    }
+
+    try {
+      const [
+        remoteClients,
+        remoteServices,
+        remoteProfessionals,
+        remoteAppointments,
+        remoteAttendances,
+        remotePayments,
+        remoteExpenses,
+        remoteInventory,
+        remoteUsers,
+        remoteSettings,
+      ] = await Promise.all([
+        fetchCollectionFromFirestore<Client>('clients'),
+        fetchCollectionFromFirestore<Service>('services'),
+        fetchCollectionFromFirestore<Professional>('professionals'),
+        fetchCollectionFromFirestore<Appointment>('appointments'),
+        fetchCollectionFromFirestore<Attendance>('attendances'),
+        fetchCollectionFromFirestore<PaymentTransaction>('payments'),
+        fetchCollectionFromFirestore<Expense>('expenses'),
+        fetchCollectionFromFirestore<InventoryItem>('inventory'),
+        fetchCollectionFromFirestore<User>('users'),
+        fetchCollectionFromFirestore<any>('settings'),
+      ]);
+
+      let totalRecords = 0;
+
+      if (remoteClients && remoteClients.length > 0) {
+        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(remoteClients));
+        await idbStorage.setItem(STORAGE_KEYS.CLIENTS, remoteClients);
+        totalRecords += remoteClients.length;
+      }
+      if (remoteServices && remoteServices.length > 0) {
+        safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(remoteServices));
+        await idbStorage.setItem(STORAGE_KEYS.SERVICES, remoteServices);
+        totalRecords += remoteServices.length;
+      }
+      if (remoteProfessionals && remoteProfessionals.length > 0) {
+        safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(remoteProfessionals));
+        await idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, remoteProfessionals);
+        totalRecords += remoteProfessionals.length;
+      }
+      if (remoteAppointments && remoteAppointments.length > 0) {
+        safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(remoteAppointments));
+        await idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, remoteAppointments);
+        totalRecords += remoteAppointments.length;
+      }
+      if (remoteAttendances && remoteAttendances.length > 0) {
+        safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(remoteAttendances));
+        await idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, remoteAttendances);
+        totalRecords += remoteAttendances.length;
+      }
+      if (remotePayments && remotePayments.length > 0) {
+        safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(remotePayments));
+        await idbStorage.setItem(STORAGE_KEYS.PAYMENTS, remotePayments);
+        totalRecords += remotePayments.length;
+      }
+      if (remoteExpenses && remoteExpenses.length > 0) {
+        safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(remoteExpenses));
+        await idbStorage.setItem(STORAGE_KEYS.EXPENSES, remoteExpenses);
+        totalRecords += remoteExpenses.length;
+      }
+      if (remoteInventory && remoteInventory.length > 0) {
+        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(remoteInventory));
+        await idbStorage.setItem(STORAGE_KEYS.INVENTORY, remoteInventory);
+        totalRecords += remoteInventory.length;
+      }
+      if (remoteUsers && remoteUsers.length > 0) {
+        safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(remoteUsers));
+        await idbStorage.setItem(STORAGE_KEYS.USERS, remoteUsers);
+        totalRecords += remoteUsers.length;
+      }
+      if (remoteSettings && remoteSettings.length > 0) {
+        const gen = remoteSettings.find((s: any) => s.id === 'general') || remoteSettings[0];
+        if (gen) {
+          const { id, ...cleanSettings } = gen;
+          safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cleanSettings));
+          await idbStorage.setItem(STORAGE_KEYS.SETTINGS, cleanSettings);
+          totalRecords += 1;
+        }
+      }
+
+      if (totalRecords === 0) {
+        // Cloud database is empty on first connection -> automatically push initial data to cloud!
+        const pushRes = await this.pushAllToFirestore();
+        return {
+          success: pushRes.success,
+          totalRecords: pushRes.totalRecords,
+          message: `Banco na nuvem inicializado com ${pushRes.totalRecords} registros do sistema!`,
+        };
+      }
+
+      return {
+        success: true,
+        totalRecords,
+        message: `${totalRecords} registros carregados com sucesso do Firebase Firestore!`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        totalRecords: 0,
+        message: `Erro ao buscar dados do Firebase: ${err?.message || 'Falha de conexão'}`,
+      };
+    }
+  },
+
   exportFullBackup(): string {
     const data = {
-      version: '2.0',
+      version: '3.0',
       exportedAt: new Date().toISOString(),
       users: this.getUsers(),
       clients: this.getClients(),
@@ -1439,32 +1720,21 @@ export const storageService = {
   },
 
   clearAllData(): void {
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
-    localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
-    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+    this.saveClients([]);
+    this.saveServices(INITIAL_SERVICES);
+    this.saveProfessionals(INITIAL_PROFESSIONALS);
+    this.saveAppointments([]);
+    this.saveAttendances([]);
+    this.savePayments([]);
+    this.saveExpenses([]);
+    this.saveInventory(INITIAL_INVENTORY);
+    this.saveUsers(DEFAULT_USERS);
 
     DEFAULT_USERS.forEach(u => {
       const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
       if (!localStorage.getItem('tb_pwd_' + u.id)) {
-        localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
+        safeSetItem('tb_pwd_' + u.id, hashPassword(pwd));
       }
     });
-
-    // Clear Firestore collections if connected, keeping official services & professionals & inventory
-    syncCollectionToFirestore('clients', []);
-    syncCollectionToFirestore('services', INITIAL_SERVICES);
-    syncCollectionToFirestore('professionals', INITIAL_PROFESSIONALS);
-    syncCollectionToFirestore('inventory', INITIAL_INVENTORY);
-    syncCollectionToFirestore('users', DEFAULT_USERS);
-    syncCollectionToFirestore('appointments', []);
-    syncCollectionToFirestore('attendances', []);
-    syncCollectionToFirestore('payments', []);
-    syncCollectionToFirestore('expenses', []);
   }
 };

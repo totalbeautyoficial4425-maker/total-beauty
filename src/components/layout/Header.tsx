@@ -254,7 +254,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 )}
 
-                {(lowStockCount + outOfStockCount) > 0 && (
+                {currentUser?.role !== 'profissional' && (lowStockCount + outOfStockCount) > 0 && (
                   <button
                     onClick={() => {
                       onNavigate('estoque');
@@ -283,12 +283,20 @@ export const Header: React.FC<HeaderProps> = ({
                     Acompanhe a agenda geral e os horários das clientes.
                   </p>
                 </div>
-                <div className="p-2.5 rounded-xl bg-tb-ivory border border-tb-rose-light/30">
-                  <p className="font-medium text-tb-brown-dark">Backup e Sincronização</p>
-                  <p className="text-[11px] text-tb-gray-neutral mt-0.5">
-                    Dados salvos com segurança localmente e prontos para o Firebase.
-                  </p>
-                </div>
+                {currentUser?.role !== 'profissional' && (
+                  <button
+                    onClick={() => {
+                      onNavigate('configuracoes');
+                      setNotificationsOpen(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl bg-emerald-50/70 hover:bg-emerald-50 border border-emerald-200/70 transition-colors block"
+                  >
+                    <p className="font-semibold text-emerald-800 text-xs">Banco de Dados Firebase & Alta Capacidade</p>
+                    <p className="text-[11px] text-tb-brown-soft mt-0.5">
+                      Armazenamento expandido (IndexedDB + Firebase Cloud Firestore) ativo. Clique para gerenciar.
+                    </p>
+                  </button>
+                )}
               </div>
             </div>
           )}

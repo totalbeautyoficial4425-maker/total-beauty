@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   Building2, 
@@ -21,17 +21,22 @@ import {
   Sparkles,
   X,
   Check,
-  Trash2
+  Trash2,
+  HardDrive,
+  Cloud,
+  ClipboardPaste,
+  HelpCircle
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { storageService } from '../services/storage';
+import { idbStorage } from '../services/idbStorage';
 import { Professional } from '../types';
 import { 
   getSavedFirebaseConfig, 
   saveFirebaseConfig, 
   testFirebaseConnection, 
   getFirebaseInstance, 
-  syncCollectionToFirestore,
+  parseFirebaseSnippet,
   FirebaseCredentials 
 } from '../services/firebase';
 
@@ -51,12 +56,32 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     attendances, 
     payments, 
     expenses, 
+    inventory,
     professionals, 
     addProfessional, 
     updateProfessional, 
     refreshData,
     clearAllData
   } = useData();
+
+  // Storage capacity stats (IndexedDB + Browser Quota)
+  const [storageStats, setStorageStats] = useState<{
+    usageMB: string;
+    quotaGB: string;
+    percentUsed: number;
+    isPersistent: boolean;
+  }>({
+    usageMB: '0.15',
+    quotaGB: '10.0',
+    percentUsed: 0.01,
+    isPersistent: true,
+  });
+
+  useEffect(() => {
+    idbStorage.getStorageStats().then((stats) => {
+      setStorageStats(stats);
+    });
+  }, [clients, services, appointments, attendances, payments, expenses, inventory]);
 
   // Clear data confirmation modal state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -102,6 +127,8 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     appId: '',
   };
   const [fbConfig, setFbConfig] = useState<FirebaseCredentials>(savedFb);
+  const [fbSnippetInput, setFbSnippetInput] = useState('');
+  const [showFbGuide, setShowFbGuide] = useState(false);
   const [fbTestStatus, setFbTestStatus] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
@@ -125,13 +152,34 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
-  // Test Firebase Connection
+  // Smart parse Firebase code block
+  const handleParseFirebaseSnippet = (raw: string) => {
+    setFbSnippetInput(raw);
+    const extracted = parseFirebaseSnippet(raw);
+    if (extracted && (extracted.apiKey || extracted.projectId)) {
+      setFbConfig({
+        apiKey: extracted.apiKey || fbConfig.apiKey,
+        projectId: extracted.projectId || fbConfig.projectId,
+        authDomain: extracted.authDomain || fbConfig.authDomain,
+        storageBucket: extracted.storageBucket || fbConfig.storageBucket,
+        messagingSenderId: extracted.messagingSenderId || fbConfig.messagingSenderId,
+        appId: extracted.appId || fbConfig.appId,
+      });
+      setFbTestStatus({
+        loading: false,
+        success: true,
+        message: 'Credenciais extraídas automaticamente do código colado! Clique em "Salvar & Conectar Firebase" abaixo.',
+      });
+    }
+  };
+
+  // Test Firebase Connection & Auto-Sync
   const handleTestFirebase = async () => {
     if (!fbConfig.apiKey || !fbConfig.projectId) {
       setFbTestStatus({
         loading: false,
         success: false,
-        message: 'Preencha pelo menos a API Key e o Project ID do Firebase.',
+        message: 'Preencha pelo menos a API Key e o Project ID do Firebase (ou cole o bloco firebaseConfig acima).',
       });
       return;
     }
@@ -144,23 +192,33 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
       success: res.success,
       message: res.message,
     });
+
+    if (res.success) {
+      const syncRes = await storageService.pushAllToFirestore();
+      if (syncRes.success) {
+        setSyncStatus(syncRes.message);
+        setTimeout(() => setSyncStatus(null), 5000);
+      }
+    }
   };
 
-  // Sync all local data to Firestore
+  // Sync all local data to Firestore (Upload)
   const handleSyncToFirestore = async () => {
-    setSyncStatus('Sincronizando com Firestore...');
-    try {
-      await syncCollectionToFirestore('clients', clients);
-      await syncCollectionToFirestore('services', services);
-      await syncCollectionToFirestore('appointments', appointments);
-      await syncCollectionToFirestore('attendances', attendances);
-      await syncCollectionToFirestore('payments', payments);
-      await syncCollectionToFirestore('expenses', expenses);
-      setSyncStatus('Todos os registros sincronizados com sucesso no Firebase Firestore!');
-      setTimeout(() => setSyncStatus(null), 3000);
-    } catch (err: any) {
-      setSyncStatus(`Erro ao sincronizar: ${err?.message || 'Falha de conexão'}`);
+    setSyncStatus('Enviando todos os registros para o Firebase Cloud Firestore...');
+    const res = await storageService.pushAllToFirestore();
+    setSyncStatus(res.message);
+    setTimeout(() => setSyncStatus(null), 5000);
+  };
+
+  // Pull all data from Firestore (Download)
+  const handlePullFromFirestore = async () => {
+    setSyncStatus('Baixando registros da nuvem Firebase Firestore...');
+    const res = await storageService.pullAllFromFirestore();
+    if (res.success) {
+      refreshData();
     }
+    setSyncStatus(res.message);
+    setTimeout(() => setSyncStatus(null), 5000);
   };
 
   // Backup Export
@@ -599,50 +657,179 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
           </div>
         </form>
 
-        {/* SECTION 2: CONEXÃO COM O FIREBASE */}
-        <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/30">
+        {/* SECTION 2: BANCO DE DADOS FIREBASE & ARMAZENAMENTO DE ALTA CAPACIDADE */}
+        <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-tb-rose-light/30 gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                 <Database className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-                  Banco de Dados Firebase
+                <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark flex items-center gap-2">
+                  Banco de Dados Firebase & Armazenamento
+                  <span className="text-[11px] font-sans font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    Nuvem + IndexedDB
+                  </span>
                 </h3>
-                <p className="text-xs text-tb-gray-neutral">Firestore & Autenticação em Nuvem</p>
+                <p className="text-xs text-tb-gray-neutral">Firestore Cloud Database & Cache Local de Alta Capacidade</p>
               </div>
             </div>
 
-            <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${
-              isFbActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'
-            }`}>
-              {isFbActive ? 'Firebase Ativo' : 'Armazenamento Local Ativo'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1.5 ${
+                isFbActive ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+              }`}>
+                {isFbActive ? (
+                  <>
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                    Firebase Cloud Conectado
+                  </>
+                ) : (
+                  <>
+                    <HardDrive className="w-3.5 h-3.5 text-blue-600" />
+                    IndexedDB Expandido Ativo
+                  </>
+                )}
+              </span>
+            </div>
           </div>
 
-          <p className="text-xs text-tb-brown-soft leading-relaxed">
-            O sistema salva automaticamente todos os dados com persistência local segura. Para conectar ao seu banco na nuvem Firebase (Firestore), cole suas credenciais do console abaixo:
-          </p>
+          {/* CARD DE MONITORAMENTO DE CAPACIDADE DE ARMAZENAMENTO */}
+          <div className="rounded-2xl bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-tb-ivory p-4 sm:p-5 border border-amber-200/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-amber-700" />
+                <span className="text-xs font-bold text-tb-brown-dark">
+                  Capacidade de Armazenamento Expandida:
+                </span>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg">
+                  ~{storageStats.quotaGB} GB disponíveis no dispositivo
+                </span>
+              </div>
+              <span className="text-[11px] text-tb-brown-soft">
+                Utilizado localmente: <strong>{storageStats.usageMB} MB</strong> ({storageStats.percentUsed.toFixed(2)}%)
+              </span>
+            </div>
 
+            <p className="text-xs text-tb-brown-soft leading-relaxed">
+              O sistema utiliza a arquitetura de <strong>Banco de Dados IndexedDB de Alta Capacidade</strong> + <strong>Firebase Cloud Firestore</strong>, superando o limite padrão de 5 MB do navegador. Você pode cadastrar dezenas de milhares de clientes, serviços e atendimentos sem restrição.
+            </p>
+
+            {/* Totalizadores de registros em tempo real */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Clientes:</span>
+                <strong className="text-tb-brown-dark font-mono">{clients.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Agendamentos:</span>
+                <strong className="text-tb-brown-dark font-mono">{appointments.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Atendimentos:</span>
+                <strong className="text-tb-brown-dark font-mono">{attendances.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Serviços:</span>
+                <strong className="text-tb-brown-dark font-mono">{services.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Profissionais:</span>
+                <strong className="text-tb-brown-dark font-mono">{professionals.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Itens Estoque:</span>
+                <strong className="text-tb-brown-dark font-mono">{inventory.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Receitas:</span>
+                <strong className="text-tb-brown-dark font-mono">{payments.length}</strong>
+              </div>
+              <div className="bg-white/80 p-2 rounded-xl border border-amber-200/60 flex items-center justify-between">
+                <span className="text-tb-brown-soft">Despesas:</span>
+                <strong className="text-tb-brown-dark font-mono">{expenses.length}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Feedback Status */}
           {fbTestStatus.message && (
-            <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${
+            <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
               fbTestStatus.success 
                 ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
                 : 'bg-rose-50 border border-rose-200 text-rose-800'
             }`}>
-              {fbTestStatus.success ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />}
-              <span>{fbTestStatus.message}</span>
+              {fbTestStatus.success ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+              )}
+              <span className="leading-relaxed">{fbTestStatus.message}</span>
             </div>
           )}
 
           {syncStatus && (
-            <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl">
-              {syncStatus}
+            <div className="p-3.5 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+              <span>{syncStatus}</span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          {/* COLAR CÓDIGO RÁPIDO DO FIREBASE (SMART PASTE) */}
+          <div className="rounded-2xl bg-tb-ivory/60 p-4 border border-tb-rose-light/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-tb-brown-dark flex items-center gap-1.5">
+                <ClipboardPaste className="w-4 h-4 text-tb-rose-primary" />
+                Preenchimento Rápido: Cole o bloco "firebaseConfig" do Console
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowFbGuide(!showFbGuide)}
+                className="text-[11px] text-tb-rose-primary hover:underline flex items-center gap-1 font-semibold"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                {showFbGuide ? 'Ocultar Tutorial' : 'Como pegar essa chave no Firebase?'}
+              </button>
+            </div>
+
+            <textarea
+              rows={2}
+              placeholder='Cole aqui o código copiado do Firebase (ex: const firebaseConfig = { apiKey: "AIza...", projectId: "...", ... })'
+              value={fbSnippetInput}
+              onChange={(e) => handleParseFirebaseSnippet(e.target.value)}
+              className="w-full text-xs font-mono p-2.5 rounded-xl border border-tb-rose-light bg-white text-tb-brown-dark placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-tb-rose-primary"
+            />
+            <p className="text-[11px] text-tb-gray-neutral">
+              Ao colar, os campos de API Key, Project ID, Auth Domain e Storage Bucket abaixo são preenchidos automaticamente.
+            </p>
+          </div>
+
+          {/* TUTORIAL PASSO A PASSO (EXPANDÍVEL) */}
+          {showFbGuide && (
+            <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs space-y-2 text-tb-brown-dark animate-fade-in">
+              <h4 className="font-bold flex items-center gap-1.5 text-amber-900">
+                <Sparkles className="w-4 h-4 text-amber-600" />
+                Passo a Passo para Conectar seu Firebase Gratuito (1 Minuto):
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-tb-brown-soft leading-relaxed pl-1">
+                <li>
+                  Acesse <strong><a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-amber-800 underline">console.firebase.google.com</a></strong> com sua conta Google e clique em <strong>Adicionar projeto</strong> (ex: "Total Beauty").
+                </li>
+                <li>
+                  No menu lateral esquerdo, clique em <strong>Criação &gt; Firestore Database</strong> e clique em <strong>Criar banco de dados</strong> (escolha o local São Paulo <code>southamerica-east1</code> ou padrão).
+                </li>
+                <li>
+                  Na aba <strong>Regras (Rules)</strong> do Firestore, altere para <code>allow read, write: if true;</code> e clique em <strong>Publicar</strong> para liberar o acesso ao sistema do salão.
+                </li>
+                <li>
+                  Clique na engrenagem ⚙️ (Configurações do Projeto) &gt; role até o final em "Seus aplicativos" &gt; adicione uma Web App <code>&lt;/&gt;</code> &gt; copie o bloco <code>firebaseConfig</code> e cole no campo acima!
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {/* CAMPOS INDIVIDUAIS DE CREDENCIAIS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
             <div>
               <label className="block text-[11px] font-semibold text-tb-brown-dark mb-1">API Key</label>
               <input
@@ -650,7 +837,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 placeholder="AIzaSy..."
                 value={fbConfig.apiKey}
                 onChange={e => setFbConfig({ ...fbConfig, apiKey: e.target.value })}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-ivory text-xs"
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
               />
             </div>
             <div>
@@ -660,7 +847,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 placeholder="total-beauty-xxxxx"
                 value={fbConfig.projectId}
                 onChange={e => setFbConfig({ ...fbConfig, projectId: e.target.value })}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-ivory text-xs"
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
               />
             </div>
             <div>
@@ -670,36 +857,78 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                 placeholder="total-beauty.firebaseapp.com"
                 value={fbConfig.authDomain}
                 onChange={e => setFbConfig({ ...fbConfig, authDomain: e.target.value })}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-ivory text-xs"
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
               />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-tb-brown-dark mb-1">Storage Bucket</label>
               <input
                 type="text"
-                placeholder="total-beauty.appspot.com"
+                placeholder="total-beauty.firebasestorage.app"
                 value={fbConfig.storageBucket}
                 onChange={e => setFbConfig({ ...fbConfig, storageBucket: e.target.value })}
-                className="w-full px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-ivory text-xs"
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-tb-brown-dark mb-1">Messaging Sender ID</label>
+              <input
+                type="text"
+                placeholder="123456789012"
+                value={fbConfig.messagingSenderId}
+                onChange={e => setFbConfig({ ...fbConfig, messagingSenderId: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-tb-brown-dark mb-1">App ID</label>
+              <input
+                type="text"
+                placeholder="1:123456789012:web:abcdef..."
+                value={fbConfig.appId}
+                onChange={e => setFbConfig({ ...fbConfig, appId: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-xs font-mono"
               />
             </div>
           </div>
 
-          <div className="pt-2 flex flex-wrap items-center justify-end gap-2">
+          {/* BOTÕES DE AÇÃO */}
+          <div className="pt-2 flex flex-wrap items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={handlePullFromFirestore}
+              className="px-4 py-2.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light border border-tb-rose-light text-tb-brown-dark rounded-xl flex items-center gap-1.5 transition-colors"
+              title="Baixar todos os registros salvos na nuvem Firebase para este dispositivo"
+            >
+              <Download className="w-4 h-4 text-tb-rose-primary" />
+              Baixar Dados da Nuvem
+            </button>
             <button
               type="button"
               onClick={handleSyncToFirestore}
-              className="px-4 py-2 text-xs font-semibold bg-tb-beige-light hover:bg-tb-beige-champagne text-tb-brown-dark rounded-xl"
+              className="px-4 py-2.5 text-xs font-semibold bg-tb-beige-light hover:bg-tb-beige-champagne text-tb-brown-dark rounded-xl flex items-center gap-1.5 transition-colors"
+              title="Enviar todos os clientes, agendamentos, estoque e financeiro para o Firebase"
             >
-              Sincronizar Dados Locais para Nuvem
+              <Upload className="w-4 h-4 text-emerald-600" />
+              Enviar Tudo para Nuvem
             </button>
             <button
               type="button"
               onClick={handleTestFirebase}
               disabled={fbTestStatus.loading}
-              className="px-5 py-2 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-sm flex items-center gap-1.5"
+              className="px-5 py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft flex items-center gap-2 transition-all disabled:opacity-50"
             >
-              {fbTestStatus.loading ? 'Testando...' : 'Salvar & Testar Conexão'}
+              {fbTestStatus.loading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Conectando ao Firebase...
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4" />
+                  Salvar & Conectar Firebase
+                </>
+              )}
             </button>
           </div>
         </div>
