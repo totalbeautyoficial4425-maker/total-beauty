@@ -163,6 +163,11 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-tb-rose-blush text-tb-rose-primary">
                     {CATEGORY_NAMES[service.category] || service.category}
                   </span>
+                  {service.isPackage && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      🎁 Pacote de Créditos
+                    </span>
+                  )}
                   <div className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${service.isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                     <span className="text-[11px] font-medium text-tb-gray-neutral">

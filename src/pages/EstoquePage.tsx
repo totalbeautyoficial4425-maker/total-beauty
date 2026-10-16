@@ -442,11 +442,31 @@ export const EstoquePage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
-              {filteredInventory.length === 0 ? (
+              {inventory.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-16 text-center text-tb-gray-neutral">
+                    <div className="w-16 h-16 rounded-3xl bg-tb-rose-blush/60 text-tb-rose-primary flex items-center justify-center mx-auto mb-3 border border-tb-rose-light">
+                      <Package className="w-8 h-8 stroke-[1.8]" />
+                    </div>
+                    <p className="font-serif-brand text-lg font-bold text-tb-brown-dark">Estoque Limpo e Pronto para Novos Materiais</p>
+                    <p className="text-xs text-tb-brown-soft max-w-md mx-auto mt-1 leading-relaxed">
+                      Os produtos de exemplo foram removidos conforme solicitado. Você pode cadastrar os materiais reais através do botão <strong>"+ Novo Material"</strong> ou aguardar o envio da lista para preenchimento.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleOpenAdd}
+                      className="mt-4 px-5 py-2.5 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-bold shadow-soft hover:shadow-premium transition-all inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4 stroke-[2.5]" />
+                      Cadastrar Primeiro Material
+                    </button>
+                  </td>
+                </tr>
+              ) : filteredInventory.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-tb-gray-neutral">
                     <Package className="w-8 h-8 text-tb-gray-neutral/50 mx-auto mb-2" />
-                    <p className="font-semibold text-tb-brown-dark">Nenhum produto encontrado.</p>
+                    <p className="font-semibold text-tb-brown-dark">Nenhum produto encontrado com os filtros atuais.</p>
                     <p className="text-[11px] text-tb-gray-neutral mt-0.5">
                       Verifique os filtros selecionados ou clique em "+ Novo Material" para cadastrar.
                     </p>

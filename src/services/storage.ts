@@ -8,7 +8,11 @@ import {
   Expense, 
   CompanySettings,
   User,
-  InventoryItem
+  InventoryItem,
+  ProductConsumption,
+  Comanda,
+  AppointmentDeletionLog,
+  ClientPackage
 } from '../types';
 import { 
   getFirebaseInstance, 
@@ -42,8 +46,12 @@ export const STORAGE_KEYS = {
   PAYMENTS: 'tb_payments_v3',
   EXPENSES: 'tb_expenses_v3',
   INVENTORY: 'tb_inventory_v3',
+  CONSUMPTIONS: 'tb_consumptions_v3',
+  COMANDAS: 'tb_comandas_v3',
   SETTINGS: 'tb_settings_v3',
-  LOGIN_ATTEMPTS: 'tb_login_attempts_v1'
+  LOGIN_ATTEMPTS: 'tb_login_attempts_v1',
+  DELETED_APPOINTMENTS: 'tb_deleted_appointments_v1',
+  CLIENT_PACKAGES: 'tb_client_packages_v1'
 };
 
 // Simple secure hash simulation for browser client-side storage
@@ -354,6 +362,24 @@ export const INITIAL_SERVICES: Service[] = [
     isActive: true,
   },
   {
+    id: 'srv_pkg_cab_01',
+    name: 'Pacote de Cabelo (4 Escovas - 10% OFF)',
+    category: 'cabelo',
+    description: 'Pacote com 4 escovas modeladas com 10% de desconto. Transforma-se em crédito na conta da cliente para uso durante o mês.',
+    price: 252.00,
+    durationMinutes: 40,
+    commissionPercentage: 50,
+    isActive: true,
+    isPackage: true,
+    packageConfig: {
+      packageType: 'cabelo',
+      items: [
+        { serviceType: 'escova', serviceName: 'Escova', quantity: 4 },
+      ],
+      validityDays: 30,
+    },
+  },
+  {
     id: 'srv_cab_21',
     name: 'Cachos e ondas',
     category: 'cabelo',
@@ -535,6 +561,25 @@ export const INITIAL_SERVICES: Service[] = [
   },
 
   // --- MANICURES ---
+  {
+    id: 'srv_pkg_unha_01',
+    name: 'Pacote de Unha (4 Manicures + 2 Pedicures)',
+    category: 'unhas',
+    description: 'Pacote mensal de unhas: 4 manicures e 2 pedicures com validade no mês por R$ 205,00. Transforma-se em crédito na conta da cliente.',
+    price: 205.00,
+    durationMinutes: 60,
+    commissionPercentage: 50,
+    isActive: true,
+    isPackage: true,
+    packageConfig: {
+      packageType: 'unha',
+      items: [
+        { serviceType: 'manicure', serviceName: 'Manicure', quantity: 4 },
+        { serviceType: 'pedicure', serviceName: 'Pedicure', quantity: 2 },
+      ],
+      validityDays: 30,
+    },
+  },
   {
     id: 'srv_man_01',
     name: 'Manicure',
@@ -726,10 +771,10 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
   {
     id: 'prof_thalita',
     name: 'Thálita',
-    specialty: 'Manicure & Nail Designer',
+    specialty: 'Manicure & Nail Designer (Inativa)',
     phone: '',
     color: '#C58F9B',
-    isActive: true,
+    isActive: false, // Inativada conforme Requisito 15 (histórico preservado)
     userId: 'user_prof_thalita',
     username: 'thalita',
   },
@@ -836,269 +881,7 @@ export const INITIAL_SETTINGS: CompanySettings = {
   }
 };
 
-export const INITIAL_INVENTORY: InventoryItem[] = [
-  // 1. Tintas & Colorações (Wella)
-  {
-    id: 'inv_wella_cp_60',
-    name: 'Color Perfect 6.0 Louro Escuro 60g',
-    brand: 'Wella',
-    category: 'Tintas & Colorações',
-    currentStock: 6,
-    minStock: 3,
-    unit: 'tubo',
-    costPrice: 38.50,
-    supplier: 'Representante Wella Professional',
-    location: 'Armário das Tintas',
-    notes: 'Base fundamental para cobertura de fios brancos',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_wella_cp_71',
-    name: 'Color Perfect 7.1 Louro Médio Acinzentado 60g',
-    brand: 'Wella',
-    category: 'Tintas & Colorações',
-    currentStock: 2,
-    minStock: 3,
-    unit: 'tubo',
-    costPrice: 38.50,
-    supplier: 'Representante Wella Professional',
-    location: 'Armário das Tintas',
-    notes: 'Muito utilizado para neutralização de tons quentes',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_wella_cp_80',
-    name: 'Color Perfect 8.0 Louro Claro 60g',
-    brand: 'Wella',
-    category: 'Tintas & Colorações',
-    currentStock: 1,
-    minStock: 2,
-    unit: 'tubo',
-    costPrice: 38.50,
-    supplier: 'Representante Wella Professional',
-    location: 'Armário das Tintas',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_wella_cp_50',
-    name: 'Color Perfect 5.0 Castanho Claro 60g',
-    brand: 'Wella',
-    category: 'Tintas & Colorações',
-    currentStock: 0,
-    minStock: 2,
-    unit: 'tubo',
-    costPrice: 38.50,
-    supplier: 'Representante Wella Professional',
-    location: 'Armário das Tintas',
-    notes: 'Urgente para retoque de raiz de clientes agendadas',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-
-  // 2. Pó Descolorante (Wella & Lowell)
-  {
-    id: 'inv_wella_blondor',
-    name: 'Blondor Multi Blonde Pó Descolorante 800g',
-    brand: 'Wella',
-    category: 'Pó Descolorante',
-    currentStock: 3,
-    minStock: 2,
-    unit: 'pote',
-    costPrice: 145.00,
-    supplier: 'Representante Wella Professional',
-    location: 'Bancada Química',
-    notes: 'Abre até 7 tons, clareamento limpo e seguro',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_lowell_descolorante',
-    name: 'Pó Descolorante Lowell Protect Care 500g',
-    brand: 'Lowell',
-    category: 'Pó Descolorante',
-    currentStock: 1,
-    minStock: 2,
-    unit: 'pote',
-    costPrice: 78.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Bancada Química',
-    notes: 'Ação rápida com queratina protetora',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-
-  // 3. Água Oxigenada (Wella & Lowell)
-  {
-    id: 'inv_wella_ox_20',
-    name: 'Welloxon Perfect 20 Volumes (6%) 1000ml',
-    brand: 'Wella',
-    category: 'Água Oxigenada',
-    currentStock: 4,
-    minStock: 2,
-    unit: 'frasco',
-    costPrice: 49.00,
-    supplier: 'Representante Wella Professional',
-    location: 'Lavatório / Bancada',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_wella_ox_30',
-    name: 'Welloxon Perfect 30 Volumes (9%) 1000ml',
-    brand: 'Wella',
-    category: 'Água Oxigenada',
-    currentStock: 2,
-    minStock: 2,
-    unit: 'frasco',
-    costPrice: 49.00,
-    supplier: 'Representante Wella Professional',
-    location: 'Lavatório / Bancada',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_lowell_ox_20',
-    name: 'Emulsão Reveladora Lowell 20 Vol 900ml',
-    brand: 'Lowell',
-    category: 'Água Oxigenada',
-    currentStock: 3,
-    minStock: 2,
-    unit: 'frasco',
-    costPrice: 34.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Lavatório / Bancada',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-
-  // 4. Hidratações & Máscaras (Lowell, Wella & Erick Kenedy)
-  {
-    id: 'inv_lowell_protect_mask',
-    name: 'Máscara Protect Care Power Nutri 450g',
-    brand: 'Lowell',
-    category: 'Hidratações & Máscaras',
-    currentStock: 3,
-    minStock: 2,
-    unit: 'pote',
-    costPrice: 88.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Lavatório - Tratamentos',
-    notes: 'Nutrição profunda para cabelos ressecados',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_erick_mascara_rec',
-    name: 'Máscara Reconstrutora Erick Kenedy 500g',
-    brand: 'Erick Kenedy',
-    category: 'Hidratações & Máscaras',
-    currentStock: 2,
-    minStock: 2,
-    unit: 'pote',
-    costPrice: 95.00,
-    supplier: 'Erick Kenedy Cosméticos',
-    location: 'Lavatório - Tratamentos',
-    notes: 'Reconstrução com aminoácidos pós-química',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_wella_oil_mask',
-    name: 'Wella Oil Reflections Máscara 500ml',
-    brand: 'Wella',
-    category: 'Hidratações & Máscaras',
-    currentStock: 2,
-    minStock: 1,
-    unit: 'pote',
-    costPrice: 135.00,
-    supplier: 'Representante Wella Professional',
-    location: 'Lavatório - Premium',
-    notes: 'Luminosidade e maciez extrema com óleos preciosos',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-
-  // 5. Shampoos & Condicionadores (Lowell & Erick Kenedy)
-  {
-    id: 'inv_lowell_shampoo_lav',
-    name: 'Shampoo Lavatório Protect Care 2.5L',
-    brand: 'Lowell',
-    category: 'Shampoos',
-    currentStock: 2,
-    minStock: 1,
-    unit: 'frasco',
-    costPrice: 98.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Lavatório Principal',
-    notes: 'Galão grande de uso profissional diário',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_lowell_cond_lav',
-    name: 'Condicionador Lavatório Protect Care 2.5L',
-    brand: 'Lowell',
-    category: 'Condicionadores',
-    currentStock: 2,
-    minStock: 1,
-    unit: 'frasco',
-    costPrice: 98.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Lavatório Principal',
-    notes: 'Galão grande de uso profissional diário',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_erick_shampoo_nutri',
-    name: 'Shampoo Nutritivo Erick Kenedy 1000ml',
-    brand: 'Erick Kenedy',
-    category: 'Shampoos',
-    currentStock: 3,
-    minStock: 2,
-    unit: 'frasco',
-    costPrice: 72.00,
-    supplier: 'Erick Kenedy Cosméticos',
-    location: 'Lavatório',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-
-  // 6. Progressivas & Alinhamento Sem Formol (Erick Kenedy & Lowell)
-  {
-    id: 'inv_erick_alinhamento',
-    name: 'Alinhamento Térmico Sem Formol 1000ml',
-    brand: 'Erick Kenedy',
-    category: 'Progressivas & Alinhamentos',
-    currentStock: 1,
-    minStock: 2,
-    unit: 'frasco',
-    costPrice: 195.00,
-    supplier: 'Erick Kenedy Cosméticos',
-    location: 'Armário de Químicas',
-    notes: 'Zero formol, alinhamento perfeito compatível com loiras e morenas',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-  {
-    id: 'inv_lowell_bioplastia',
-    name: 'Bioplastia Selagem / Alinhamento 1000ml',
-    brand: 'Lowell',
-    category: 'Progressivas & Alinhamentos',
-    currentStock: 2,
-    minStock: 1,
-    unit: 'frasco',
-    costPrice: 165.00,
-    supplier: 'Distribuidora Lowell',
-    location: 'Armário de Químicas',
-    notes: 'Redução de volume e blindagem dos fios',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-  },
-];
+export const INITIAL_INVENTORY: InventoryItem[] = [];
 
 export function getTodayDate(): string {
   const now = new Date();
@@ -1197,6 +980,28 @@ export function ensureCleanProductionState(): void {
     syncCollectionToFirestore('services', INITIAL_SERVICES);
   }
 
+  // Ensure package services (Pacote de Unha and Pacote de Cabelo) are merged into services
+  const PACKAGE_SERVICES_FLAG = 'tb_official_package_services_v1';
+  const hasPackageServices = localStorage.getItem(PACKAGE_SERVICES_FLAG);
+  if (!hasPackageServices) {
+    let existingServices: Service[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SERVICES);
+      if (raw) existingServices = JSON.parse(raw);
+    } catch {
+      existingServices = [];
+    }
+    const packageServices = INITIAL_SERVICES.filter(s => s.isPackage);
+    const existingIds = new Set(existingServices.map(s => s.id));
+    const merged = [
+      ...existingServices,
+      ...packageServices.filter(s => !existingIds.has(s.id))
+    ];
+    localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(merged));
+    localStorage.setItem(PACKAGE_SERVICES_FLAG, 'true');
+    syncCollectionToFirestore('services', merged);
+  }
+
   // Ensure official professionals are loaded for active browsers
   const hasProfessionals = localStorage.getItem(PROFESSIONALS_VERSION_FLAG);
   if (!hasProfessionals) {
@@ -1236,6 +1041,20 @@ export function ensureCleanProductionState(): void {
     }
     localStorage.removeItem('tb_login_attempts_v1');
     localStorage.setItem(ADMIN_AUTH_SYNC_FLAG, 'true');
+  }
+
+  // Cleanup Deborah example training attendances & payments if not already cleaned
+  const hasCleanedDeborah = localStorage.getItem('tb_deborah_examples_cleanup_v1');
+  if (!hasCleanedDeborah) {
+    storageService.cleanupDeborahExampleData();
+    localStorage.setItem('tb_deborah_examples_cleanup_v1', 'true');
+  }
+
+  // Cleanup example stock/inventory items if not already cleaned
+  const hasCleanedInventory = localStorage.getItem('tb_inventory_examples_cleanup_v1');
+  if (!hasCleanedInventory) {
+    storageService.cleanupExampleInventory();
+    localStorage.setItem('tb_inventory_examples_cleanup_v1', 'true');
   }
 }
 
@@ -1351,6 +1170,8 @@ export const storageService = {
       profs = INITIAL_PROFESSIONALS;
       safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     }
+    // Requisito 15: Thálita inativada operacionalmente preservando integridade histórica
+    profs = profs.map(p => (p.id === 'prof_thalita' || p.username === 'thalita' ? { ...p, isActive: false } : p));
     return profs;
   },
 
@@ -1422,19 +1243,13 @@ export const storageService = {
   getInventory(): InventoryItem[] {
     const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
     if (!raw) {
-      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
-      return INITIAL_INVENTORY;
+      return [];
     }
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
-        return INITIAL_INVENTORY;
-      }
-      return parsed;
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
-      return INITIAL_INVENTORY;
+      return [];
     }
   },
 
@@ -1442,6 +1257,28 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
     idbStorage.setItem(STORAGE_KEYS.INVENTORY, inventory);
     syncCollectionToFirestore('inventory', inventory);
+  },
+
+  getConsumptions(): ProductConsumption[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.CONSUMPTIONS);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  saveConsumptions(consumptions: ProductConsumption[]): void {
+    safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(consumptions));
+    idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, consumptions);
+    syncCollectionToFirestore('consumptions', consumptions);
+  },
+
+  getComandas(): Comanda[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.COMANDAS);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  saveComandas(comandas: Comanda[]): void {
+    safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(comandas));
+    idbStorage.setItem(STORAGE_KEYS.COMANDAS, comandas);
+    syncCollectionToFirestore('comandas', comandas);
   },
 
   getSettings(): CompanySettings {
@@ -1472,6 +1309,151 @@ export const storageService = {
     deleteDocumentFromFirestore(collectionName, docId);
   },
 
+  getAppointmentDeletionLogs(): AppointmentDeletionLog[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_APPOINTMENTS);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  saveAppointmentDeletionLog(log: AppointmentDeletionLog): void {
+    const existing = this.getAppointmentDeletionLogs();
+    const next = [log, ...existing];
+    safeSetItem(STORAGE_KEYS.DELETED_APPOINTMENTS, JSON.stringify(next));
+    idbStorage.setItem(STORAGE_KEYS.DELETED_APPOINTMENTS, next);
+    syncCollectionToFirestore('deletedAppointments', next);
+  },
+
+  cleanupDeborahExampleData(): { deletedAttendances: number; deletedPayments: number; deletedAppointments: number } {
+    // 1. Clean attendances
+    const rawAttendances = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
+    let attendancesList: Attendance[] = rawAttendances ? JSON.parse(rawAttendances) : [];
+    const deborahAtdIds = new Set<string>();
+    const deborahAptIds = new Set<string>();
+
+    const remainingAttendances = attendancesList.filter(a => {
+      const isDeborah = a.professionalId === 'prof_deborah' || 
+                        a.professionalName?.toLowerCase().includes('deborah') || 
+                        a.professionalName?.toLowerCase().includes('déborah');
+      if (isDeborah) {
+        deborahAtdIds.add(a.id);
+        if (a.appointmentId) deborahAptIds.add(a.appointmentId);
+        deleteDocumentFromFirestore('attendances', a.id);
+        return false;
+      }
+      return true;
+    });
+
+    safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(remainingAttendances));
+    idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, remainingAttendances);
+
+    // 2. Clean payments
+    const rawPayments = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
+    let paymentsList: PaymentTransaction[] = rawPayments ? JSON.parse(rawPayments) : [];
+    const remainingPayments = paymentsList.filter(p => {
+      const isDeborah = p.professionalId === 'prof_deborah' || 
+                        p.professionalName?.toLowerCase().includes('deborah') || 
+                        p.professionalName?.toLowerCase().includes('déborah') ||
+                        (p.attendanceId && deborahAtdIds.has(p.attendanceId));
+      if (isDeborah) {
+        deleteDocumentFromFirestore('payments', p.id);
+        return false;
+      }
+      return true;
+    });
+
+    safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(remainingPayments));
+    idbStorage.setItem(STORAGE_KEYS.PAYMENTS, remainingPayments);
+
+    // 3. Clean appointments (up to today or associated with Deborah's training attendances)
+    const rawAppointments = localStorage.getItem(STORAGE_KEYS.APPOINTMENTS);
+    let appointmentsList: Appointment[] = rawAppointments ? JSON.parse(rawAppointments) : [];
+    const remainingAppointments = appointmentsList.filter(apt => {
+      const isDeborah = apt.professionalId === 'prof_deborah' || 
+                        apt.professionalName?.toLowerCase().includes('deborah') || 
+                        apt.professionalName?.toLowerCase().includes('déborah') ||
+                        deborahAptIds.has(apt.id);
+      if (isDeborah) {
+        deleteDocumentFromFirestore('appointments', apt.id);
+        return false;
+      }
+      return true;
+    });
+
+    safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(remainingAppointments));
+    idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, remainingAppointments);
+
+    // 4. Clean comandas
+    const rawComandas = localStorage.getItem(STORAGE_KEYS.COMANDAS);
+    if (rawComandas) {
+      try {
+        let comandasList: Comanda[] = JSON.parse(rawComandas);
+        const remainingComandas = comandasList
+          .map(c => ({
+            ...c,
+            attendanceIds: c.attendanceIds.filter(id => !deborahAtdIds.has(id))
+          }))
+          .filter(c => c.attendanceIds.length > 0);
+        safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(remainingComandas));
+        idbStorage.setItem(STORAGE_KEYS.COMANDAS, remainingComandas);
+      } catch {
+        // ignore
+      }
+    }
+
+    // 5. Clean consumptions
+    const rawConsumptions = localStorage.getItem(STORAGE_KEYS.CONSUMPTIONS);
+    if (rawConsumptions) {
+      try {
+        const consumptionsList: ProductConsumption[] = JSON.parse(rawConsumptions);
+        const remainingConsumptions = consumptionsList.filter(c => c.attendanceId ? !deborahAtdIds.has(c.attendanceId) : true);
+        safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(remainingConsumptions));
+        idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, remainingConsumptions);
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      deletedAttendances: deborahAtdIds.size,
+      deletedPayments: paymentsList.length - remainingPayments.length,
+      deletedAppointments: appointmentsList.length - remainingAppointments.length,
+    };
+  },
+
+  cleanupExampleInventory(): { deletedItemsCount: number } {
+    const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+    let items: InventoryItem[] = [];
+    try {
+      if (raw) items = JSON.parse(raw);
+    } catch {
+      items = [];
+    }
+
+    items.forEach(i => {
+      deleteDocumentFromFirestore('inventory', i.id);
+    });
+
+    safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify([]));
+    idbStorage.setItem(STORAGE_KEYS.INVENTORY, []);
+    syncCollectionToFirestore('inventory', []);
+
+    safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify([]));
+    idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, []);
+    syncCollectionToFirestore('consumptions', []);
+
+    return { deletedItemsCount: items.length };
+  },
+
+  getClientPackages(): ClientPackage[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.CLIENT_PACKAGES);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  saveClientPackages(packages: ClientPackage[]): void {
+    safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(packages));
+    idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, packages);
+    syncCollectionToFirestore('clientPackages', packages);
+  },
+
   /**
    * Hydrate collections from High-Capacity IndexedDB into memory/localStorage
    */
@@ -1486,8 +1468,11 @@ export const storageService = {
         STORAGE_KEYS.PAYMENTS,
         STORAGE_KEYS.EXPENSES,
         STORAGE_KEYS.INVENTORY,
+        STORAGE_KEYS.CONSUMPTIONS,
+        STORAGE_KEYS.COMANDAS,
         STORAGE_KEYS.USERS,
         STORAGE_KEYS.SETTINGS,
+        STORAGE_KEYS.CLIENT_PACKAGES,
       ];
 
       let restoredAny = false;
@@ -1741,6 +1726,9 @@ export const storageService = {
       payments: this.getPayments(),
       expenses: this.getExpenses(),
       inventory: this.getInventory(),
+      consumptions: this.getConsumptions(),
+      comandas: this.getComandas(),
+      clientPackages: this.getClientPackages(),
       settings: this.getSettings(),
     };
     return JSON.stringify(data, null, 2);
@@ -1758,6 +1746,9 @@ export const storageService = {
       if (parsed.payments) this.savePayments(parsed.payments);
       if (parsed.expenses) this.saveExpenses(parsed.expenses);
       if (parsed.inventory) this.saveInventory(parsed.inventory);
+      if (parsed.consumptions) this.saveConsumptions(parsed.consumptions);
+      if (parsed.comandas) this.saveComandas(parsed.comandas);
+      if (parsed.clientPackages) this.saveClientPackages(parsed.clientPackages);
       if (parsed.settings) this.saveSettings(parsed.settings);
       return true;
     } catch (e) {
@@ -1775,6 +1766,7 @@ export const storageService = {
     this.savePayments([]);
     this.saveExpenses([]);
     this.saveInventory(INITIAL_INVENTORY);
+    this.saveClientPackages([]);
     this.saveUsers(DEFAULT_USERS);
 
     DEFAULT_USERS.forEach(u => {

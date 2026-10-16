@@ -12,7 +12,8 @@ import {
   Database,
   CheckCircle2,
   UserCheck,
-  Package
+  Package,
+  Gift
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { getFirebaseInstance } from '../../services/firebase';
@@ -42,12 +43,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ? [
         { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
         { id: 'agenda', label: 'Agendamentos', icon: CalendarDays },
+        { id: 'atendimentos', label: 'Meus Atendimentos', icon: Clock },
         { id: 'servicos', label: 'Serviços Disponíveis', icon: Sparkles },
+        { id: 'aniversariantes', label: 'Aniversariantes', icon: Gift },
       ]
     : [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'agenda', label: 'Agenda', icon: CalendarDays },
         { id: 'clientes', label: 'Clientes', icon: Users },
+        { id: 'aniversariantes', label: 'Aniversariantes', icon: Gift },
         { id: 'servicos', label: 'Serviços', icon: Sparkles },
         { id: 'profissionais', label: 'Profissionais', icon: UserCheck },
         { id: 'atendimentos', label: 'Atendimentos', icon: Clock },

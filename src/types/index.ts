@@ -54,6 +54,13 @@ export interface Service {
   price: number;
   durationMinutes: number;
   commissionPercentage: number; // Percentual de comissão do serviço (ex: 50%)
+  requiresProductConsumption?: boolean; // Exige registro de consumo de produtos/gramatura
+  isPackage?: boolean;
+  packageConfig?: {
+    packageType: 'unha' | 'cabelo' | 'outro';
+    items: Array<{ serviceType: string; serviceName: string; quantity: number }>;
+    validityDays: number;
+  };
   isActive: boolean;
   internalNotes?: string;
 }
@@ -96,13 +103,40 @@ export interface Appointment {
   status: AppointmentStatus;
   cancellationReason?: string;
   isFitIn?: boolean; // Encaixe
+  fitInReason?: string; // Motivo do encaixe excepcional
+  fitInAuthorizedBy?: string; // Quem autorizou
+  sessionId?: string; // ID da sessão de múltiplos serviços
+  executionMode?: 'sequencial' | 'simultaneo';
+  deletedAt?: string;
+  deletedBy?: string;
+  deletionReason?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AppointmentDeletionLog {
+  id: string;
+  appointmentId: string;
+  clientId: string;
+  clientName: string;
+  clientPhone?: string;
+  serviceName: string;
+  professionalId: string;
+  professionalName: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  price: number;
+  reason: string;
+  deletedBy: string;
+  deletedAt: string;
 }
 
 export interface Attendance {
   id: string;
   appointmentId?: string;
+  sessionId?: string; // ID da sessão vinculada
+  comandaId?: string; // ID da comanda unificada
   clientId: string;
   clientName: string;
   serviceId: string;
@@ -122,7 +156,56 @@ export interface Attendance {
   paymentStatus: 'pago' | 'pendente' | 'parcial';
   paidAmount: number;
   paymentMethod?: PaymentMethod;
+  packageId?: string; // Se o atendimento foi pago/coberto por crédito de pacote
+  isPackageCovered?: boolean; // Se a sessão foi abonada pelo pacote
   createdAt: string;
+}
+
+export interface ProductConsumption {
+  id: string;
+  attendanceId?: string;
+  appointmentId?: string;
+  clientId: string;
+  clientName: string;
+  serviceId: string;
+  serviceName: string;
+  professionalId: string;
+  professionalName: string;
+  productId: string;
+  productName: string;
+  quantity: number; // Quantidade informada (ex: 40 para 40g)
+  unit: string; // 'g', 'ml', 'un', 'tubo', etc.
+  costPrice?: number;
+  date: string; // YYYY-MM-DD
+  createdAt: string;
+}
+
+export interface ComandaPayment {
+  id: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  date: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface Comanda {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientPhone?: string;
+  date: string; // YYYY-MM-DD
+  attendanceIds: string[];
+  subtotal: number;
+  discountTotal: number;
+  netTotal: number;
+  paidTotal: number;
+  pendingTotal: number;
+  status: 'pago' | 'parcial' | 'pendente';
+  payments: ComandaPayment[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type PaymentMethod = 
@@ -131,11 +214,53 @@ export type PaymentMethod =
   | 'cartao_debito' 
   | 'cartao_credito' 
   | 'transferencia' 
+  | 'pacote_credito'
   | 'outros';
+
+export interface PackageItemBalance {
+  serviceType: string;
+  serviceName: string;
+  totalQty: number;
+  usedQty: number;
+  remainingQty: number;
+}
+
+export interface PackageUsageLog {
+  id: string;
+  date: string;
+  serviceType: string;
+  serviceName: string;
+  attendanceId?: string;
+  professionalId?: string;
+  professionalName?: string;
+  notes?: string;
+  usedAt: string;
+}
+
+export interface ClientPackage {
+  id: string;
+  clientId: string;
+  clientName: string;
+  packageServiceId: string;
+  packageName: string;
+  packageType: 'unha' | 'cabelo' | 'outro';
+  totalPricePaid: number;
+  purchaseDate: string; // YYYY-MM-DD
+  expiryDate: string; // YYYY-MM-DD
+  status: 'ativo' | 'esgotado' | 'expirado';
+  items: PackageItemBalance[];
+  usageHistory: PackageUsageLog[];
+  attendanceId?: string;
+  comandaId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface PaymentTransaction {
   id: string;
   attendanceId?: string;
+  comandaId?: string;
+  packageId?: string;
   clientId?: string;
   clientName?: string;
   serviceName?: string;
@@ -144,6 +269,7 @@ export interface PaymentTransaction {
   description: string;
   grossValue: number;
   discount: number;
+  discountPercentage?: number;
   netValue: number;
   paidAmount: number;
   pendingAmount: number;
@@ -224,6 +350,7 @@ export type NavigationPage =
   | 'financeiro' 
   | 'relatorios' 
   | 'configuracoes'
+  | 'aniversariantes'
   | 'minha-producao'; // Página exclusiva das profissionais
 
 export type InventoryCategory =

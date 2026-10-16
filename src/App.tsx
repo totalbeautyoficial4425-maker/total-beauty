@@ -17,6 +17,7 @@ import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { MinhaProducaoPage } from './pages/MinhaProducaoPage';
 import { ProfissionaisPage } from './pages/ProfissionaisPage';
 import { EstoquePage } from './pages/EstoquePage';
+import { AniversariantesPage } from './pages/AniversariantesPage';
 
 // Modals
 import { AppointmentModal } from './components/modals/AppointmentModal';
@@ -38,7 +39,7 @@ export const AppContent: React.FC = () => {
   // Role protection guard: prevent professionals from opening administrative routes
   useEffect(() => {
     if (currentUser?.role === 'profissional') {
-      const allowedPages: NavigationPage[] = ['dashboard', 'agenda', 'servicos', 'minha-producao'];
+      const allowedPages: NavigationPage[] = ['dashboard', 'agenda', 'atendimentos', 'servicos', 'aniversariantes', 'minha-producao'];
       if (!allowedPages.includes(currentPage)) {
         setCurrentPage('dashboard');
       }
@@ -52,6 +53,7 @@ export const AppContent: React.FC = () => {
   const [appointmentInitialDate, setAppointmentInitialDate] = useState<string | undefined>();
   const [appointmentInitialTime, setAppointmentInitialTime] = useState<string | undefined>();
   const [appointmentInitialClientId, setAppointmentInitialClientId] = useState<string | undefined>();
+  const [appointmentInitialProfessionalId, setAppointmentInitialProfessionalId] = useState<string | undefined>();
 
   // 2. Client Modal
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -84,11 +86,12 @@ export const AppContent: React.FC = () => {
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // Handlers for Opening Modals
-  const handleOpenNewAppointment = (initialDate?: string, initialTime?: string, initialClientId?: string) => {
+  const handleOpenNewAppointment = (initialDate?: string, initialTime?: string, initialClientId?: string, initialProfessionalId?: string) => {
     setAppointmentToEdit(null);
     setAppointmentInitialDate(initialDate);
     setAppointmentInitialTime(initialTime);
     setAppointmentInitialClientId(initialClientId);
+    setAppointmentInitialProfessionalId(initialProfessionalId);
     setIsAppointmentModalOpen(true);
   };
 
@@ -187,6 +190,7 @@ export const AppContent: React.FC = () => {
               onOpenNewAppointment={handleOpenNewAppointment}
               onEditAppointment={handleEditAppointment}
               onOpenWhatsApp={handleOpenWhatsApp}
+              onNavigateToAtendimentos={() => setCurrentPage('atendimentos')}
             />
           )}
 
@@ -197,6 +201,14 @@ export const AppContent: React.FC = () => {
               onViewClientDetails={handleViewClientDetails}
               onOpenWhatsApp={handleOpenWhatsApp}
               onNewAppointmentForClient={(clientId) => handleOpenNewAppointment(undefined, undefined, clientId)}
+            />
+          )}
+
+          {currentPage === 'aniversariantes' && (
+            <AniversariantesPage
+              onOpenWhatsApp={handleOpenWhatsApp}
+              onOpenNewAppointmentForClient={(clientId: string) => handleOpenNewAppointment(undefined, undefined, clientId)}
+              onViewClientDetails={handleViewClientDetails}
             />
           )}
 
@@ -271,6 +283,7 @@ export const AppContent: React.FC = () => {
         initialDate={appointmentInitialDate}
         initialTime={appointmentInitialTime}
         initialClientId={appointmentInitialClientId}
+        initialProfessionalId={appointmentInitialProfessionalId}
       />
 
       {/* 4. Client Modal */}

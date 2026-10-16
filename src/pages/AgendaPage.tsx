@@ -1,14 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  Filter, 
   Clock, 
   User, 
   MessageCircle, 
-  MoreVertical, 
   CheckCircle2, 
   Play, 
   XCircle, 
@@ -17,49 +15,82 @@ import {
   List,
   CalendarDays,
   CalendarRange,
-  Search
+  Search,
+  Gift,
+  Cake,
+  Receipt,
+  Eye,
+  SlidersHorizontal,
+  Trash2,
+  X
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Appointment, AppointmentStatus } from '../types';
-import { formatBRL, formatDateBR, addMinutesToTime } from '../utils/formatters';
+import { Appointment, AppointmentStatus, Professional } from '../types';
+import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday } from '../utils/formatters';
 
 interface AgendaPageProps {
-  onOpenNewAppointment: (initialDate?: string, initialTime?: string) => void;
+  onOpenNewAppointment: (initialDate?: string, initialTime?: string, initialClientId?: string, initialProfessionalId?: string) => void;
   onEditAppointment: (appointment: Appointment) => void;
   onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any) => void;
+  onNavigateToAtendimentos?: () => void;
 }
 
-type ViewMode = 'dia' | 'semana' | 'mes' | 'lista';
+type ViewMode = 'grade_profissionais' | 'dia_lista' | 'semana' | 'mes' | 'lista';
 
-const STATUS_CONFIG: Record<AppointmentStatus, { label: string; badgeClass: string; borderClass: string }> = {
-  agendado: { label: 'Agendado', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200', borderClass: 'border-l-blue-400' },
-  confirmado: { label: 'Confirmado', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', borderClass: 'border-l-emerald-500' },
-  em_atendimento: { label: 'Em Atendimento', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse', borderClass: 'border-l-amber-500' },
-  concluido: { label: 'Concluído', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200', borderClass: 'border-l-purple-500' },
-  cancelado: { label: 'Cancelado', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200', borderClass: 'border-l-rose-400' },
-  nao_compareceu: { label: 'Não Compareceu', badgeClass: 'bg-gray-100 text-gray-700 border-gray-300', borderClass: 'border-l-gray-400' },
+const STATUS_CONFIG: Record<AppointmentStatus, { label: string; badgeClass: string; borderClass: string; bgClass: string }> = {
+  agendado: { label: 'Agendado', badgeClass: 'bg-emerald-600 text-white', borderClass: 'border-l-emerald-500', bgClass: 'bg-[#00796B]' },
+  confirmado: { label: 'Confirmado', badgeClass: 'bg-teal-500 text-white', borderClass: 'border-l-teal-400', bgClass: 'bg-[#00695c]' },
+  em_atendimento: { label: 'Em Atendimento', badgeClass: 'bg-amber-400 text-amber-950 animate-pulse', borderClass: 'border-l-amber-500', bgClass: 'bg-[#005c53]' },
+  concluido: { label: 'Concluído', badgeClass: 'bg-purple-600 text-white', borderClass: 'border-l-purple-500', bgClass: 'bg-[#4a5568]' },
+  cancelado: { label: 'Cancelado', badgeClass: 'bg-rose-600 text-white', borderClass: 'border-l-rose-500', bgClass: 'bg-[#718096]' },
+  nao_compareceu: { label: 'Não Compareceu', badgeClass: 'bg-gray-600 text-white', borderClass: 'border-l-gray-400', bgClass: 'bg-[#a0aec0]' },
+};
+
+// Professional column colors aligned with the reference design
+const PROF_COLORS: Record<string, string> = {
+  deborah: '#A855F7',   // Purple
+  geovana: '#F97316',   // Orange
+  rose: '#E11D48',      // Crimson Red
+  leila: '#14B8A6',     // Teal
+  elizama: '#16A34A',   // Green
+  zama: '#16A34A',      // Green
+  talitha: '#84CC16',   // Lime Green
+  thais: '#F59E0B',     // Amber
 };
 
 const TIME_SLOTS = [
-  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', 
-  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', 
-  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', 
-  '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
+  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', 
+  '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', 
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
+  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', 
+  '19:00', '19:30', '20:00', '20:30'
 ];
+
+const SLOT_HEIGHT = 48; // pixels per 30-minute slot
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+const START_OF_DAY_MINUTES = 7 * 60; // 07:00 = 420 mins
 
 export const AgendaPage: React.FC<AgendaPageProps> = ({
   onOpenNewAppointment,
   onEditAppointment,
   onOpenWhatsApp,
+  onNavigateToAtendimentos,
 }) => {
   const { currentUser } = useAuth();
   const { 
     appointments, 
     professionals, 
-    services, 
+    clients,
+    attendances,
     updateAppointmentStatus, 
     cancelAppointment, 
+    deleteAppointment,
     startAttendance 
   } = useData();
 
@@ -70,7 +101,12 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     p.name.toLowerCase() === currentUser?.name.toLowerCase()
   )?.id;
 
-  const [viewMode, setViewMode] = useState<ViewMode>('dia');
+  // Active professionals only (Thálita is excluded)
+  const activeProfessionals = useMemo(() => {
+    return professionals.filter(p => p.isActive && p.id !== 'prof_thalita');
+  }, [professionals]);
+
+  const [viewMode, setViewMode] = useState<ViewMode>('grade_profissionais');
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -81,27 +117,37 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('todos');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Column count adjustment: 3, 5, 8, 10, 12, or 'all'
+  const [columnsVisibleCount, setColumnsVisibleCount] = useState<number | 'all'>('all');
+
   // Cancel Modal Prompt State
   const [cancelingAppointmentId, setCancelingAppointmentId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Action Menu dropdown state
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  // Delete Modal Prompt State (With Mandatory Justification)
+  const [deletingAppointment, setDeletingAppointment] = useState<Appointment | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Selected appointment popover tooltip
+  const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Open Comandas Count
+  const openComandasCount = useMemo(() => {
+    return attendances.filter(a => !a.finishedAt || a.paymentStatus !== 'pago').length;
+  }, [attendances]);
 
   // Navigate date
   const handlePrevDate = () => {
     const d = new Date(selectedDate + 'T00:00:00');
-    if (viewMode === 'dia') d.setDate(d.getDate() - 1);
-    else if (viewMode === 'semana') d.setDate(d.getDate() - 7);
-    else if (viewMode === 'mes') d.setMonth(d.getMonth() - 1);
+    d.setDate(d.getDate() - 1);
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
   const handleNextDate = () => {
     const d = new Date(selectedDate + 'T00:00:00');
-    if (viewMode === 'dia') d.setDate(d.getDate() + 1);
-    else if (viewMode === 'semana') d.setDate(d.getDate() + 7);
-    else if (viewMode === 'mes') d.setMonth(d.getMonth() + 1);
+    d.setDate(d.getDate() + 1);
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
@@ -109,517 +155,748 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     setSelectedDate(new Date().toISOString().split('T')[0]);
   };
 
-  // Filtered appointments
-  const filteredAppointments = useMemo(() => {
+  // Filtered professionals to display in columns
+  const displayedProfessionals = useMemo(() => {
+    let list = activeProfessionals;
+    if (selectedProfessional !== 'todos') {
+      list = list.filter(p => p.id === selectedProfessional);
+    }
+    if (columnsVisibleCount !== 'all' && typeof columnsVisibleCount === 'number') {
+      list = list.slice(0, columnsVisibleCount);
+    }
+    return list;
+  }, [activeProfessionals, selectedProfessional, columnsVisibleCount]);
+
+  // Appointments for the selected date
+  const dayAppointments = useMemo(() => {
     return appointments.filter(apt => {
-      // Date filter based on view mode
-      if (viewMode === 'dia' && apt.date !== selectedDate) return false;
-      if (viewMode === 'semana') {
-        const sel = new Date(selectedDate + 'T00:00:00');
-        const startWeek = new Date(sel);
-        startWeek.setDate(sel.getDate() - sel.getDay());
-        const endWeek = new Date(startWeek);
-        endWeek.setDate(startWeek.getDate() + 6);
-        const aptDate = new Date(apt.date + 'T00:00:00');
-        if (aptDate < startWeek || aptDate > endWeek) return false;
-      }
-      if (viewMode === 'mes' && apt.date.substring(0, 7) !== selectedDate.substring(0, 7)) return false;
-
-      // Professional filter
-      if (selectedProfessional !== 'todos' && apt.professionalId !== selectedProfessional) return false;
-
-      // Status filter
+      if (apt.date !== selectedDate) return false;
       if (selectedStatus !== 'todos' && apt.status !== selectedStatus) return false;
-
-      // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
           apt.clientName.toLowerCase().includes(q) ||
           apt.serviceName.toLowerCase().includes(q) ||
-          apt.clientPhone.includes(q)
+          apt.clientPhone.includes(q) ||
+          apt.professionalName.toLowerCase().includes(q)
         );
       }
-
       return true;
     });
-  }, [appointments, selectedDate, viewMode, selectedProfessional, selectedStatus, searchQuery]);
+  }, [appointments, selectedDate, selectedStatus, searchQuery]);
+
+  // Check if client has birthday today
+  const clientBirthdaysMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    clients.forEach(c => {
+      if (c.birthDate && isClientBirthdayToday(c.birthDate)) {
+        map.set(c.id, true);
+        map.set(c.name.toLowerCase(), true);
+      }
+    });
+    return map;
+  }, [clients]);
+
+  // Click handler on empty slot
+  const handleEmptySlotClick = (profId: string, time: string) => {
+    onOpenNewAppointment(selectedDate, time, undefined, profId);
+  };
+
+  // Card click handler to toggle popover
+  const handleAppointmentClick = (e: React.MouseEvent, apt: Appointment) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPopoverPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+    });
+    setPopoverAppointment(apt);
+  };
+
+  // Close popover when clicking anywhere else
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setPopoverAppointment(null);
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleConfirmCancel = () => {
     if (cancelingAppointmentId) {
-      cancelAppointment(cancelingAppointmentId, cancelReason.trim() || 'Cancelado pela administradora');
+      cancelAppointment(cancelingAppointmentId, cancelReason.trim() || 'Cancelado');
       setCancelingAppointmentId(null);
       setCancelReason('');
+      setPopoverAppointment(null);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingAppointment) return;
+    if (!deleteReason.trim()) {
+      setDeleteError('Por favor, informe a justificativa da exclusão do agendamento.');
+      return;
+    }
+    const res = deleteAppointment(deletingAppointment.id, deleteReason.trim());
+    if (res.success) {
+      setDeletingAppointment(null);
+      setDeleteReason('');
+      setDeleteError(null);
+      setPopoverAppointment(null);
+    } else {
+      setDeleteError(res.error || 'Erro ao excluir agendamento.');
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
-      {/* Top Controls Bar */}
-      <div className="bg-tb-white rounded-3xl p-5 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        {/* Left: View Mode Toggle & Date Navigator */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* View mode switcher */}
-          <div className="flex bg-tb-ivory p-1 rounded-2xl border border-tb-rose-light/50">
-            {[
-              { id: 'dia', label: 'Dia', icon: CalendarDays },
-              { id: 'semana', label: 'Semana', icon: CalendarRange },
-              { id: 'mes', label: 'Mês', icon: CalendarIcon },
-              { id: 'lista', label: 'Lista', icon: List },
-            ].map(vm => {
-              const Icon = vm.icon;
-              const isActive = viewMode === vm.id;
-              return (
-                <button
-                  key={vm.id}
-                  onClick={() => setViewMode(vm.id as ViewMode)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-tb-rose-primary text-white shadow-sm'
-                      : 'text-tb-brown-soft hover:text-tb-brown-dark hover:bg-tb-beige-light'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {vm.label}
-                </button>
-              );
-            })}
-          </div>
+    <div className="space-y-4 animate-fade-in pb-12 font-sans">
+      {/* Top Controls Bar Aligned with Reference Design */}
+      <div className="bg-tb-white rounded-3xl p-4 sm:p-5 border border-tb-rose-light/50 shadow-soft flex flex-wrap items-center justify-between gap-3">
+        {/* Left: Date Navigator */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToday}
+            className="px-4 py-2 rounded-xl border border-tb-rose-light bg-tb-white hover:bg-tb-ivory text-xs font-bold text-tb-brown-dark shadow-xs transition-colors"
+          >
+            Hoje
+          </button>
 
-          {/* Date Navigator */}
-          <div className="flex items-center gap-1.5 bg-tb-ivory px-2 py-1 rounded-2xl border border-tb-rose-light/50">
+          <div className="flex items-center bg-tb-ivory px-2 py-1 rounded-xl border border-tb-rose-light/70">
             <button
               onClick={handlePrevDate}
-              className="p-1 rounded-lg text-tb-gray-neutral hover:text-tb-brown-dark hover:bg-tb-beige-light"
+              className="p-1 rounded-lg text-tb-gray-neutral hover:text-tb-brown-dark hover:bg-tb-beige-light transition-colors"
+              title="Dia anterior"
             >
               <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleToday}
-              className="px-2.5 py-1 text-xs font-medium text-tb-brown-dark hover:text-tb-rose-primary"
-            >
-              Hoje
             </button>
             <input
               type="date"
               value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
-              className="text-xs px-2 py-0.5 rounded-lg border-0 bg-transparent text-tb-brown-dark font-semibold focus:ring-0"
+              className="text-xs px-2 py-0.5 rounded-lg border-0 bg-transparent text-tb-brown-dark font-bold focus:ring-0"
             />
             <button
               onClick={handleNextDate}
-              className="p-1 rounded-lg text-tb-gray-neutral hover:text-tb-brown-dark hover:bg-tb-beige-light"
+              className="p-1 rounded-lg text-tb-gray-neutral hover:text-tb-brown-dark hover:bg-tb-beige-light transition-colors"
+              title="Próximo dia"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+
+          <span className="text-xs font-bold text-tb-brown-dark hidden md:inline ml-2">
+            {formatDateBR(selectedDate)}
+          </span>
         </div>
 
-        {/* Right: Action Button */}
-        <button
-          onClick={() => onOpenNewAppointment(selectedDate)}
-          className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs sm:text-sm font-semibold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          Novo Agendamento
-        </button>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="bg-tb-white rounded-2xl p-4 border border-tb-rose-light/40 shadow-soft flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Filtrar por cliente, telefone ou serviço..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/20"
-          />
-        </div>
-
-        {/* Quick filter toggle for professional */}
-        {isProfessional && myProfId && (
-          <div className="flex bg-tb-ivory p-1 rounded-xl border border-tb-rose-light/60">
-            <button
-              type="button"
-              onClick={() => setSelectedProfessional('todos')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedProfessional === 'todos'
-                  ? 'bg-tb-rose-primary text-white shadow-xs'
-                  : 'text-tb-brown-soft hover:text-tb-brown-dark'
-              }`}
-            >
-              Agenda Geral (Salão)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedProfessional(myProfId)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedProfessional === myProfId
-                  ? 'bg-tb-rose-primary text-white shadow-xs'
-                  : 'text-tb-brown-soft hover:text-tb-brown-dark'
-              }`}
-            >
-              Meus Atendimentos
-            </button>
-          </div>
-        )}
-
-        {/* Professional filter dropdown */}
-        <select
-          value={selectedProfessional}
-          onChange={e => setSelectedProfessional(e.target.value)}
-          className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
-        >
-          <option value="todos">Todas as Profissionais</option>
-          {professionals.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name} {p.id === myProfId ? '(Você)' : ''}
-            </option>
-          ))}
-        </select>
-
-        {/* Status filter */}
-        <select
-          value={selectedStatus}
-          onChange={e => setSelectedStatus(e.target.value)}
-          className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
-        >
-          <option value="todos">Todos os Status</option>
-          <option value="agendado">Agendados</option>
-          <option value="confirmado">Confirmados</option>
-          <option value="em_atendimento">Em Atendimento</option>
-          <option value="concluido">Concluídos</option>
-          <option value="cancelado">Cancelados</option>
-          <option value="nao_compareceu">Não Compareceu</option>
-        </select>
-
-        <span className="text-xs font-semibold text-tb-gray-neutral ml-auto">
-          {filteredAppointments.length} agendamento(s)
-        </span>
-      </div>
-
-      {/* Main Agenda Grid / Views */}
-
-      {/* VIEW: DIA (Time Grid) */}
-      {viewMode === 'dia' && (
-        <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
-          <div className="p-4 bg-tb-ivory border-b border-tb-rose-light/40 flex items-center justify-between">
-            <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
-              Grade Diária — {formatDateBR(selectedDate)}
-            </h3>
-            <span className="text-xs text-tb-gray-neutral">
-              Clique em um horário vago para agendar imediatamente
+        {/* Center: Open Comandas Counter Badge & Column Adjuster */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Badge: Comandas Abertas */}
+          <button
+            onClick={onNavigateToAtendimentos}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-500/20 transition-all shadow-2xs"
+            title="Ver comandas e atendimentos abertos"
+          >
+            <span>Comandas Abertas</span>
+            <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[11px] font-extrabold shadow-xs">
+              {openComandasCount}
             </span>
+          </button>
+
+          {/* Adjust Columns Buttons: 3, 5, 8, 10, 12, Todas */}
+          <div className="hidden lg:flex items-center gap-1 bg-tb-ivory p-1 rounded-xl border border-tb-rose-light/60">
+            <span className="text-[11px] font-semibold text-tb-brown-soft px-2">
+              Ajustar colunas:
+            </span>
+            {[3, 5, 8, 10, 12].map(num => (
+              <button
+                key={num}
+                onClick={() => setColumnsVisibleCount(num)}
+                className={`w-6 h-6 rounded-lg text-[11px] font-bold transition-all ${
+                  columnsVisibleCount === num
+                    ? 'bg-tb-rose-primary text-white shadow-xs'
+                    : 'text-tb-brown-dark hover:bg-tb-beige-light'
+                }`}
+              >
+                {num}
+              </button>
+            ))}
+            <button
+              onClick={() => setColumnsVisibleCount('all')}
+              className={`px-2 h-6 rounded-lg text-[11px] font-bold transition-all ${
+                columnsVisibleCount === 'all'
+                  ? 'bg-tb-rose-primary text-white shadow-xs'
+                  : 'text-tb-brown-dark hover:bg-tb-beige-light'
+              }`}
+            >
+              Todas
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Search & New Appointment Button */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-56">
+            <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Pesquisar agendamento..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark font-medium placeholder:text-tb-gray-neutral"
+            />
           </div>
 
-          <div className="divide-y divide-tb-rose-light/20 max-h-[750px] overflow-y-auto">
-            {TIME_SLOTS.map(time => {
-              const slotAppointments = filteredAppointments.filter(
-                a => a.startTime <= time && a.endTime > time
-              );
+          <button
+            onClick={() => onOpenNewAppointment(selectedDate)}
+            className="px-4 py-2 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-bold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-1.5 shrink-0"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            Novo Agendamento
+          </button>
+        </div>
+      </div>
+
+      {/* Secondary Bar: Status Filters & Professional Selector */}
+      <div className="bg-tb-white rounded-2xl px-4 py-2.5 border border-tb-rose-light/40 shadow-soft flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick status filter pills */}
+          <span className="font-semibold text-tb-brown-soft">Status:</span>
+          {[
+            { id: 'todos', label: 'Todos' },
+            { id: 'agendado', label: 'Agendados' },
+            { id: 'confirmado', label: 'Confirmados' },
+            { id: 'em_atendimento', label: 'Em Atendimento' },
+            { id: 'concluido', label: 'Concluídos' },
+          ].map(st => (
+            <button
+              key={st.id}
+              onClick={() => setSelectedStatus(st.id)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                selectedStatus === st.id
+                  ? 'bg-tb-brown-dark text-white shadow-2xs'
+                  : 'bg-tb-ivory text-tb-brown-soft hover:bg-tb-beige-light'
+              }`}
+            >
+              {st.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Filter by specific professional */}
+          <select
+            value={selectedProfessional}
+            onChange={e => setSelectedProfessional(e.target.value)}
+            className="text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark font-medium"
+          >
+            <option value="todos">Todas as Profissionais ({activeProfessionals.length})</option>
+            {activeProfessionals.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name} {p.id === myProfId ? '(Você)' : ''}
+              </option>
+            ))}
+          </select>
+
+          <span className="text-xs font-bold text-tb-brown-dark">
+            {dayAppointments.length} agendamento(s) hoje
+          </span>
+        </div>
+      </div>
+
+      {/* MAIN AGENDA: HORIZONTAL PROFESSIONAL COLUMNS GRID (REFERÊNCIA OBRIGATÓRIA) */}
+      <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
+        <div className="overflow-x-auto relative max-h-[820px] overflow-y-auto">
+          {/* Grid Table Container */}
+          <div 
+            className="min-w-full"
+            style={{ 
+              display: 'grid',
+              gridTemplateColumns: `80px repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
+            }}
+          >
+            {/* Header: Leftmost Time cell */}
+            <div className="sticky top-0 left-0 z-40 bg-tb-ivory p-3 border-b-2 border-r border-tb-rose-light text-center font-bold text-xs text-tb-brown-soft uppercase tracking-wider">
+              Horário
+            </div>
+
+            {/* Header: Columns for each Professional (Reference Style with Colored Banner and Avatar) */}
+            {displayedProfessionals.map(prof => {
+              const profColorKey = prof.name.toLowerCase().replace(/[^a-z]/g, '');
+              const headerColor = PROF_COLORS[profColorKey] || prof.color || '#C58F9B';
 
               return (
-                <div 
-                  key={time} 
-                  className="flex items-start min-h-[58px] hover:bg-tb-ivory/50 transition-colors group"
+                <div
+                  key={prof.id}
+                  className="sticky top-0 z-30 p-2.5 text-center border-b-2 border-r border-tb-rose-light/60 transition-all select-none"
+                  style={{ backgroundColor: headerColor }}
                 >
-                  {/* Time Column */}
-                  <div className="w-20 sm:w-24 px-3 py-2 text-right border-r border-tb-rose-light/30 shrink-0">
-                    <span className="text-xs font-semibold text-tb-brown-soft">{time}</span>
+                  <div className="flex flex-col items-center justify-center gap-1 text-white">
+                    {/* Circle avatar */}
+                    <div className="w-8 h-8 rounded-full bg-white/20 border border-white/40 flex items-center justify-center font-bold text-xs shadow-inner">
+                      {prof.name.substring(0, 1).toUpperCase()}
+                    </div>
+                    {/* Name */}
+                    <span className="font-bold text-sm tracking-wide text-white drop-shadow-xs capitalize">
+                      {prof.name}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Time Rows and Grid Cells */}
+            {TIME_SLOTS.map(timeSlot => {
+              return (
+                <React.Fragment key={timeSlot}>
+                  {/* Left Column: Time label */}
+                  <div 
+                    className="sticky left-0 z-20 bg-tb-white px-2 py-3 text-center border-b border-r border-tb-rose-light/40 text-xs font-bold text-tb-brown-soft h-[48px] flex items-center justify-center select-none shadow-2xs"
+                  >
+                    {timeSlot}
                   </div>
 
-                  {/* Slot Appointments Container */}
-                  <div className="flex-1 p-1.5 flex flex-wrap gap-2 items-center">
-                    {slotAppointments.length === 0 ? (
-                      <button
-                        onClick={() => onOpenNewAppointment(selectedDate, time)}
-                        className="w-full text-left py-1 px-3 text-[11px] text-tb-gray-neutral/40 hover:text-tb-rose-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 rounded-lg hover:bg-tb-rose-blush/30"
+                  {/* Cell for each professional in this time slot */}
+                  {displayedProfessionals.map(prof => {
+                    return (
+                      <div
+                        key={`${prof.id}-${timeSlot}`}
+                        onClick={() => handleEmptySlotClick(prof.id, timeSlot)}
+                        className="border-b border-r border-tb-rose-light/25 hover:bg-tb-rose-blush/20 transition-colors h-[48px] relative group cursor-pointer"
+                        title={`Livre — Clique para agendar com ${prof.name} às ${timeSlot}`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        Livre — Agendar às {time}
-                      </button>
-                    ) : (
-                      slotAppointments.map(apt => {
-                        const statusMeta = STATUS_CONFIG[apt.status];
-                        return (
-                          <div
-                            key={apt.id}
-                            className={`p-3 rounded-2xl bg-tb-ivory border ${statusMeta.borderClass} border-l-4 shadow-2xs hover:shadow-soft transition-all flex items-center justify-between gap-4 flex-1 min-w-[280px] max-w-xl`}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-tb-brown-dark">
-                                  {apt.clientName}
-                                </span>
-                                {isProfessional && apt.professionalId === myProfId && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-tb-rose-blush text-tb-rose-primary border border-tb-rose-light">
-                                    ★ Meu
-                                  </span>
-                                )}
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${statusMeta.badgeClass}`}>
-                                  {statusMeta.label}
-                                </span>
-                                {apt.isFitIn && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-200 text-amber-900">
-                                    Encaixe
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-tb-brown-soft mt-0.5">
-                                {apt.serviceName} • {apt.startTime} às {apt.endTime} ({apt.durationMinutes} min)
-                              </p>
-                              <p className="text-[10px] text-tb-gray-neutral">
-                                Profissional: <span className={`font-semibold ${isProfessional && apt.professionalId === myProfId ? 'text-tb-rose-primary' : 'text-tb-brown-dark'}`}>{apt.professionalName} {isProfessional && apt.professionalId === myProfId ? '(Você)' : ''}</span> • {formatBRL(apt.price)}
-                              </p>
-                            </div>
+                        {/* Hover hint */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <span className="text-[10px] font-semibold text-tb-rose-primary bg-white/90 px-2 py-0.5 rounded-md shadow-2xs">
+                            + {timeSlot}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </div>
 
-                            {/* Card Actions */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, apt)}
-                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                title="WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
+          {/* OVERLAY APPOINTMENT CARDS (POSITIONED PRECISELY BY TIME & DURATION) */}
+          <div 
+            className="absolute top-[58px] left-[80px] right-0 bottom-0 pointer-events-none"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
+            }}
+          >
+            {displayedProfessionals.map(prof => {
+              // Appointments for this professional
+              const profAppointments = dayAppointments.filter(a => a.professionalId === prof.id);
 
-                              {apt.status === 'agendado' && (
-                                <button
-                                  onClick={() => updateAppointmentStatus(apt.id, 'confirmado')}
-                                  className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
-                                  title="Confirmar Presença"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </button>
-                              )}
+              return (
+                <div key={prof.id} className="relative h-full pointer-events-none border-r border-transparent">
+                  {profAppointments.map(apt => {
+                    const startMins = timeToMinutes(apt.startTime);
+                    const dur = Math.max(25, apt.durationMinutes);
+                    const topPixels = Math.max(0, ((startMins - START_OF_DAY_MINUTES) / 30) * SLOT_HEIGHT);
+                    const heightPixels = Math.max(40, (dur / 30) * SLOT_HEIGHT - 3);
 
-                              {['agendado', 'confirmado'].includes(apt.status) && (
-                                <button
-                                  onClick={() => startAttendance(apt.id)}
-                                  className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                  title="Iniciar Atendimento Agora"
-                                >
-                                  <Play className="w-4 h-4" />
-                                </button>
-                              )}
+                    const statusMeta = STATUS_CONFIG[apt.status] || STATUS_CONFIG.agendado;
+                    const isClientBirthday = clientBirthdaysMap.get(apt.clientId) || clientBirthdaysMap.get(apt.clientName.toLowerCase());
 
-                              <button
-                                onClick={() => onEditAppointment(apt)}
-                                className="p-1.5 text-tb-brown-soft hover:bg-tb-beige-light rounded-lg transition-colors"
-                                title="Editar"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
+                    return (
+                      <div
+                        key={apt.id}
+                        onClick={(e) => handleAppointmentClick(e, apt)}
+                        style={{
+                          top: `${topPixels}px`,
+                          height: `${heightPixels}px`,
+                        }}
+                        className={`absolute left-1 right-1 rounded-xl p-2.5 text-white shadow-soft hover:shadow-premium transition-all pointer-events-auto cursor-pointer border-l-4 ${statusMeta.borderClass} ${statusMeta.bgClass} flex flex-col justify-between overflow-hidden group select-none`}
+                      >
+                        {/* Card Top: Time & Client Name */}
+                        <div>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[11px] font-extrabold text-white/90 tracking-tight">
+                              {apt.startTime} {apt.clientName}
+                            </span>
 
-                              {!['cancelado', 'concluido'].includes(apt.status) && (
-                                <button
-                                  onClick={() => setCancelingAppointmentId(apt.id)}
-                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                                  title="Cancelar"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
+                            {/* Fit-in badge if forced/fit-in */}
+                            {apt.isFitIn && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-300 text-amber-950 uppercase tracking-tighter shrink-0">
+                                ENCAIXE
+                              </span>
+                            )}
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+
+                          {/* Service name */}
+                          <p className="text-[10px] font-medium text-white/80 truncate mt-0.5">
+                            {apt.serviceName}
+                          </p>
+                        </div>
+
+                        {/* Card Bottom / Badges */}
+                        <div className="flex items-center justify-between gap-1 pt-1">
+                          {/* Birthday Badge if client has birthday today */}
+                          {isClientBirthday ? (
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-pink-500 text-white flex items-center gap-1 shadow-xs animate-pulse">
+                              <Gift className="w-2.5 h-2.5" />
+                              Aniversário!
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-white/70">
+                              {apt.durationMinutes}m
+                            </span>
+                          )}
+
+                          {(!isProfessional || apt.professionalId === myProfId) ? (
+                            <span className="text-[9px] font-bold text-white/90">
+                              {formatBRL(apt.price)}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-white/70 flex items-center gap-0.5 font-medium" title="Acesso somente leitura à agenda">
+                              <Eye className="w-2.5 h-2.5" />
+                              Agenda
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* VIEW: LISTA */}
-      {viewMode === 'lista' && (
-        <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-tb-ivory border-b border-tb-rose-light/40 text-tb-brown-soft font-semibold uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-3.5">Data & Horário</th>
-                  <th className="px-5 py-3.5">Cliente</th>
-                  <th className="px-5 py-3.5">Serviço</th>
-                  <th className="px-5 py-3.5">Profissional</th>
-                  <th className="px-5 py-3.5">Valor</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
-                {filteredAppointments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-tb-gray-neutral">
-                      Nenhum agendamento encontrado para os filtros selecionados.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAppointments.map(apt => {
-                    const statusMeta = STATUS_CONFIG[apt.status];
-                    return (
-                      <tr key={apt.id} className="hover:bg-tb-ivory/60 transition-colors">
-                        <td className="px-5 py-3.5 font-medium whitespace-nowrap">
-                          {formatDateBR(apt.date)} às {apt.startTime} - {apt.endTime}
-                        </td>
-                        <td className="px-5 py-3.5 font-bold">
-                          {apt.clientName}
-                          <span className="block text-[11px] font-normal text-tb-gray-neutral">{apt.clientPhone}</span>
-                        </td>
-                        <td className="px-5 py-3.5">{apt.serviceName}</td>
-                        <td className="px-5 py-3.5">{apt.professionalName}</td>
-                        <td className="px-5 py-3.5 font-semibold text-tb-rose-primary">{formatBRL(apt.price)}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${statusMeta.badgeClass}`}>
-                            {statusMeta.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, apt)}
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"
-                              title="WhatsApp"
-                            >
-                              <MessageCircle className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => onEditAppointment(apt)}
-                              className="p-1.5 text-tb-brown-soft hover:bg-tb-beige-light rounded-lg"
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            {!['cancelado', 'concluido'].includes(apt.status) && (
-                              <button
-                                onClick={() => setCancelingAppointmentId(apt.id)}
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"
-                                title="Cancelar"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW: SEMANA & MÊS (Calendar Cards) */}
-      {(viewMode === 'semana' || viewMode === 'mes') && (
-        <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/30">
-            <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-              Visão Geral de Agendamentos ({filteredAppointments.length} registrados)
-            </h3>
-            <span className="text-xs text-tb-gray-neutral">Referência: {formatDateBR(selectedDate)}</span>
+      {/* POPOVER TOOLTIP (MATCHING THE SPEECH BUBBLE IN THE REFERENCE IMAGE) */}
+      {popoverAppointment && popoverPosition && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: `${Math.min(window.innerWidth - 300, Math.max(20, popoverPosition.x - 140))}px`,
+            top: `${Math.min(window.innerHeight - 340, Math.max(70, popoverPosition.y - 10))}px`,
+          }}
+          className="z-50 bg-white rounded-2xl shadow-premium border border-tb-rose-light/80 p-4 w-72 animate-fade-in space-y-3"
+        >
+          {/* Header */}
+          <div className="flex items-start justify-between border-b border-tb-rose-light/40 pb-2">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-tb-rose-primary block">
+                {isProfessional && popoverAppointment.professionalId !== myProfId
+                  ? 'Agenda Compartilhada (Leitura)'
+                  : 'Detalhes do Atendimento'}
+              </span>
+              <h4 className="font-serif-brand text-base font-bold text-tb-brown-dark leading-tight mt-0.5">
+                {popoverAppointment.clientName}
+              </h4>
+            </div>
+            <button
+              onClick={() => setPopoverAppointment(null)}
+              className="p-1 text-tb-gray-neutral hover:text-tb-brown-dark rounded-md"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredAppointments.length === 0 ? (
-              <div className="col-span-full p-12 text-center text-xs text-tb-gray-neutral">
-                Nenhum agendamento para este período.
-              </div>
-            ) : (
-              filteredAppointments.map(apt => {
-                const statusMeta = STATUS_CONFIG[apt.status];
-                return (
-                  <div 
-                    key={apt.id}
-                    className={`p-4 rounded-2xl bg-tb-ivory border ${statusMeta.borderClass} border-l-4 shadow-2xs hover:shadow-soft transition-all flex flex-col justify-between space-y-3`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-tb-brown-dark">{apt.clientName}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${statusMeta.badgeClass}`}>
-                          {statusMeta.label}
-                        </span>
-                      </div>
-                      <p className="text-xs text-tb-rose-primary font-medium mt-1">{apt.serviceName}</p>
-                      <p className="text-[11px] text-tb-brown-soft mt-0.5">
-                        {formatDateBR(apt.date)} • {apt.startTime} às {apt.endTime}
-                      </p>
-                      <p className="text-[11px] text-tb-gray-neutral">
-                        Com {apt.professionalName} • {formatBRL(apt.price)}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-tb-rose-light/30 flex items-center justify-between">
-                      <button
-                        onClick={() => onOpenWhatsApp(apt.clientName, apt.clientPhone, apt)}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        WhatsApp
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => onEditAppointment(apt)}
-                          className="px-2.5 py-1 text-xs font-medium text-tb-brown-dark hover:bg-tb-beige-light rounded-lg"
-                        >
-                          Detalhes
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+          {/* Details Content */}
+          <div className="space-y-1.5 text-xs text-tb-brown-dark">
+            <p>
+              <span className="font-bold text-tb-brown-soft">Serviço:</span> {popoverAppointment.serviceName}
+            </p>
+            <p className="flex items-center gap-1.5">
+              <span className="font-bold text-tb-brown-soft">Status:</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_CONFIG[popoverAppointment.status]?.badgeClass}`}>
+                {STATUS_CONFIG[popoverAppointment.status]?.label}
+              </span>
+            </p>
+            <p>
+              <span className="font-bold text-tb-brown-soft">Horário:</span> {popoverAppointment.startTime} às {popoverAppointment.endTime} ({popoverAppointment.durationMinutes} min)
+            </p>
+            <p>
+              <span className="font-bold text-tb-brown-soft">Profissional:</span> {popoverAppointment.professionalName}
+            </p>
+            {(!isProfessional || popoverAppointment.professionalId === myProfId) && (
+              <p>
+                <span className="font-bold text-tb-brown-soft">Valor:</span> {formatBRL(popoverAppointment.price)}
+              </p>
+            )}
+            {popoverAppointment.isFitIn && (
+              <p className="text-amber-800 font-bold bg-amber-50 p-1 rounded-md text-[11px]">
+                ★ Agendamento Forçado / Encaixe
+                {popoverAppointment.fitInReason ? `: ${popoverAppointment.fitInReason}` : ''}
+              </p>
+            )}
+            {popoverAppointment.notes && (
+              <p className="text-[11px] text-tb-gray-neutral italic bg-tb-ivory p-2 rounded-lg">
+                Obs: {popoverAppointment.notes}
+              </p>
             )}
           </div>
+
+          {/* Actions inside Popover */}
+          {isProfessional && popoverAppointment.professionalId !== myProfId ? (
+            <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between text-xs">
+              <span className="text-[11px] text-tb-brown-soft flex items-center gap-1 italic">
+                <Eye className="w-3.5 h-3.5 text-tb-rose-primary" />
+                Somente leitura
+              </span>
+
+              {/* WhatsApp communication */}
+              <button
+                onClick={() => {
+                  onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
+                  setPopoverAppointment(null);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center gap-1 font-semibold text-[11px]"
+                title="Conversar no WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                WhatsApp
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-tb-rose-light/40 flex flex-wrap items-center gap-1.5">
+              {/* Start attendance button */}
+              {['agendado', 'confirmado'].includes(popoverAppointment.status) && (
+                <button
+                  onClick={() => {
+                    startAttendance(popoverAppointment.id);
+                    setPopoverAppointment(null);
+                  }}
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
+                  title="Iniciar atendimento"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  Iniciar
+                </button>
+              )}
+
+              {/* Confirm attendance */}
+              {popoverAppointment.status === 'agendado' && (
+                <button
+                  onClick={() => {
+                    updateAppointmentStatus(popoverAppointment.id, 'confirmado');
+                    setPopoverAppointment(null);
+                  }}
+                  className="p-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                  title="Confirmar presença"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* WhatsApp */}
+              <button
+                onClick={() => {
+                  onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
+                  setPopoverAppointment(null);
+                }}
+                className="p-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                title="WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4" />
+              </button>
+
+              {/* Edit */}
+              <button
+                onClick={() => {
+                  onEditAppointment(popoverAppointment);
+                  setPopoverAppointment(null);
+                }}
+                className="p-1.5 rounded-xl bg-tb-ivory text-tb-brown-dark hover:bg-tb-beige-light transition-colors"
+                title="Editar"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+
+              {/* Cancel */}
+              {!['cancelado', 'concluido'].includes(popoverAppointment.status) && (
+                <button
+                  onClick={() => {
+                    setCancelingAppointmentId(popoverAppointment.id);
+                    setPopoverAppointment(null);
+                  }}
+                  className="p-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+                  title="Cancelar agendamento"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Excluir (com justificativa) */}
+              <button
+                onClick={() => {
+                  setDeletingAppointment(popoverAppointment);
+                  setDeleteReason('');
+                  setDeleteError(null);
+                  setPopoverAppointment(null);
+                }}
+                className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition-colors"
+                title="Excluir agendamento da grade (com justificativa)"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Cancellation Reason Modal */}
+      {/* Cancel Confirmation Modal */}
       {cancelingAppointmentId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-tb-white rounded-2xl shadow-premium border border-tb-rose-light/50 w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-                Cancelar Agendamento
-              </h3>
-            </div>
-
+          <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light w-full max-w-md space-y-4 shadow-premium">
+            <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+              Cancelar Agendamento
+            </h3>
             <p className="text-xs text-tb-gray-neutral">
-              Informe o motivo do cancelamento para registro histórico no prontuário da cliente:
+              Informe a justificativa do cancelamento para registro no histórico da cliente:
             </p>
-
-            <textarea
-              rows={3}
+            <input
+              type="text"
+              placeholder="Ex: Cliente solicitou reagendamento, imprevisto..."
               value={cancelReason}
               onChange={e => setCancelReason(e.target.value)}
-              placeholder="Ex: Cliente solicitou cancelamento por imprevisto pessoal..."
-              className="w-full text-xs p-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark resize-none"
+              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
             />
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setCancelingAppointmentId(null)}
-                className="px-4 py-2 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-tb-brown-soft"
               >
                 Voltar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmCancel}
-                className="px-5 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm"
+                className="px-5 py-2 text-xs font-bold bg-amber-600 text-white rounded-xl shadow-sm hover:bg-amber-700"
               >
                 Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exclude Confirmation Modal with Mandatory Justification */}
+      {deletingAppointment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-tb-white rounded-3xl p-6 border border-rose-200 w-full max-w-lg space-y-4 shadow-premium">
+            <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-rose-100 text-rose-700">
+                  <Trash2 className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                    Excluir Agendamento
+                  </h3>
+                  <p className="text-[11px] text-tb-brown-soft">
+                    Remoção da grade de horários da profissional
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setDeletingAppointment(null);
+                  setDeleteReason('');
+                  setDeleteError(null);
+                }}
+                className="p-1.5 rounded-xl text-tb-gray-neutral hover:bg-tb-ivory hover:text-tb-brown-dark transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Appointment Details */}
+            <div className="bg-tb-ivory/80 rounded-2xl p-4 border border-tb-rose-light/50 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Cliente:</span>
+                <span className="font-bold text-tb-brown-dark">{deletingAppointment.clientName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Profissional:</span>
+                <span className="font-semibold text-tb-brown-dark">{deletingAppointment.professionalName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Serviço:</span>
+                <span className="font-semibold text-tb-brown-dark">{deletingAppointment.serviceName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Data e Horário:</span>
+                <span className="font-bold text-tb-rose-primary">
+                  {formatDateBR(deletingAppointment.date)} às {deletingAppointment.startTime} ({deletingAppointment.durationMinutes} min)
+                </span>
+              </div>
+            </div>
+
+            {/* Justification Field (Mandatory) */}
+            <div>
+              <label className="block text-xs font-bold text-tb-brown-dark mb-1">
+                Justificativa da Exclusão <span className="text-rose-600">*</span>
+              </label>
+              <p className="text-[11px] text-tb-gray-neutral mb-2">
+                Informe obrigatoriamente a razão pela qual este agendamento está sendo excluído:
+              </p>
+              <textarea
+                rows={3}
+                placeholder="Ex: Agendamento de exemplo usado para treinamento / Cliente cancelou e liberou o horário / Lançamento duplicado..."
+                value={deleteReason}
+                onChange={e => {
+                  setDeleteReason(e.target.value);
+                  if (deleteError) setDeleteError(null);
+                }}
+                className="w-full text-xs p-3 rounded-xl border border-rose-300 bg-tb-ivory text-tb-brown-dark focus:ring-2 focus:ring-rose-400 focus:outline-none resize-none"
+              />
+
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[
+                  'Agendamento de teste / exemplo',
+                  'Cliente desistiu e liberou o horário',
+                  'Lançamento duplicado por engano',
+                  'Horário / serviço lançado incorretamente',
+                ].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setDeleteReason(preset)}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-tb-ivory hover:bg-rose-50 text-tb-brown-soft hover:text-rose-700 border border-tb-rose-light/50 transition-colors font-medium"
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+
+              {deleteError && (
+                <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-3 border-t border-tb-rose-light/30">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingAppointment(null);
+                  setDeleteReason('');
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2.5 text-xs font-semibold text-tb-brown-soft hover:text-tb-brown-dark rounded-xl"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4 stroke-[2.5]" />
+                Confirmar Exclusão
               </button>
             </div>
           </div>

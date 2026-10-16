@@ -38,7 +38,11 @@ export const MinhaProducaoPage: React.FC = () => {
     if (!loggedProf) {
       return {
         todayCommissions: 0,
+        todayGross: 0,
+        todayNet: 0,
         monthCommissions: 0,
+        monthGross: 0,
+        monthNet: 0,
         pendingCommissions: 0,
         todayCompletedCount: 0,
         monthCompletedCount: 0,
@@ -83,7 +87,8 @@ export const MinhaProducaoPage: React.FC = () => {
   const handleExportCSV = () => {
     const headers = [
       'Data', 'Cliente', 'Serviço Realizado', 'Valor Bruto (R$)', 
-      'Valor Líquido (R$)', '% de Comissão', 'Minha Comissão (R$)', 'Status Pagamento'
+      'Desconto (R$)', 'Valor Final (R$)', '% de Comissão', 
+      'Minha Comissão (R$)', 'Salão (R$)', 'Status Pagamento'
     ];
 
     const rows = filteredTransactions.map(tx => [
@@ -91,9 +96,11 @@ export const MinhaProducaoPage: React.FC = () => {
       tx.clientName || 'Cliente',
       tx.serviceName || tx.description,
       tx.grossValue.toFixed(2),
+      tx.discount.toFixed(2),
       tx.netValue.toFixed(2),
       `${tx.commissionPercentage || 50}%`,
       (tx.commissionAmount || 0).toFixed(2),
+      (Math.max(0, tx.netValue - (tx.commissionAmount || 0))).toFixed(2),
       tx.status.toUpperCase()
     ]);
 
@@ -133,7 +140,7 @@ export const MinhaProducaoPage: React.FC = () => {
             Minha Produção — {loggedProf?.name || currentUser?.name}
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            {loggedProf?.specialty || 'Profissional'} • Comissões calculadas por serviço realizado
+            {loggedProf?.specialty || 'Profissional'} • Comissões transparentes calculadas sobre o valor do serviço após descontos
           </p>
         </div>
 
@@ -158,26 +165,42 @@ export const MinhaProducaoPage: React.FC = () => {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Minhas Comissões Hoje */}
-        <div className="p-5 rounded-3xl bg-tb-white border border-tb-rose-light/50 shadow-soft">
+        <div className="p-5 rounded-3xl bg-tb-white border-2 border-emerald-300 shadow-soft">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-tb-brown-soft">A Receber Hoje</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Comissão a Pagar Hoje</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+              <DollarSign className="w-4 h-4 stroke-[2.5]" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-700">
+          <div className="text-2xl font-extrabold text-emerald-700">
             {formatBRL(profMetrics.todayCommissions)}
           </div>
-          <p className="text-[11px] text-tb-gray-neutral mt-1">
-            {profMetrics.todayCompletedCount} atendimento(s) concluído(s) hoje
+          <p className="text-[11px] text-emerald-800 mt-1 font-medium">
+            Liberado para pagamento diário
           </p>
         </div>
 
-        {/* Card 2: Total no Mês */}
+        {/* Card 2: Produção Bruta Hoje */}
         <div className="p-5 rounded-3xl bg-tb-white border border-tb-rose-light/50 shadow-soft">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-tb-brown-soft">Minhas Comissões no Mês</span>
+            <span className="text-xs font-medium text-tb-brown-soft">Produção Bruta Hoje</span>
             <div className="w-8 h-8 rounded-lg bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-tb-brown-dark">
+            {formatBRL(profMetrics.todayGross)}
+          </div>
+          <p className="text-[11px] text-tb-gray-neutral mt-1">
+            Base líquida: {formatBRL(profMetrics.todayNet)}
+          </p>
+        </div>
+
+        {/* Card 3: Total no Mês */}
+        <div className="p-5 rounded-3xl bg-tb-white border border-tb-rose-light/50 shadow-soft">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-tb-brown-soft">Comissões no Mês</span>
+            <div className="w-8 h-8 rounded-lg bg-tb-beige-light text-tb-brown-dark flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
@@ -185,11 +208,11 @@ export const MinhaProducaoPage: React.FC = () => {
             {formatBRL(profMetrics.monthCommissions)}
           </div>
           <p className="text-[11px] text-tb-gray-neutral mt-1">
-            Total acumulado liquidado
+            Bruto mês: {formatBRL(profMetrics.monthGross)}
           </p>
         </div>
 
-        {/* Card 3: Comissões Pendentes */}
+        {/* Card 4: Comissões Pendentes */}
         <div className="p-5 rounded-3xl bg-tb-white border border-tb-rose-light/50 shadow-soft">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-tb-brown-soft">Comissões Pendentes</span>
@@ -202,22 +225,6 @@ export const MinhaProducaoPage: React.FC = () => {
           </div>
           <p className="text-[11px] text-amber-600 mt-1 font-medium">
             Atendimentos aguardando quitação
-          </p>
-        </div>
-
-        {/* Card 4: Atendimentos no Mês */}
-        <div className="p-5 rounded-3xl bg-tb-white border border-tb-rose-light/50 shadow-soft">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-tb-brown-soft">Atendimentos no Mês</span>
-            <div className="w-8 h-8 rounded-lg bg-tb-beige-light text-tb-brown-dark flex items-center justify-center">
-              <User className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-tb-brown-dark">
-            {profMetrics.monthCompletedCount}
-          </div>
-          <p className="text-[11px] text-tb-gray-neutral mt-1">
-            Clientes atendidas por você
           </p>
         </div>
       </div>
@@ -271,7 +278,7 @@ export const MinhaProducaoPage: React.FC = () => {
               Extrato Detalhado de Atendimentos & Comissões
             </h3>
             <p className="text-xs text-tb-gray-neutral">
-              Detalhamento de cada serviço prestado, percentual de repasse e valores liberados
+              Detalhamento de cada serviço prestado, descontos aplicados, percentual e repasses líquidos
             </p>
           </div>
           <span className="text-xs font-semibold text-tb-rose-primary bg-tb-rose-blush px-3 py-1 rounded-full">
@@ -279,60 +286,96 @@ export const MinhaProducaoPage: React.FC = () => {
           </span>
         </div>
 
+        {/* Formula Explanation Banner */}
+        <div className="px-5 py-3 bg-tb-rose-blush/30 border-b border-tb-rose-light/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-tb-brown-dark font-medium">
+            <Sparkles className="w-4 h-4 text-tb-rose-primary shrink-0" />
+            <span>
+              <strong>Regra de Cálculo Transparente:</strong> [Valor Bruto] − [Desconto da Cliente] = <strong>[Base de Cálculo]</strong> × [% Comissão] = <strong>[Seu Repasse Líquido]</strong>
+            </span>
+          </div>
+          <span className="text-[11px] text-tb-brown-soft">
+            * O Salão retém o valor restante da base após a dedução da comissão.
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-tb-ivory/60 text-tb-brown-soft font-semibold uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4">Data</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Procedimento / Serviço</th>
-                <th className="px-6 py-4">Valor do Serviço</th>
-                <th className="px-6 py-4">% Comissão</th>
-                <th className="px-6 py-4 text-right">Minha Comissão (R$)</th>
-                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-4 py-3.5">Data</th>
+                <th className="px-4 py-3.5">Cliente</th>
+                <th className="px-4 py-3.5">Procedimento / Serviço</th>
+                <th className="px-4 py-3.5 text-right">Valor Bruto</th>
+                <th className="px-4 py-3.5 text-right">Desconto</th>
+                <th className="px-4 py-3.5 text-right">Valor Final (Base)</th>
+                <th className="px-4 py-3.5 text-center">% Repasse</th>
+                <th className="px-4 py-3.5 text-right">Minha Comissão</th>
+                <th className="px-4 py-3.5 text-right">Salão</th>
+                <th className="px-4 py-3.5 text-center">Situação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-tb-gray-neutral">
+                  <td colSpan={10} className="px-6 py-12 text-center text-tb-gray-neutral">
                     Nenhum atendimento ou comissão registrada para o período selecionado.
                   </td>
                 </tr>
               ) : (
-                filteredTransactions.map(tx => (
-                  <tr key={tx.id} className="hover:bg-tb-ivory/50 transition-colors">
-                    <td className="px-6 py-3.5 whitespace-nowrap font-medium">
-                      {formatDateBR(tx.date)}
-                    </td>
-                    <td className="px-6 py-3.5 font-bold">
-                      {tx.clientName || 'Cliente'}
-                    </td>
-                    <td className="px-6 py-3.5 text-tb-brown-soft">
-                      {tx.serviceName || tx.description}
-                    </td>
-                    <td className="px-6 py-3.5 font-semibold text-tb-brown-dark">
-                      {formatBRL(tx.netValue)}
-                    </td>
-                    <td className="px-6 py-3.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
-                        {tx.commissionPercentage || 50}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
-                      +{formatBRL(tx.commissionAmount || 0)}
-                    </td>
-                    <td className="px-6 py-3.5 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        tx.status === 'pago' ? 'bg-emerald-100 text-emerald-800' :
-                        tx.status === 'parcial' ? 'bg-amber-100 text-amber-800' :
-                        'bg-rose-100 text-rose-800'
-                      }`}>
-                        {tx.status === 'pago' ? 'Recebido' : tx.status === 'parcial' ? 'Parcial' : 'Aguardando Pagamento'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredTransactions.map(tx => {
+                  const gross = tx.grossValue || tx.netValue;
+                  const disc = tx.discount || 0;
+                  const discPct = tx.discountPercentage || (gross > 0 && disc > 0 ? Math.round((disc / gross) * 100) : 0);
+                  const salonAmount = Math.max(0, tx.netValue - (tx.commissionAmount || 0));
+
+                  return (
+                    <tr key={tx.id} className="hover:bg-tb-ivory/50 transition-colors">
+                      <td className="px-4 py-3.5 whitespace-nowrap font-medium">
+                        {formatDateBR(tx.date)}
+                      </td>
+                      <td className="px-4 py-3.5 font-bold">
+                        {tx.clientName || 'Cliente'}
+                      </td>
+                      <td className="px-4 py-3.5 text-tb-brown-soft max-w-[180px] truncate">
+                        {tx.serviceName || tx.description}
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-medium text-tb-brown-dark">
+                        {formatBRL(gross)}
+                      </td>
+                      <td className="px-4 py-3.5 text-right text-rose-700 font-medium">
+                        {disc > 0 ? (
+                          <span>-{formatBRL(disc)} <span className="text-[10px] text-rose-600 font-normal">({discPct}%)</span></span>
+                        ) : (
+                          <span className="text-tb-gray-neutral/70">R$ 0,00</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-bold text-tb-brown-dark">
+                        {formatBRL(tx.netValue)}
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
+                          {tx.commissionPercentage || 50}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
+                        +{formatBRL(tx.commissionAmount || 0)}
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-medium text-tb-brown-soft whitespace-nowrap">
+                        {formatBRL(salonAmount)}
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          tx.status === 'pago' ? 'bg-emerald-100 text-emerald-800' :
+                          tx.status === 'parcial' ? 'bg-amber-100 text-amber-800' :
+                          'bg-rose-100 text-rose-800'
+                        }`}>
+                          {tx.status === 'pago' ? 'Quitado' : tx.status === 'parcial' ? 'Parcial' : 'Pendente'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

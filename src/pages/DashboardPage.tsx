@@ -173,25 +173,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         )}
 
-        {/* 4 Cards de Métricas Particulares da Profissional */}
+        {/* 4 Cards de Métricas Particulares da Profissional (Pagamento Diário) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Minha Comissão Hoje */}
-          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+          {/* Card 1: Comissão a Pagar Hoje */}
+          <div className="p-5 rounded-2xl bg-tb-white border-2 border-emerald-300 shadow-soft hover:shadow-premium transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-tb-brown-soft">A Receber Hoje</span>
-              <div className="w-9 h-9 rounded-xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Comissão a Pagar Hoje</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-xs">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-tb-rose-primary">
+            <div className="text-3xl font-extrabold text-emerald-700">
               {formatBRL(myMetrics.todayCommissions)}
             </div>
-            <p className="text-[11px] text-tb-gray-neutral mt-1">
-              Liberado de atendimentos pagos hoje
+            <p className="text-[11px] text-emerald-800 mt-1 font-medium">
+              ✓ Liberado para pagamento diário
             </p>
           </div>
 
-          {/* Card 2: Minha Produção no Mês */}
+          {/* Card 2: Valor Bruto Produzido Hoje */}
+          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-tb-brown-soft">Produção Bruta Hoje</span>
+              <div className="w-9 h-9 rounded-xl bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+                <Sparkles className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-tb-brown-dark">
+              {formatBRL(myMetrics.todayGross)}
+            </div>
+            <p className="text-[11px] text-tb-gray-neutral mt-1">
+              Base líquida cliente: {formatBRL(myMetrics.todayNet)}
+            </p>
+          </div>
+
+          {/* Card 3: Minha Produção no Mês */}
           <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-tb-brown-soft">Minha Comissão no Mês</span>
@@ -203,39 +219,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               {formatBRL(myMetrics.monthCommissions)}
             </div>
             <p className="text-[11px] text-tb-gray-neutral mt-1">
-              Acumulado no mês corrente
+              Bruto mês: {formatBRL(myMetrics.monthGross)}
             </p>
           </div>
 
-          {/* Card 3: Meus Atendimentos Hoje */}
+          {/* Card 4: Meus Atendimentos Hoje */}
           <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-tb-brown-soft">Meus Atendimentos Hoje</span>
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
                 <CalendarCheck className="w-5 h-5" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-emerald-800">
+            <div className="text-3xl font-bold text-blue-900">
               {myMetrics.todayCompletedCount} / {myMetrics.todayAppointments.length}
             </div>
             <p className="text-[11px] text-tb-gray-neutral mt-1">
-              {myMetrics.todayCompletedCount} concluídos de {myMetrics.todayAppointments.length} agendados
-            </p>
-          </div>
-
-          {/* Card 4: Comissões Pendentes */}
-          <div className="p-5 rounded-2xl bg-tb-white border border-tb-rose-light/60 shadow-soft hover:shadow-premium transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-tb-brown-soft">Comissões Pendentes</span>
-              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-                <Clock className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="text-3xl font-bold text-amber-800">
-              {formatBRL(myMetrics.pendingCommissions)}
-            </div>
-            <p className="text-[11px] text-tb-gray-neutral mt-1">
-              Aguardando pagamento pelo cliente
+              {myMetrics.todayCompletedCount} concluídos hoje
             </p>
           </div>
         </div>
@@ -396,6 +396,102 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
 
+        {/* Tabela de Comissões e Repasses Transparentes da Profissional */}
+        <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
+          <div className="p-5 bg-tb-ivory border-b border-tb-rose-light/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary">
+                  Transparência de Repasse
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                  Cálculo Aberto
+                </span>
+              </div>
+              <h3 className="font-serif-brand text-lg sm:text-xl font-bold text-tb-brown-dark">
+                Seus Atendimentos Recentes & Repasses Líquidos
+              </h3>
+              <p className="text-xs text-tb-gray-neutral">
+                Fórmula transparente: Valor Bruto − Desconto = Base × Sua Comissão % = Seu Repasse
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigate('minha-producao')}
+              className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1"
+            >
+              Extrato completo <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-tb-ivory/60 text-tb-brown-soft font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="px-4 py-3">Data</th>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3">Serviço</th>
+                  <th className="px-4 py-3 text-right">Valor Bruto</th>
+                  <th className="px-4 py-3 text-right">Desconto</th>
+                  <th className="px-4 py-3 text-right">Valor Final (Base)</th>
+                  <th className="px-4 py-3 text-center">% Repasse</th>
+                  <th className="px-4 py-3 text-right">Sua Comissão</th>
+                  <th className="px-4 py-3 text-center">Situação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
+                {myMetrics.myTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-8 text-center text-tb-gray-neutral">
+                      Nenhum atendimento liquidado registrado até o momento.
+                    </td>
+                  </tr>
+                ) : (
+                  myMetrics.myTransactions.slice(0, 6).map(tx => {
+                    const gross = tx.grossValue || tx.netValue;
+                    const disc = tx.discount || 0;
+                    const discPct = tx.discountPercentage || (gross > 0 && disc > 0 ? Math.round((disc / gross) * 100) : 0);
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-tb-ivory/50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap font-medium">{formatDateBR(tx.date)}</td>
+                        <td className="px-4 py-3 font-bold">{tx.clientName || 'Cliente'}</td>
+                        <td className="px-4 py-3 text-tb-brown-soft max-w-[160px] truncate">{tx.serviceName || tx.description}</td>
+                        <td className="px-4 py-3 text-right font-medium">{formatBRL(gross)}</td>
+                        <td className="px-4 py-3 text-right text-rose-700 font-medium">
+                          {disc > 0 ? (
+                            <span>-{formatBRL(disc)} <span className="text-[10px] text-rose-600 font-normal">({discPct}%)</span></span>
+                          ) : (
+                            <span className="text-tb-gray-neutral/60">R$ 0,00</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold">{formatBRL(tx.netValue)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
+                            {tx.commissionPercentage || 50}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                          +{formatBRL(tx.commissionAmount || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            tx.status === 'pago' ? 'bg-emerald-100 text-emerald-800' :
+                            tx.status === 'parcial' ? 'bg-amber-100 text-amber-800' :
+                            'bg-rose-100 text-rose-800'
+                          }`}>
+                            {tx.status === 'pago' ? 'Quitado' : tx.status === 'parcial' ? 'Parcial' : 'Pendente'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Rodapé: Atalho para Minha Produção */}
         <div className="rounded-3xl bg-tb-white border border-tb-rose-light/60 p-6 shadow-soft flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -425,6 +521,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }
 
   const [chartPeriod, setChartPeriod] = useState<'7dias' | 'mes' | 'tudo'>('mes');
+  const today = new Date().toISOString().split('T')[0];
 
   // Prepare chart data dynamically from real data
   // 1. Revenue over time
@@ -535,10 +632,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             <button
-              onClick={() => onNavigate('clientes')}
+              onClick={() => onNavigate('aniversariantes')}
               className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1 shrink-0"
             >
-              Ver clientes <ChevronRight className="w-3.5 h-3.5" />
+              Ver todos aniversariantes <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -669,6 +766,38 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </p>
         </div>
 
+        {/* Card: Comissões a Pagar Hoje (Pagamento Diário) */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-tb-white border-2 border-emerald-300/80 shadow-soft hover:shadow-premium transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Comissões a Pagar Hoje</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+              <DollarSign className="w-4 h-4 stroke-[2.5]" />
+            </div>
+          </div>
+          <div className="text-2xl font-extrabold text-emerald-700">
+            {formatBRL(dashboardMetrics.todayCommissionsToPay)}
+          </div>
+          <p className="text-[11px] text-emerald-800 mt-1 font-medium">
+            Pagamento diário das profissionais
+          </p>
+        </div>
+
+        {/* Card: Salão Líquido Hoje */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-tb-white border border-tb-rose-light/50 shadow-soft hover:shadow-premium transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-tb-brown-soft">Salão Líquido Hoje</span>
+            <div className="w-8 h-8 rounded-lg bg-tb-rose-blush text-tb-rose-primary flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-tb-brown-dark">
+            {formatBRL(dashboardMetrics.todaySalonNet)}
+          </div>
+          <p className="text-[11px] text-tb-gray-neutral mt-1">
+            Faturamento − Comissões
+          </p>
+        </div>
+
         {/* Card 5: Faturamento do Mês */}
         <div className="p-4 sm:p-5 rounded-2xl bg-tb-white border border-tb-rose-light/50 shadow-soft hover:shadow-premium transition-all">
           <div className="flex items-center justify-between mb-2">
@@ -763,6 +892,170 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <p className="text-[11px] text-amber-600 mt-1 font-medium">
             Pagamentos pendentes
           </p>
+        </div>
+      </div>
+
+      {/* Módulo Especial: Fechamento Diário de Profissionais (Pagamento de Hoje) */}
+      <div className="bg-tb-white rounded-3xl border-2 border-emerald-300/90 shadow-premium overflow-hidden">
+        <div className="p-5 sm:p-6 bg-gradient-to-r from-emerald-50 via-tb-ivory to-tb-white border-b border-emerald-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shrink-0">
+              <DollarSign className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif-brand text-xl sm:text-2xl font-bold text-tb-brown-dark">
+                  Fechamento Diário de Profissionais
+                </h3>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white shadow-xs">
+                  Pagamento de Hoje ({formatDateBR(today)})
+                </span>
+              </div>
+              <p className="text-xs text-tb-brown-soft mt-0.5">
+                Cálculo instantâneo atualizado em tempo real assim que cada comanda é recebida.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-emerald-300 shadow-xs">
+            <span className="text-xs text-tb-brown-soft font-semibold">Total a Repassar Hoje:</span>
+            <span className="text-2xl font-extrabold text-emerald-700">
+              {formatBRL(dashboardMetrics.todayCommissionsToPay)}
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-tb-ivory/80 text-tb-brown-soft font-semibold uppercase tracking-wider border-b border-tb-rose-light/40">
+              <tr>
+                <th className="px-5 py-3.5">Profissional</th>
+                <th className="px-5 py-3.5 text-center">Atendimentos Hoje</th>
+                <th className="px-5 py-3.5 text-right">Produção Bruta Hoje</th>
+                <th className="px-5 py-3.5 text-right">Descontos</th>
+                <th className="px-5 py-3.5 text-right">Base Líquida</th>
+                <th className="px-5 py-3.5 text-center">% Repasse</th>
+                <th className="px-5 py-3.5 text-right">Comissão a Pagar Hoje</th>
+                <th className="px-5 py-3.5 text-right">Retenção Salão</th>
+                <th className="px-5 py-3.5 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
+              {professionals.filter(p => p.isActive).map(prof => {
+                const metrics = getProfessionalMetrics(prof.id);
+                const hasProduction = metrics.todayGross > 0 || metrics.todayCommissions > 0;
+                const salonRetained = Math.max(0, metrics.todayNet - metrics.todayCommissions);
+                const avgPercent = prof.commissionPercentage || 50;
+
+                return (
+                  <tr key={prof.id} className={`hover:bg-tb-ivory/60 transition-colors ${hasProduction ? 'bg-emerald-50/25' : ''}`}>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shadow-xs"
+                          style={{ backgroundColor: prof.color || '#C58F9B' }}
+                        >
+                          {prof.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold text-tb-brown-dark text-xs">{prof.name}</p>
+                          <p className="text-[10px] text-tb-gray-neutral">{prof.specialty}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                        metrics.todayCompletedCount > 0 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {metrics.todayCompletedCount} concluído(s)
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3.5 text-right font-semibold text-tb-brown-dark">
+                      {formatBRL(metrics.todayGross)}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-right text-rose-700 font-medium">
+                      {metrics.todayGross - metrics.todayNet > 0 ? (
+                        `-${formatBRL(metrics.todayGross - metrics.todayNet)}`
+                      ) : (
+                        <span className="text-tb-gray-neutral/60">R$ 0,00</span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-right font-medium text-tb-brown-dark">
+                      {formatBRL(metrics.todayNet)}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
+                        {avgPercent}%
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <span className={`text-sm font-extrabold px-3 py-1 rounded-xl ${
+                        metrics.todayCommissions > 0 
+                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs' 
+                          : 'text-gray-400'
+                      }`}>
+                        {formatBRL(metrics.todayCommissions)}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3.5 text-right font-medium text-tb-brown-soft">
+                      {formatBRL(salonRetained)}
+                    </td>
+
+                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                      {metrics.todayCommissions > 0 ? (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Pronto para Pagamento Diário
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">
+                          Sem produção hoje
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-tb-ivory border-t-2 border-emerald-200 text-tb-brown-dark font-bold">
+              <tr>
+                <td className="px-5 py-3.5">TOTAL GERAL DO DIA</td>
+                <td className="px-5 py-3.5 text-center">
+                  {dashboardMetrics.todayCompletedCount} atendimentos
+                </td>
+                <td className="px-5 py-3.5 text-right">
+                  {formatBRL(dashboardMetrics.todayGrossRevenue)}
+                </td>
+                <td className="px-5 py-3.5 text-right text-rose-700">
+                  -{formatBRL(Math.max(0, dashboardMetrics.todayGrossRevenue - dashboardMetrics.todayReceivedRevenue))}
+                </td>
+                <td className="px-5 py-3.5 text-right">
+                  {formatBRL(dashboardMetrics.todayReceivedRevenue)}
+                </td>
+                <td className="px-5 py-3.5 text-center">—</td>
+                <td className="px-5 py-3.5 text-right text-emerald-800 text-base font-extrabold">
+                  {formatBRL(dashboardMetrics.todayCommissionsToPay)}
+                </td>
+                <td className="px-5 py-3.5 text-right text-tb-brown-dark">
+                  {formatBRL(dashboardMetrics.todaySalonNet)}
+                </td>
+                <td className="px-5 py-3.5 text-center">
+                  <span className="text-[10px] text-emerald-800 uppercase font-extrabold tracking-wider bg-emerald-100 px-2 py-1 rounded-lg">
+                    Fechamento Diário
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
 
@@ -889,7 +1182,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => onNavigate('clientes')}
+                onClick={() => onNavigate('aniversariantes')}
                 className="text-xs text-tb-rose-primary hover:underline font-semibold flex items-center gap-1"
               >
                 Ver todos <ChevronRight className="w-3.5 h-3.5" />
@@ -1043,6 +1336,166 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Tabela de Transparência Financeira: Serviços, Descontos e Repasses a Profissionais */}
+      <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
+        <div className="p-6 bg-tb-ivory border-b border-tb-rose-light/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-widest text-tb-rose-primary">
+                Auditoria & Gestão de Repasses
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                Transparência Salão & Profissionais
+              </span>
+            </div>
+            <h3 className="font-serif-brand text-2xl font-bold text-tb-brown-dark">
+              Demonstrativo de Serviços, Descontos e Repasses
+            </h3>
+            <p className="text-xs text-tb-gray-neutral mt-0.5">
+              Fórmula de conferência: Valor Bruto − Desconto = Base de Cálculo → Repasse Líquido da Profissional (% e R$) e Retenção do Salão
+            </p>
+          </div>
+
+          <button
+            onClick={() => onNavigate('financeiro')}
+            className="px-4 py-2.5 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-semibold shadow-soft transition-all flex items-center gap-2 shrink-0"
+          >
+            <DollarSign className="w-4 h-4" />
+            Abrir Financeiro Completo
+          </button>
+        </div>
+
+        {/* 5 Cards de Resumo da Regra */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-6 bg-tb-white border-b border-tb-rose-light/30">
+          <div className="p-3.5 rounded-2xl bg-tb-ivory border border-tb-rose-light/40">
+            <span className="text-[11px] font-semibold text-tb-brown-soft block">Faturamento Bruto</span>
+            <span className="text-lg font-bold text-tb-brown-dark block mt-0.5">
+              {formatBRL(payments.reduce((acc, p) => acc + (p.grossValue || p.netValue), 0))}
+            </span>
+            <span className="text-[10px] text-tb-gray-neutral">Sem descontos</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/60">
+            <span className="text-[11px] font-semibold text-rose-700 block">Descontos Totais</span>
+            <span className="text-lg font-bold text-rose-800 block mt-0.5">
+              -{formatBRL(payments.reduce((acc, p) => acc + (p.discount || 0), 0))}
+            </span>
+            <span className="text-[10px] text-rose-600">Concedidos a clientes</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-tb-beige-light/50 border border-tb-rose-light/40">
+            <span className="text-[11px] font-semibold text-tb-brown-soft block">Base Líquida</span>
+            <span className="text-lg font-bold text-tb-brown-dark block mt-0.5">
+              {formatBRL(payments.reduce((acc, p) => acc + p.netValue, 0))}
+            </span>
+            <span className="text-[10px] text-tb-gray-neutral">Bruto − Descontos</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/60">
+            <span className="text-[11px] font-semibold text-emerald-700 block">Repasses Profissionais</span>
+            <span className="text-lg font-bold text-emerald-800 block mt-0.5">
+              {formatBRL(payments.reduce((acc, p) => acc + (p.commissionAmount || 0), 0))}
+            </span>
+            <span className="text-[10px] text-emerald-600">Comissões individuais</span>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-tb-rose-blush/60 border border-tb-rose-light/70 col-span-2 lg:col-span-1">
+            <span className="text-[11px] font-semibold text-tb-rose-primary block">Retenção Salão</span>
+            <span className="text-lg font-bold text-tb-brown-dark block mt-0.5">
+              {formatBRL(payments.reduce((acc, p) => acc + Math.max(0, p.netValue - (p.commissionAmount || 0)), 0))}
+            </span>
+            <span className="text-[10px] text-tb-brown-soft">Margem operacional</span>
+          </div>
+        </div>
+
+        {/* Formula Callout */}
+        <div className="px-6 py-3 bg-tb-rose-blush/20 border-b border-tb-rose-light/30 flex items-center gap-2 text-xs text-tb-brown-dark">
+          <Sparkles className="w-4 h-4 text-tb-rose-primary shrink-0" />
+          <span>
+            <strong>Regra de Negócio:</strong> A comissão de cada profissional incide sobre o valor após os descontos. Exemplo: Serviço de R$ 200 − 10% desc (R$ 20) = R$ 180 base. Com 40% de comissão = R$ 72 para a profissional e R$ 108 de retenção do salão.
+          </span>
+        </div>
+
+        {/* Table of Latest Service Transactions with Full Breakdown */}
+        <div className="overflow-x-auto max-h-[460px] overflow-y-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-tb-ivory text-tb-brown-soft font-semibold uppercase tracking-wider sticky top-0 z-10 border-b border-tb-rose-light/40">
+              <tr>
+                <th className="px-5 py-3.5">Data</th>
+                <th className="px-5 py-3.5">Cliente</th>
+                <th className="px-5 py-3.5">Profissional</th>
+                <th className="px-5 py-3.5">Serviço</th>
+                <th className="px-5 py-3.5 text-right">Valor Bruto</th>
+                <th className="px-5 py-3.5 text-right">Desconto</th>
+                <th className="px-5 py-3.5 text-right">Valor Final (Base)</th>
+                <th className="px-5 py-3.5 text-center">% Repasse</th>
+                <th className="px-5 py-3.5 text-right">Repasse Prof.</th>
+                <th className="px-5 py-3.5 text-right">Salão</th>
+                <th className="px-5 py-3.5 text-center">Situação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
+              {payments.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="px-6 py-12 text-center text-tb-gray-neutral">
+                    Nenhum pagamento registrado até o momento.
+                  </td>
+                </tr>
+              ) : (
+                payments.slice(0, 15).map(p => {
+                  const gross = p.grossValue || p.netValue;
+                  const disc = p.discount || 0;
+                  const discPct = p.discountPercentage || (gross > 0 && disc > 0 ? Math.round((disc / gross) * 100) : 0);
+                  const salonAmount = Math.max(0, p.netValue - (p.commissionAmount || 0));
+
+                  return (
+                    <tr key={p.id} className="hover:bg-tb-ivory/50 transition-colors">
+                      <td className="px-5 py-3 whitespace-nowrap font-medium">{formatDateBR(p.date)}</td>
+                      <td className="px-5 py-3 font-bold">{p.clientName || 'Cliente'}</td>
+                      <td className="px-5 py-3">
+                        <span className="font-semibold text-tb-rose-primary bg-tb-rose-blush px-2 py-0.5 rounded-full text-[11px]">
+                          {p.professionalName || 'Profissional'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-tb-brown-soft max-w-[160px] truncate">{p.serviceName || p.description}</td>
+                      <td className="px-5 py-3 text-right font-medium">{formatBRL(gross)}</td>
+                      <td className="px-5 py-3 text-right text-rose-700 font-medium">
+                        {disc > 0 ? (
+                          <span>-{formatBRL(disc)} <span className="text-[10px] text-rose-600 font-normal">({discPct}%)</span></span>
+                        ) : (
+                          <span className="text-tb-gray-neutral/60">R$ 0,00</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right font-bold">{formatBRL(p.netValue)}</td>
+                      <td className="px-5 py-3 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
+                          {p.commissionPercentage || 50}%
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                        +{formatBRL(p.commissionAmount || 0)}
+                      </td>
+                      <td className="px-5 py-3 text-right font-medium text-tb-brown-soft whitespace-nowrap">
+                        {formatBRL(salonAmount)}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          p.status === 'pago' ? 'bg-emerald-100 text-emerald-800' :
+                          p.status === 'parcial' ? 'bg-amber-100 text-amber-800' :
+                          'bg-rose-100 text-rose-800'
+                        }`}>
+                          {p.status === 'pago' ? 'Quitado' : p.status === 'parcial' ? 'Parcial' : 'Pendente'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

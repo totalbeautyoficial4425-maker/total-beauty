@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Clock, 
   Play, 
@@ -7,12 +7,19 @@ import {
   User, 
   DollarSign, 
   Sparkles, 
-  AlertCircle,
-  Calendar
+  AlertCircle, 
+  Calendar,
+  Scale,
+  Receipt,
+  Check,
+  ChevronRight,
+  Filter
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { Attendance } from '../types';
 import { formatBRL, formatDateBR } from '../utils/formatters';
+import { ProductConsumptionModal } from '../components/modals/ProductConsumptionModal';
 
 interface AtendimentosPageProps {
   onOpenFinishAttendance: (attendance: Attendance) => void;
@@ -23,21 +30,57 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
   onOpenFinishAttendance,
   onOpenNewAppointment,
 }) => {
-  const { attendances, appointments, clients, services, professionals, startAttendance } = useData();
+  const { currentUser } = useAuth();
+  const { 
+    attendances, 
+    appointments, 
+    clients, 
+    services, 
+    professionals, 
+    startAttendance,
+    updateAppointmentStatus 
+  } = useData();
 
-  // New ad-hoc attendance state
+  const isProfessional = currentUser?.role === 'profissional';
+  const myProf = professionals.find(p => 
+    p.id === currentUser?.professionalId || 
+    p.userId === currentUser?.id || 
+    p.name.toLowerCase() === currentUser?.name.toLowerCase()
+  );
+  const myProfId = myProf?.id;
+
+  // Active professionals only (Thálita is excluded)
+  const activeProfessionals = useMemo(() => {
+    return professionals.filter(p => p.isActive && p.id !== 'prof_thalita');
+  }, [professionals]);
+
+  // Tab filter: 'todas_comandas' | 'meus_atendimentos'
+  const [filterMode, setFilterMode] = useState<'todas' | 'meus'>(isProfessional ? 'meus' : 'todas');
+
+  // Ad-hoc attendance state
   const [isStartingNew, setIsStartingNew] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState('');
-  const [selectedProfId, setSelectedProfId] = useState('');
+  const [selectedProfId, setSelectedProfId] = useState(myProfId || '');
   const [startError, setStartError] = useState<string | null>(null);
 
-  // Appointments ready to be started (agendados ou confirmados para hoje)
+  // Consumption Modal
+  const [attendanceForConsumption, setAttendanceForConsumption] = useState<Attendance | null>(null);
+
   const todayStr = new Date().toISOString().split('T')[0];
-  const readyAppointments = appointments.filter(
-    a => a.date === todayStr && ['agendado', 'confirmado'].includes(a.status)
-  );
+
+  // Appointments ready to be started (today)
+  const readyAppointments = useMemo(() => {
+    return appointments.filter(a => {
+      if (a.date !== todayStr) return false;
+      if (!['agendado', 'confirmado'].includes(a.status)) return false;
+      if (isProfessional && filterMode === 'meus' && myProfId && a.professionalId !== myProfId) {
+        return false;
+      }
+      return true;
+    });
+  }, [appointments, todayStr, isProfessional, filterMode, myProfId]);
 
   const handleStartFromAppointment = (aptId: string) => {
     startAttendance(aptId);
@@ -56,44 +99,115 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
       return;
     }
 
-    const res = startAttendance(undefined, selectedClientId, selectedServiceId, selectedProfId);
+    const profToUse = isProfessional && myProfId ? myProfId : selectedProfId;
+    const res = startAttendance(undefined, selectedClientId, selectedServiceId, profToUse);
     if (!res.success) {
       setStartError(res.error || 'Erro ao iniciar atendimento.');
     } else {
       setIsStartingNew(false);
       setSelectedClientId('');
       setSelectedServiceId('');
-      setSelectedProfId('');
+      setSelectedProfId(myProfId || '');
     }
   };
 
-  // Group attendances into active (in progress) and finished
-  const inProgressAttendances = attendances.filter(a => !a.finishedAt);
-  const completedAttendances = attendances.filter(a => !!a.finishedAt);
+  // Filter attendances based on role/filter
+  const filteredAttendances = useMemo(() => {
+    return attendances.filter(a => {
+      if (isProfessional && filterMode === 'meus' && myProfId) {
+        return a.professionalId === myProfId;
+      }
+      return true;
+    });
+  }, [attendances, isProfessional, filterMode, myProfId]);
+
+  // Group attendances by Client for Unified Comanda View (Today's Attendances)
+  const todayComandas = useMemo(() => {
+    const map = new Map<string, { client: any; attendances: Attendance[]; subtotal: number; isAllFinished: boolean }>();
+
+    filteredAttendances.filter(a => a.date === todayStr).forEach(atd => {
+      const cli = clients.find(c => c.id === atd.clientId) || { id: atd.clientId, name: atd.clientName, phone: '' };
+      const groupKey = atd.clientId;
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          client: cli,
+          attendances: [],
+          subtotal: 0,
+          isAllFinished: true,
+        });
+      }
+      const group = map.get(groupKey)!;
+      group.attendances.push(atd);
+      group.subtotal += atd.netValue || atd.grossValue || 0;
+      if (!atd.finishedAt) {
+        group.isAllFinished = false;
+      }
+    });
+
+    return Array.from(map.values());
+  }, [filteredAttendances, clients, todayStr]);
+
+  // In-progress single services
+  const inProgressAttendances = useMemo(() => {
+    return filteredAttendances.filter(a => !a.finishedAt && a.date === todayStr);
+  }, [filteredAttendances, todayStr]);
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
-      {/* Top Header Card */}
-      <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="space-y-6 animate-fade-in pb-12 font-sans">
+      {/* Header Banner */}
+      <div className="bg-tb-white rounded-3xl p-6 sm:p-8 border border-tb-rose-light/50 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary block mb-1">
-            Recepção & Execução
-          </span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs uppercase font-bold tracking-widest text-tb-rose-primary">
+              Recepção, Execução & Comandas
+            </span>
+            {isProfessional && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-tb-rose-blush text-tb-rose-primary border border-tb-rose-light">
+                Perfil: {myProf?.name} ({myProf?.specialty})
+              </span>
+            )}
+          </div>
           <h2 className="font-serif-brand text-3xl font-bold text-tb-brown-dark">
-            Atendimentos em Andamento
+            Atendimentos & Comandas do Salão
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            Controle a chegada da cliente, início da sessão, tempo decorrido e encerramento com pagamento.
+            Inicie atendimentos, registre consumo de produtos e faça o fechamento unificado da comanda da cliente.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsStartingNew(!isStartingNew)}
-          className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs sm:text-sm font-semibold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2"
-        >
-          <Play className="w-4 h-4 fill-current" />
-          {isStartingNew ? 'Fechar Início Avulso' : 'Iniciar Atendimento Avulso'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          {/* Quick toggle for professional */}
+          {isProfessional && (
+            <div className="flex bg-tb-ivory p-1 rounded-2xl border border-tb-rose-light/70 text-xs">
+              <button
+                type="button"
+                onClick={() => setFilterMode('meus')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  filterMode === 'meus' ? 'bg-tb-rose-primary text-white shadow-xs' : 'text-tb-brown-dark hover:bg-tb-beige-light'
+                }`}
+              >
+                Meus Atendimentos
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode('todas')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  filterMode === 'todas' ? 'bg-tb-rose-primary text-white shadow-xs' : 'text-tb-brown-dark hover:bg-tb-beige-light'
+                }`}
+              >
+                Geral do Salão
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => setIsStartingNew(!isStartingNew)}
+            className="px-5 py-2.5 rounded-2xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-bold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-2 shrink-0"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            {isStartingNew ? 'Fechar Início Avulso' : 'Iniciar Atendimento Avulso'}
+          </button>
+        </div>
       </div>
 
       {/* Ad-hoc Attendance Box */}
@@ -103,7 +217,9 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
             <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
               Iniciar Atendimento Imediato (Sem Agendamento Prévio)
             </h3>
-            <span className="text-xs text-tb-gray-neutral">Início agora às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-xs text-tb-gray-neutral">
+              Início às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
 
           {startError && (
@@ -114,47 +230,33 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-1">
+            <div>
               <label className="block text-xs font-semibold text-tb-brown-dark mb-1">Cliente *</label>
               <input
                 type="text"
-                placeholder="Filtrar cliente por nome ou celular..."
+                placeholder="Filtrar cliente por nome..."
                 value={clientSearch}
                 onChange={e => {
                   const val = e.target.value;
                   setClientSearch(val);
                   const q = val.trim().toLowerCase();
                   if (q) {
-                    const firstMatch = clients.find(
-                      c => !c.isArchived && (c.name.toLowerCase().includes(q) || c.phone.includes(q))
-                    );
+                    const firstMatch = clients.find(c => !c.isArchived && c.name.toLowerCase().includes(q));
                     if (firstMatch) setSelectedClientId(firstMatch.id);
                   }
                 }}
-                className="w-full text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light/80 bg-tb-white"
+                className="w-full text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light bg-tb-white mb-1"
               />
               <select
                 value={selectedClientId}
                 onChange={e => setSelectedClientId(e.target.value)}
                 required
-                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
+                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark"
               >
                 <option value="">Selecione a cliente...</option>
-                {(() => {
-                  const q = clientSearch.trim().toLowerCase();
-                  const active = clients.filter(c => !c.isArchived);
-                  const matches = q
-                    ? active.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q))
-                    : active;
-                  const sliced = matches.slice(0, 150);
-                  const selectedObj = active.find(c => c.id === selectedClientId);
-                  if (selectedObj && !sliced.some(c => c.id === selectedObj.id)) {
-                    sliced.unshift(selectedObj);
-                  }
-                  return sliced.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} {c.phone ? `— ${c.phone}` : ''}</option>
-                  ));
-                })()}
+                {clients.filter(c => !c.isArchived).map(c => (
+                  <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
+                ))}
               </select>
             </div>
 
@@ -164,45 +266,29 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                 value={selectedServiceId}
                 onChange={e => setSelectedServiceId(e.target.value)}
                 required
-                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
+                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark"
               >
                 <option value="">Selecione o serviço...</option>
-                {Object.entries({
-                  cabelo: 'Cabeleireiras & Cabelos',
-                  unhas: 'Manicures & Unhas',
-                  estetica: 'Esteticista & Depilação',
-                  sobrancelhas: 'Designer Sobrancelhas',
-                  cilios: 'Lash Designer',
-                  maquiagem: 'Maquiagem & Penteado',
-                }).map(([catKey, catLabel]) => {
-                  const catServices = services.filter(s => s.isActive && s.category === catKey);
-                  if (catServices.length === 0) return null;
-                  return (
-                    <optgroup key={catKey} label={catLabel}>
-                      {catServices.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} — {s.durationMinutes} min ({formatBRL(s.price)})
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-                {services.filter(s => s.isActive && !['cabelo', 'unhas', 'estetica', 'sobrancelhas', 'cilios', 'maquiagem'].includes(s.category)).map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({formatBRL(s.price)})</option>
+                {services.filter(s => s.isActive).map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.durationMinutes} min ({formatBRL(s.price)})
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">Profissional Responsável</label>
+              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">Profissional Responsável *</label>
               <select
-                value={selectedProfId}
+                value={isProfessional && myProfId ? myProfId : selectedProfId}
                 onChange={e => setSelectedProfId(e.target.value)}
-                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
+                disabled={isProfessional}
+                required
+                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark"
               >
-                <option value="">Selecione o profissional...</option>
-                {professionals.filter(p => p.isActive).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                <option value="">Selecione a profissional...</option>
+                {activeProfessionals.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} — {p.specialty}</option>
                 ))}
               </select>
             </div>
@@ -212,13 +298,13 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
             <button
               type="button"
               onClick={() => setIsStartingNew(false)}
-              className="px-4 py-2 text-xs text-tb-brown-soft"
+              className="px-4 py-2 text-xs font-semibold text-tb-brown-soft"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-6 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm"
+              className="px-6 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm"
             >
               Dar Início ao Atendimento
             </button>
@@ -226,20 +312,20 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
         </form>
       )}
 
-      {/* Ready Appointments from Today's Schedule */}
+      {/* Ready Appointments from Today's Schedule (With Iniciar Button for Authorized Roles) */}
       {readyAppointments.length > 0 && (
         <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-                Clientes Agendadas Prontas para Atendimento
+                Clientes Agendadas Aguardando Início ({readyAppointments.length})
               </h3>
               <p className="text-xs text-tb-gray-neutral">
-                Clientes agendadas para hoje que aguardam início do procedimento
+                Clique em Iniciar para marcar o início da sessão e registrar o horário
               </p>
             </div>
-            <span className="text-xs font-semibold text-tb-rose-primary bg-tb-rose-blush px-3 py-1 rounded-full">
-              {readyAppointments.length} aguardando
+            <span className="text-xs font-bold text-tb-rose-primary bg-tb-rose-blush px-3 py-1 rounded-full">
+              Prontas para Atender
             </span>
           </div>
 
@@ -247,150 +333,199 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
             {readyAppointments.map(apt => (
               <div
                 key={apt.id}
-                className="p-4 rounded-2xl bg-tb-ivory border border-tb-rose-light/60 flex items-center justify-between gap-3 hover:border-tb-rose-primary/50 transition-all"
+                className="p-4 rounded-2xl bg-tb-ivory border border-tb-rose-light/60 flex items-center justify-between gap-3 hover:border-tb-rose-primary/50 transition-all shadow-2xs"
               >
                 <div>
                   <span className="text-xs font-bold text-tb-brown-dark block">
                     {apt.startTime} — {apt.clientName}
                   </span>
-                  <p className="text-[11px] text-tb-rose-primary font-medium mt-0.5">
+                  <p className="text-[11px] text-tb-rose-primary font-bold mt-0.5">
                     {apt.serviceName}
                   </p>
                   <p className="text-[10px] text-tb-gray-neutral">
-                    Com {apt.professionalName} • {formatBRL(apt.price)}
+                    Com <span className="font-semibold text-tb-brown-dark">{apt.professionalName}</span>
+                    {(!isProfessional || apt.professionalId === myProfId) && ` • ${formatBRL(apt.price)}`}
                   </p>
                 </div>
 
-                <button
-                  onClick={() => handleStartFromAppointment(apt.id)}
-                  className="px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm flex items-center gap-1.5 shrink-0"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Iniciar
-                </button>
+                {(!isProfessional || apt.professionalId === myProfId) ? (
+                  <button
+                    onClick={() => handleStartFromAppointment(apt.id)}
+                    className="px-3.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm flex items-center gap-1.5 shrink-0"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Iniciar
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-tb-gray-neutral italic px-2 py-1 bg-tb-white rounded-lg border border-tb-rose-light/40">
+                    Agenda Colega
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Currently In-Progress Attendances */}
-      <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-4">
+      {/* SECTION: COMANDAS DO DIA (FECHAMENTO UNIFICADO DA COMANDA DA CLIENTE) */}
+      <div className="bg-tb-white rounded-3xl p-6 border border-tb-rose-light/50 shadow-soft space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-              Na Cadeira / Em Execução Agora ({inProgressAttendances.length})
-            </h3>
-            <p className="text-xs text-tb-gray-neutral">
-              Finalize quando o serviço for concluído para registrar o pagamento
+            <div className="flex items-center gap-2">
+              <h3 className="font-serif-brand text-2xl font-bold text-tb-brown-dark">
+                Comandas do Dia ({todayComandas.length})
+              </h3>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Visão Unificada
+              </span>
+            </div>
+            <p className="text-xs text-tb-gray-neutral mt-0.5">
+              Reúne todos os serviços realizados pela cliente hoje para conferência e fechamento unificado
             </p>
           </div>
         </div>
 
-        {inProgressAttendances.length === 0 ? (
+        {todayComandas.length === 0 ? (
           <div className="p-10 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/40 text-xs text-tb-gray-neutral">
-            Nenhum atendimento em andamento no momento. Inicie um agendamento ou adicione um atendimento avulso.
+            Nenhuma comanda aberta para o dia de hoje.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {inProgressAttendances.map(atd => (
-              <div
-                key={atd.id}
-                className="p-5 rounded-2xl bg-gradient-to-br from-tb-ivory to-tb-white border-2 border-tb-rose-light shadow-soft flex flex-col justify-between space-y-4"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 animate-pulse">
-                      Em Execução
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {todayComandas.map(group => {
+              const cli = group.client;
+              const hasOpenService = group.attendances.some(a => !a.finishedAt);
+              const isFullyPaid = group.attendances.every(a => a.paymentStatus === 'pago');
+
+              return (
+                <div
+                  key={cli.id}
+                  className="p-5 rounded-3xl bg-tb-ivory/80 border-2 border-tb-rose-light/80 shadow-soft flex flex-col justify-between space-y-4"
+                >
+                  {/* Comanda Header */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif-brand text-xl font-bold text-tb-brown-dark">
+                          {cli.name}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isFullyPaid 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : hasOpenService 
+                            ? 'bg-amber-100 text-amber-800 animate-pulse' 
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {isFullyPaid ? '✓ Quitada' : hasOpenService ? 'Em Atendimento' : 'Pendente de Pagamento'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-tb-gray-neutral mt-0.5">
+                        {group.attendances.length} serviço(s) realizados hoje • {cli.phone || ''}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-tb-gray-neutral uppercase block font-semibold">Total Comanda</span>
+                      <span className="text-lg font-bold text-tb-brown-dark">
+                        {!isProfessional
+                          ? formatBRL(group.subtotal)
+                          : formatBRL(group.attendances.filter(a => a.professionalId === myProfId).reduce((acc, a) => acc + (a.netValue || a.grossValue || 0), 0))
+                        }
+                        {isProfessional && group.attendances.some(a => a.professionalId !== myProfId) && (
+                          <span className="block text-[9px] text-tb-gray-neutral font-normal">(Sua parte)</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Services List inside this Comanda */}
+                  <div className="space-y-2 bg-tb-white p-3 rounded-2xl border border-tb-rose-light/50">
+                    {group.attendances.map(atd => {
+                      const isMine = isProfessional && atd.professionalId === myProfId;
+
+                      return (
+                        <div
+                          key={atd.id}
+                          className="p-2.5 rounded-xl bg-tb-ivory/60 border border-tb-rose-light/40 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-tb-brown-dark">
+                                {atd.serviceName}
+                              </span>
+                              {atd.finishedAt ? (
+                                <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-semibold">
+                                  Concluído às {atd.finishedAt}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded font-semibold animate-pulse">
+                                  Na Cadeira (Início: {atd.startedAt})
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-tb-gray-neutral mt-0.5">
+                              Profissional: <span className="font-semibold text-tb-brown-dark">{atd.professionalName}</span>
+                              {(!isProfessional || isMine) && ` • ${formatBRL(atd.netValue || atd.grossValue)}`}
+                            </p>
+                          </div>
+
+                          {/* Quick Actions for this Service */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Product Consumption Button */}
+                            <button
+                              type="button"
+                              onClick={() => setAttendanceForConsumption(atd)}
+                              className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                              title="Registrar produtos e gramatura gastos neste serviço"
+                            >
+                              <Scale className="w-3 h-3" />
+                              Produtos
+                            </button>
+
+                            {/* Individual Finish Button (Authorized Professional or Admin) */}
+                            {!atd.finishedAt && (!isProfessional || isMine) && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenFinishAttendance(atd)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                title="Concluir este serviço"
+                              >
+                                <Check className="w-3 h-3" />
+                                Finalizar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Comanda Footer: Unify & Pay Button */}
+                  <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between">
+                    <span className="text-xs text-tb-brown-soft font-semibold">
+                      {group.attendances.length > 1 ? 'Múltiplos profissionais envolvidos' : 'Serviço individual'}
                     </span>
-                    <h4 className="font-serif-brand text-2xl font-bold text-tb-brown-dark mt-2">
-                      {atd.clientName}
-                    </h4>
-                    <p className="text-xs font-medium text-tb-rose-primary mt-0.5">
-                      {atd.serviceName}
-                    </p>
-                    <p className="text-[11px] text-tb-gray-neutral mt-1">
-                      Profissional: <span className="text-tb-brown-dark font-medium">{atd.professionalName}</span>
-                    </p>
-                  </div>
 
-                  <div className="p-3 bg-tb-white rounded-2xl border border-tb-rose-light text-center shadow-2xs">
-                    <span className="text-[10px] text-tb-gray-neutral block">Início às</span>
-                    <span className="text-sm font-bold text-tb-brown-dark">{atd.startedAt}</span>
+                    <button
+                      onClick={() => onOpenFinishAttendance(group.attendances[0])}
+                      className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
+                    >
+                      <Receipt className="w-4 h-4" />
+                      {isFullyPaid ? 'Ver Comanda / Recibo' : 'Fechar Comanda Unificada'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-between">
-                  <span className="text-sm font-bold text-tb-brown-dark">
-                    Valor previsto: {formatBRL(atd.netValue)}
-                  </span>
-
-                  <button
-                    onClick={() => onOpenFinishAttendance(atd)}
-                    className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Concluir & Pagar
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Historical Completed Attendances */}
-      <div className="bg-tb-white rounded-3xl border border-tb-rose-light/50 shadow-soft overflow-hidden">
-        <div className="p-5 bg-tb-ivory border-b border-tb-rose-light/40">
-          <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-            Histórico Recente de Atendimentos Concluídos
-          </h3>
-          <p className="text-xs text-tb-gray-neutral">
-            Sessões finalizadas com registro de pagamento
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-tb-ivory/60 text-tb-brown-soft font-semibold uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-3.5">Data / Horário</th>
-                <th className="px-6 py-3.5">Cliente</th>
-                <th className="px-6 py-3.5">Serviço Realizado</th>
-                <th className="px-6 py-3.5">Profissional</th>
-                <th className="px-6 py-3.5">Valor Líquido</th>
-                <th className="px-6 py-3.5">Pagamento</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-tb-rose-light/20 text-tb-brown-dark">
-              {completedAttendances.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-tb-gray-neutral">
-                    Nenhum atendimento finalizado registrado ainda.
-                  </td>
-                </tr>
-              ) : (
-                completedAttendances.map(atd => (
-                  <tr key={atd.id} className="hover:bg-tb-ivory/40">
-                    <td className="px-6 py-3.5 whitespace-nowrap">
-                      {formatDateBR(atd.date)} ({atd.startedAt} - {atd.finishedAt})
-                    </td>
-                    <td className="px-6 py-3.5 font-bold">{atd.clientName}</td>
-                    <td className="px-6 py-3.5">{atd.serviceName}</td>
-                    <td className="px-6 py-3.5">{atd.professionalName}</td>
-                    <td className="px-6 py-3.5 font-bold text-emerald-700">{formatBRL(atd.netValue)}</td>
-                    <td className="px-6 py-3.5">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        {atd.paymentStatus} ({atd.paymentMethod?.replace('_', ' ').toUpperCase() || 'PIX'})
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Product Consumption Modal */}
+      <ProductConsumptionModal
+        isOpen={!!attendanceForConsumption}
+        onClose={() => setAttendanceForConsumption(null)}
+        attendance={attendanceForConsumption}
+      />
     </div>
   );
 };

@@ -16,7 +16,8 @@ import {
   HeartHandshake,
   CheckCircle2,
   CalendarCheck,
-  Cake
+  Cake,
+  Sparkles
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Client } from '../../types';
@@ -39,8 +40,8 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   onOpenWhatsApp,
   onNewAppointmentForClient,
 }) => {
-  const { appointments, attendances, payments, archiveClient } = useData();
-  const [activeTab, setActiveTab] = useState<'dados' | 'atendimentos' | 'agenda' | 'financeiro' | 'observacoes'>('dados');
+  const { appointments, attendances, payments, clientPackages, archiveClient } = useData();
+  const [activeTab, setActiveTab] = useState<'dados' | 'pacotes' | 'atendimentos' | 'agenda' | 'financeiro' | 'observacoes'>('dados');
 
   if (!isOpen || !client) return null;
 
@@ -48,6 +49,7 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   const clientAppointments = appointments.filter(a => a.clientId === client.id);
   const clientAttendances = attendances.filter(a => a.clientId === client.id);
   const clientPayments = payments.filter(p => p.clientId === client.id);
+  const clientPackagesList = (clientPackages || []).filter(p => p.clientId === client.id);
 
   const totalSpentCalculated = clientPayments
     .filter(p => p.status === 'pago')
@@ -150,10 +152,11 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
         <div className="flex border-b border-tb-rose-light/40 px-6 bg-tb-ivory/50 overflow-x-auto">
           {[
             { id: 'dados', label: '1. Dados Pessoais', icon: User },
-            { id: 'atendimentos', label: `2. Atendimentos (${clientAttendances.length})`, icon: Clock },
-            { id: 'agenda', label: `3. Agenda (${clientAppointments.length})`, icon: Calendar },
-            { id: 'financeiro', label: `4. Financeiro (${formatBRL(totalSpentCalculated)})`, icon: DollarSign },
-            { id: 'observacoes', label: '5. Preferências', icon: FileText },
+            { id: 'pacotes', label: `2. Pacotes & Créditos (${clientPackagesList.length})`, icon: Sparkles },
+            { id: 'atendimentos', label: `3. Atendimentos (${clientAttendances.length})`, icon: Clock },
+            { id: 'agenda', label: `4. Agenda (${clientAppointments.length})`, icon: Calendar },
+            { id: 'financeiro', label: `5. Financeiro (${formatBRL(totalSpentCalculated)})`, icon: DollarSign },
+            { id: 'observacoes', label: '6. Preferências', icon: FileText },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -249,7 +252,141 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: Atendimentos */}
+          {/* TAB: Pacotes & Créditos */}
+          {activeTab === 'pacotes' && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-tb-rose-primary" />
+                  Controle e Acompanhamento de Pacotes da Cliente
+                </span>
+                <span className="text-[11px] text-tb-gray-neutral">
+                  Sessões restantes e histórico de utilização
+                </span>
+              </div>
+
+              {clientPackagesList.length === 0 ? (
+                <div className="p-8 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/40 space-y-2">
+                  <span className="text-2xl block">🎁</span>
+                  <p className="text-xs font-bold text-tb-brown-dark">
+                    Nenhum pacote contratado no momento.
+                  </p>
+                  <p className="text-[11px] text-tb-gray-neutral max-w-sm mx-auto">
+                    Ao contratar o <strong>Pacote de Unha</strong> (4 manicures + 2 pedicures por R$ 205,00) ou o <strong>Pacote de Cabelo</strong> (4 escovas com 10% OFF), o crédito aparecerá automaticamente aqui com acompanhamento das sessões.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {clientPackagesList.map(pkg => {
+                    const totalSessions = pkg.items.reduce((acc, i) => acc + i.totalQty, 0);
+                    const remainingSessions = pkg.items.reduce((acc, i) => acc + i.remainingQty, 0);
+
+                    return (
+                      <div 
+                        key={pkg.id} 
+                        className={`p-4 rounded-2xl border transition-all ${
+                          pkg.status === 'ativo' 
+                            ? 'bg-gradient-to-br from-emerald-50/50 via-tb-white to-teal-50/30 border-emerald-300 shadow-soft' 
+                            : 'bg-gray-50 border-gray-200 opacity-80'
+                        }`}
+                      >
+                        {/* Header */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-tb-rose-light/40 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-base shrink-0 shadow-2xs">
+                              🎁
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-sm text-tb-brown-dark">
+                                {pkg.packageName}
+                              </h4>
+                              <p className="text-[11px] text-tb-gray-neutral">
+                                Contratado em {formatDateBR(pkg.purchaseDate)} • Validade: {formatDateBR(pkg.expiryDate)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-tb-brown-dark bg-white px-2.5 py-1 rounded-lg border border-tb-rose-light">
+                              {formatBRL(pkg.totalPricePaid)}
+                            </span>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                              pkg.status === 'ativo' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                              pkg.status === 'esgotado' ? 'bg-gray-200 text-gray-700 border border-gray-300' :
+                              'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              {pkg.status === 'ativo' ? '● Pacote Ativo' : pkg.status === 'esgotado' ? '✓ Esgotado' : '⏳ Expirado'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Items Balance and Progress */}
+                        <div className="py-3 space-y-2.5">
+                          <span className="text-[11px] font-bold text-tb-brown-soft uppercase tracking-wider block">
+                            Saldo de Sessões Restantes:
+                          </span>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {pkg.items.map((item, idx) => {
+                              const itemPct = item.totalQty > 0 ? (item.usedQty / item.totalQty) * 100 : 0;
+                              return (
+                                <div key={idx} className="bg-white p-3 rounded-xl border border-tb-rose-light/50 shadow-2xs space-y-1.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-tb-brown-dark">{item.serviceName}</span>
+                                    <span className={`font-extrabold ${item.remainingQty > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+                                      {item.remainingQty} de {item.totalQty} restante(s)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all duration-500 ${item.remainingQty === 0 ? 'bg-gray-300' : 'bg-emerald-500'}`}
+                                      style={{ width: `${itemPct}%` }}
+                                      title={`${item.usedQty} utilizadas`}
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between text-[10px] text-tb-gray-neutral">
+                                    <span>{item.usedQty} utilizada(s)</span>
+                                    <span>{item.remainingQty === 0 ? 'Concluído' : `${item.remainingQty} disponível`}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Usage History Log */}
+                        {pkg.usageHistory && pkg.usageHistory.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-tb-rose-light/40 space-y-1.5">
+                            <span className="text-[10px] font-bold text-tb-brown-soft uppercase tracking-wider block">
+                              Histórico de Utilização deste Pacote ({pkg.usageHistory.length} sessões realizadas):
+                            </span>
+                            <div className="space-y-1">
+                              {pkg.usageHistory.map(log => (
+                                <div key={log.id} className="text-[11px] bg-white/90 p-2 rounded-lg border border-tb-rose-light/40 flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span className="font-semibold text-tb-brown-dark">{log.serviceName}</span>
+                                    {log.professionalName && (
+                                      <span className="text-tb-gray-neutral">• com {log.professionalName}</span>
+                                    )}
+                                  </div>
+                                  <div className="text-right text-tb-gray-neutral text-[10px]">
+                                    {formatDateBR(log.date)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: Atendimentos */}
           {activeTab === 'atendimentos' && (
             <div className="space-y-3 animate-fade-in">
               {clientAttendances.length === 0 ? (

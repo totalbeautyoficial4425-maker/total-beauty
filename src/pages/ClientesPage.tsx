@@ -44,7 +44,7 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
   onOpenWhatsApp,
   onNewAppointmentForClient,
 }) => {
-  const { clients } = useData();
+  const { clients, clientPackages } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'todas' | 'recorrentes' | 'novas' | 'inativas' | 'aniversariantes_hoje' | 'aniversariantes_mes' | 'arquivadas'>('todas');
   const [currentPage, setCurrentPage] = useState(1);
@@ -251,6 +251,17 @@ export const ClientesPage: React.FC<ClientesPageProps> = ({
                                 🎂 {formatBirthdayDayMonth(client.birthDate)}
                               </span>
                             )}
+                            {(clientPackages || [])
+                              .filter(p => p.clientId === client.id && p.status === 'ativo' && p.items.some(i => i.remainingQty > 0))
+                              .map(pkg => (
+                                <span 
+                                  key={pkg.id} 
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 shrink-0 border border-emerald-300"
+                                  title={`Pacote ${pkg.packageName}: ${pkg.items.map(i => `${i.remainingQty}/${i.totalQty} ${i.serviceName}`).join(', ')}`}
+                                >
+                                  🎁 {pkg.packageName}: {pkg.items.map(i => `${i.remainingQty} ${i.serviceName}`).join(' + ')}
+                                </span>
+                              ))}
                           </div>
                           <p className="text-[11px] text-tb-gray-neutral">
                             {client.email || 'Sem e-mail cadastrado'}
