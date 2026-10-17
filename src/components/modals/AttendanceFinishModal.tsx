@@ -19,6 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { Attendance, PaymentMethod } from '../../types';
 import { formatBRL } from '../../utils/formatters';
+import { getTodayDate } from '../../services/storage';
 import { ProductConsumptionModal } from './ProductConsumptionModal';
 
 interface AttendanceFinishModalProps {
@@ -67,6 +68,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     finishUnifiedComanda,
     finishAttendance,
     revertAttendance,
+    removeServiceFromComanda,
     clientPackages,
     getClientActivePackages 
   } = useData();
@@ -75,7 +77,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
   // Selected client & date
   const targetClientId = attendance?.clientId || initialClientId || '';
-  const targetDate = attendance?.date || initialDate || new Date().toISOString().split('T')[0];
+  const targetDate = attendance?.date || initialDate || getTodayDate();
 
   const client = clients.find(c => c.id === targetClientId);
 
@@ -298,6 +300,26 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     const res = revertAttendance(attendanceId);
     if (!res.success) {
       setError(res.error || 'Erro ao reverter atendimento.');
+      return;
+    }
+
+    if (serviceItems.length <= 1) {
+      onClose();
+    } else {
+      setServiceItems(prev => prev.filter(item => item.attendanceId !== attendanceId));
+    }
+  };
+
+  // Remove service from comanda completely
+  const handleRemoveServiceItem = (attendanceId: string, serviceName: string) => {
+    const isConfirmed = window.confirm(
+      `Deseja realmente remover o serviço "${serviceName}" desta comanda?\n\nO valor será deduzido da comanda. Se veio de um agendamento, ele voltará para o status Agendado na agenda sem perdas.`
+    );
+    if (!isConfirmed) return;
+
+    const res = removeServiceFromComanda(attendanceId);
+    if (!res.success) {
+      setError(res.error || 'Erro ao remover serviço da comanda.');
       return;
     }
 
@@ -599,6 +621,15 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                               >
                                 <RotateCcw className="w-3 h-3" />
                                 Voltar p/ Agendamento
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveServiceItem(item.attendanceId, item.serviceName)}
+                                className="text-[10px] text-red-700 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                title="Remover este serviço da comanda"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-600" />
+                                Remover da Comanda
                               </button>
                             </div>
                           </div>

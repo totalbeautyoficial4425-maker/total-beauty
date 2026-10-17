@@ -14,7 +14,8 @@ import {
   Check,
   ChevronRight,
   Filter,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +42,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     professionals, 
     startAttendance,
     revertAttendance,
+    removeServiceFromComanda,
     updateAppointmentStatus 
   } = useData();
 
@@ -73,7 +75,25 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
 
   // Revert attendance state
   const [revertConfirmAttendance, setRevertConfirmAttendance] = useState<Attendance | null>(null);
+  const [removeServiceConfirm, setRemoveServiceConfirm] = useState<Attendance | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleConfirmRemoveService = (atd: Attendance) => {
+    const res = removeServiceFromComanda(atd.id);
+    if (res.success) {
+      setFeedbackMessage({
+        type: 'success',
+        text: `Serviço "${atd.serviceName}" foi removido da comanda com sucesso!`,
+      });
+      setTimeout(() => setFeedbackMessage(null), 5000);
+    } else {
+      setFeedbackMessage({
+        type: 'error',
+        text: res.error || 'Erro ao remover serviço da comanda.',
+      });
+    }
+    setRemoveServiceConfirm(null);
+  };
 
   const handleConfirmRevert = (atd: Attendance) => {
     const res = revertAttendance(atd.id);
@@ -539,6 +559,19 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                               </button>
                             )}
 
+                            {/* Remover Serviço da Comanda */}
+                            {(!isProfessional || isMine) && (
+                              <button
+                                type="button"
+                                onClick={() => setRemoveServiceConfirm(atd)}
+                                className="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                title="Remover este serviço da comanda"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-600" />
+                                Remover da Comanda
+                              </button>
+                            )}
+
                             {/* Individual Finish Button (Authorized Professional or Admin) */}
                             {!atd.finishedAt && (!isProfessional || isMine) && (
                               <button
@@ -632,6 +665,66 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 Sim, Voltar para Solicitação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Service From Comanda Confirmation Modal */}
+      {removeServiceConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/50 backdrop-blur-xs animate-fade-in">
+          <div className="bg-tb-white rounded-3xl p-6 max-w-md w-full border border-tb-rose-light/50 shadow-premium space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                  Remover Serviço da Comanda
+                </h3>
+                <p className="text-xs text-tb-gray-neutral">
+                  Exclusão de item da comanda
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-red-50/70 border border-red-200 rounded-2xl space-y-2 text-xs text-red-950">
+              <p>
+                Deseja remover o serviço <strong className="text-tb-brown-dark">{removeServiceConfirm.serviceName}</strong> ({removeServiceConfirm.professionalName}) da comanda de <strong className="text-tb-brown-dark">{removeServiceConfirm.clientName}</strong>?
+              </p>
+              <div className="text-[11px] text-tb-brown-soft bg-white/90 p-2.5 rounded-xl border border-red-200/70 space-y-1">
+                <p className="font-semibold text-emerald-800 flex items-center gap-1">
+                  <span>✓</span> O valor de {formatBRL(removeServiceConfirm.netValue || removeServiceConfirm.grossValue)} será deduzido da comanda
+                </p>
+                {removeServiceConfirm.appointmentId && (
+                  <p className="text-tb-brown-soft">
+                    O agendamento retornará com segurança ao status <strong>Agendado</strong> na agenda para que não seja perdido.
+                  </p>
+                )}
+                {removeServiceConfirm.packageId && (
+                  <p className="text-emerald-700 font-medium">
+                    A sessão de crédito de pacote será estornada de volta ao pacote da cliente.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRemoveServiceConfirm(null)}
+                className="px-4 py-2 rounded-xl border border-tb-rose-light text-tb-brown-dark hover:bg-tb-ivory text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmRemoveService(removeServiceConfirm)}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-soft transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Sim, Remover da Comanda
               </button>
             </div>
           </div>

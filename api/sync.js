@@ -3,22 +3,22 @@ import { put } from '@vercel/blob';
 const BLOB_FILE_NAME = 'total_beauty_db.json';
 const BLOB_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
 
-function mergeArrayById(existingList, incomingList) {
+function mergeArrayById(existingList, incomingList, deletedIds = new Set()) {
   if (!Array.isArray(existingList) && !Array.isArray(incomingList)) return [];
-  if (!Array.isArray(incomingList)) return existingList || [];
-  if (!Array.isArray(existingList)) return incomingList || [];
+  if (!Array.isArray(incomingList)) return (existingList || []).filter(item => item?.id && !deletedIds.has(item.id));
+  if (!Array.isArray(existingList)) return (incomingList || []).filter(item => item?.id && !deletedIds.has(item.id));
 
   const map = new Map();
-  // Seed with existing items
+  // Seed with existing items (excluding deleted)
   existingList.forEach(item => {
-    if (item && item.id) {
+    if (item && item.id && !deletedIds.has(item.id)) {
       map.set(item.id, item);
     }
   });
 
-  // Merge incoming items (take newer or add new)
+  // Merge incoming items (take newer or add new, excluding deleted)
   incomingList.forEach(item => {
-    if (item && item.id) {
+    if (item && item.id && !deletedIds.has(item.id)) {
       const existing = map.get(item.id);
       if (!existing) {
         map.set(item.id, item);
@@ -106,38 +106,45 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
       const version = Date.now().toString();
 
-      const mergedClients = mergeArrayById(existingData.clients, body.clients);
-      const mergedServices = mergeArrayById(existingData.services, body.services);
-      const mergedProfessionals = mergeArrayById(existingData.professionals, body.professionals);
-      const mergedAppointments = mergeArrayById(existingData.appointments, body.appointments);
-      const mergedAttendances = mergeArrayById(existingData.attendances, body.attendances);
-      const mergedComandas = mergeArrayById(existingData.comandas, body.comandas);
-      const mergedPayments = mergeArrayById(existingData.payments, body.payments);
-      const mergedExpenses = mergeArrayById(existingData.expenses, body.expenses);
-      const mergedInventory = mergeArrayById(existingData.inventory, body.inventory);
-      const mergedConsumptions = mergeArrayById(existingData.consumptions, body.consumptions);
-      const mergedClientPackages = mergeArrayById(existingData.clientPackages, body.clientPackages);
-      const mergedScheduleBlocks = mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks);
-      const mergedUsers = mergeArrayById(existingData.users, body.users);
+      const allDeletedIds = new Set([
+        ...(Array.isArray(existingData.deletedIds) ? existingData.deletedIds : []),
+        ...(Array.isArray(body.deletedIds) ? body.deletedIds : [])
+      ]);
 
-      // CRITICAL INTEGRITY CHECK: Under NO circumstances can appointments, comandas, attendances, or clients shrink!
-      if (existingData.appointments?.length && mergedAppointments.length < existingData.appointments.length) {
-        return res.status(400).json({ success: false, error: 'Integrity check failed: appointments cannot be reduced.' });
+      const mergedClients = mergeArrayById(existingData.clients, body.clients, allDeletedIds);
+      const mergedServices = mergeArrayById(existingData.services, body.services, allDeletedIds);
+      const mergedProfessionals = mergeArrayById(existingData.professionals, body.professionals, allDeletedIds);
+      const mergedAppointments = mergeArrayById(existingData.appointments, body.appointments, allDeletedIds);
+      const mergedAttendances = mergeArrayById(existingData.attendances, body.attendances, allDeletedIds);
+      const mergedComandas = mergeArrayById(existingData.comandas, body.comandas, allDeletedIds);
+      const mergedPayments = mergeArrayById(existingData.payments, body.payments, allDeletedIds);
+      const mergedExpenses = mergeArrayById(existingData.expenses, body.expenses, allDeletedIds);
+      const mergedInventory = mergeArrayById(existingData.inventory, body.inventory, allDeletedIds);
+      const mergedConsumptions = mergeArrayById(existingData.consumptions, body.consumptions, allDeletedIds);
+      const mergedClientPackages = mergeArrayById(existingData.clientPackages, body.clientPackages, allDeletedIds);
+      const mergedScheduleBlocks = mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks, allDeletedIds);
+      const mergedUsers = mergeArrayById(existingData.users, body.users, allDeletedIds);
+
+      // CATASTROPHIC WIPE PREVENTION GUARD:
+      // Prevent unhydrated or corrupted client from wiping out established database tables
+      if (existingData.clients?.length > 50 && (!body.clients || body.clients.length === 0)) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: clients payload empty.' });
       }
-      if (existingData.comandas?.length && mergedComandas.length < existingData.comandas.length) {
-        return res.status(400).json({ success: false, error: 'Integrity check failed: comandas cannot be reduced.' });
+      if (existingData.services?.length > 10 && (!body.services || body.services.length === 0)) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: services payload empty.' });
       }
-      if (existingData.attendances?.length && mergedAttendances.length < existingData.attendances.length) {
-        return res.status(400).json({ success: false, error: 'Integrity check failed: attendances cannot be reduced.' });
+      if (existingData.professionals?.length > 2 && (!body.professionals || body.professionals.length === 0)) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: professionals payload empty.' });
       }
-      if (existingData.clients?.length && mergedClients.length < existingData.clients.length) {
-        return res.status(400).json({ success: false, error: 'Integrity check failed: clients cannot be reduced.' });
+      if (existingData.appointments?.length > 10 && (!body.appointments || body.appointments.length === 0)) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: appointments payload empty.' });
       }
 
       const mergedPayload = {
         version,
         updatedAt: now,
         exportedAt: now,
+        deletedIds: Array.from(allDeletedIds),
         clients: mergedClients,
         services: mergedServices,
         professionals: mergedProfessionals,

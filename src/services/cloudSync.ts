@@ -48,18 +48,19 @@ function safeSetItem(key: string, value: string): void {
  */
 function mergeById<T extends { id: string; updatedAt?: string; createdAt?: string }>(
   localList: T[],
-  remoteList: T[]
+  remoteList: T[],
+  deletedIdsSet: Set<string> = new Set()
 ): T[] {
   const map = new Map<string, T>();
 
-  // Add all local items first
+  // Add all local items first (excluding deleted)
   localList.forEach(item => {
-    if (item && item.id) map.set(item.id, item);
+    if (item && item.id && !deletedIdsSet.has(item.id)) map.set(item.id, item);
   });
 
-  // Merge remote items
+  // Merge remote items (excluding deleted)
   remoteList.forEach(remoteItem => {
-    if (!remoteItem || !remoteItem.id) return;
+    if (!remoteItem || !remoteItem.id || deletedIdsSet.has(remoteItem.id)) return;
     const localItem = map.get(remoteItem.id);
     if (!localItem) {
       map.set(remoteItem.id, remoteItem);
@@ -135,11 +136,16 @@ export const cloudSyncService = {
         return { success: true, hasChanges: false };
       }
 
+      if (Array.isArray(cloudData.deletedIds)) {
+        cloudData.deletedIds.forEach((id: string) => storageService.recordDeletedId(id));
+      }
+      const deletedIdsSet = new Set(storageService.getDeletedIds());
+
       let hasAnyChange = false;
 
       // 1. Appointments
       if (Array.isArray(cloudData.appointments)) {
-        const merged = mergeCollections(localApts, cloudData.appointments);
+        const merged = mergeCollections(localApts, cloudData.appointments, deletedIdsSet);
         if (merged.length !== localApts.length || JSON.stringify(merged) !== JSON.stringify(localApts)) {
           safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, merged);
@@ -149,7 +155,7 @@ export const cloudSyncService = {
 
       // 2. Attendances
       if (Array.isArray(cloudData.attendances)) {
-        const merged = mergeCollections(localAtds, cloudData.attendances);
+        const merged = mergeCollections(localAtds, cloudData.attendances, deletedIdsSet);
         if (merged.length !== localAtds.length || JSON.stringify(merged) !== JSON.stringify(localAtds)) {
           safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, merged);
@@ -159,7 +165,7 @@ export const cloudSyncService = {
 
       // 3. Comandas
       if (Array.isArray(cloudData.comandas)) {
-        const merged = mergeCollections(localCmds, cloudData.comandas);
+        const merged = mergeCollections(localCmds, cloudData.comandas, deletedIdsSet);
         if (merged.length !== localCmds.length || JSON.stringify(merged) !== JSON.stringify(localCmds)) {
           safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.COMANDAS, merged);
@@ -169,7 +175,7 @@ export const cloudSyncService = {
 
       // 4. Payments
       if (Array.isArray(cloudData.payments)) {
-        const merged = mergeCollections(localPays, cloudData.payments);
+        const merged = mergeCollections(localPays, cloudData.payments, deletedIdsSet);
         if (merged.length !== localPays.length || JSON.stringify(merged) !== JSON.stringify(localPays)) {
           safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.PAYMENTS, merged);
@@ -180,7 +186,7 @@ export const cloudSyncService = {
       // 5. Expenses
       if (Array.isArray(cloudData.expenses)) {
         const local = storageService.getExpenses();
-        const merged = mergeCollections(local, cloudData.expenses);
+        const merged = mergeCollections(local, cloudData.expenses, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.EXPENSES, merged);
@@ -202,7 +208,7 @@ export const cloudSyncService = {
       // 7. Consumptions
       if (Array.isArray(cloudData.consumptions)) {
         const local = storageService.getConsumptions();
-        const merged = mergeCollections(local, cloudData.consumptions);
+        const merged = mergeCollections(local, cloudData.consumptions, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, merged);
@@ -224,7 +230,7 @@ export const cloudSyncService = {
       // 9. Schedule Blocks
       if (Array.isArray(cloudData.scheduleBlocks)) {
         const local = storageService.getScheduleBlocks();
-        const merged = mergeCollections(local, cloudData.scheduleBlocks);
+        const merged = mergeCollections(local, cloudData.scheduleBlocks, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, merged);
@@ -314,6 +320,7 @@ export const cloudSyncService = {
     try {
       const payload = {
         exportedAt: new Date().toISOString(),
+        deletedIds: storageService.getDeletedIds(),
         clients: localClients,
         services: storageService.getServices(),
         professionals: localProfs,

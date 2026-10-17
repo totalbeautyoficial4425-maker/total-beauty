@@ -53,7 +53,8 @@ export const STORAGE_KEYS = {
   LOGIN_ATTEMPTS: 'tb_login_attempts_v1',
   DELETED_APPOINTMENTS: 'tb_deleted_appointments_v1',
   CLIENT_PACKAGES: 'tb_client_packages_v1',
-  SCHEDULE_BLOCKS: 'tb_schedule_blocks_v1'
+  SCHEDULE_BLOCKS: 'tb_schedule_blocks_v1',
+  DELETED_IDS: 'tb_deleted_ids_v1'
 };
 
 // Simple secure hash simulation for browser client-side storage
@@ -2202,9 +2203,27 @@ export const storageService = {
     notifyDataChanged();
   },
 
+  getDeletedIds(): string[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_IDS);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  recordDeletedId(id: string): void {
+    if (!id) return;
+    const existing = new Set(this.getDeletedIds());
+    if (!existing.has(id)) {
+      existing.add(id);
+      const arr = Array.from(existing);
+      safeSetItem(STORAGE_KEYS.DELETED_IDS, JSON.stringify(arr));
+      idbStorage.setItem(STORAGE_KEYS.DELETED_IDS, arr);
+    }
+  },
+
   getAttendances(): Attendance[] {
     const raw = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
-    return raw ? JSON.parse(raw) : [];
+    const list: Attendance[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(a => a && a.id && !deletedIds.has(a.id) && !(a as any).deletedAt);
   },
 
   saveAttendances(attendances: Attendance[]): void {
@@ -2221,7 +2240,9 @@ export const storageService = {
       safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw);
+    const list: PaymentTransaction[] = JSON.parse(raw);
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(p => p && p.id && !deletedIds.has(p.id) && !(p as any).deletedAt);
   },
 
   savePayments(payments: PaymentTransaction[]): void {
@@ -2238,7 +2259,9 @@ export const storageService = {
       safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw);
+    const list: Expense[] = JSON.parse(raw);
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(e => e && e.id && !deletedIds.has(e.id) && !(e as any).deletedAt);
   },
 
   saveExpenses(expenses: Expense[]): void {
@@ -2280,7 +2303,9 @@ export const storageService = {
 
   getConsumptions(): ProductConsumption[] {
     const raw = localStorage.getItem(STORAGE_KEYS.CONSUMPTIONS);
-    return raw ? JSON.parse(raw) : [];
+    const list: ProductConsumption[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(c => c && c.id && !deletedIds.has(c.id) && !(c as any).deletedAt);
   },
 
   saveConsumptions(consumptions: ProductConsumption[]): void {
@@ -2292,7 +2317,9 @@ export const storageService = {
 
   getComandas(): Comanda[] {
     const raw = localStorage.getItem(STORAGE_KEYS.COMANDAS);
-    return raw ? JSON.parse(raw) : [];
+    const list: Comanda[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(c => c && c.id && !deletedIds.has(c.id) && !(c as any).deletedAt);
   },
 
   saveComandas(comandas: Comanda[]): void {
@@ -2328,6 +2355,7 @@ export const storageService = {
   },
 
   deleteFromCloud(collectionName: string, docId: string): void {
+    this.recordDeletedId(docId);
     deleteDocumentFromFirestore(collectionName, docId);
     notifyDataChanged();
   },
@@ -2481,7 +2509,9 @@ export const storageService = {
 
   getScheduleBlocks(): ScheduleBlock[] {
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULE_BLOCKS);
-    return raw ? JSON.parse(raw) : [];
+    const list: ScheduleBlock[] = raw ? JSON.parse(raw) : [];
+    const deletedIds = new Set(this.getDeletedIds());
+    return list.filter(b => b && b.id && !deletedIds.has(b.id) && !(b as any).deletedAt);
   },
 
   saveScheduleBlocks(blocks: ScheduleBlock[]): void {
