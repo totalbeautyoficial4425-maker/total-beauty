@@ -271,8 +271,8 @@ export const ProfissionaisPage: React.FC = () => {
       `"${t.clientName || 'Cliente'}"`,
       `"${t.serviceName || t.description || 'Procedimento'}"`,
       t.netValue.toFixed(2),
-      `${t.commissionPercentage || 50}%`,
-      (t.commissionAmount || 0).toFixed(2),
+      `${t.commissionPercentage || activeProf.commissionPercentage || 50}%`,
+      (t.commissionAmount || ((t.netValue * (t.commissionPercentage || activeProf.commissionPercentage || 50)) / 100)).toFixed(2),
       t.status.toUpperCase(),
     ]);
 
@@ -471,11 +471,11 @@ export const ProfissionaisPage: React.FC = () => {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[11px] font-semibold text-tb-brown-soft block">
-                        Comissão
+                      <span className="text-[10px] uppercase font-bold text-tb-brown-soft block">
+                        Comissão Fixa
                       </span>
-                      <span className="text-[10px] text-tb-rose-primary font-bold block">
-                        Por Serviço
+                      <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-tb-beige-champagne text-tb-brown-dark inline-block mt-0.5">
+                        {p.commissionPercentage ?? 50}%
                       </span>
                     </div>
                   </div>
@@ -521,7 +521,7 @@ export const ProfissionaisPage: React.FC = () => {
                     <span>•</span>
                     <span>Usuário: <code className="font-mono text-tb-brown-dark font-bold bg-tb-ivory px-1.5 py-0.5 rounded border border-tb-rose-light/40">@{activeProf.username || activeProf.name.toLowerCase().split(' ')[0]}</code></span>
                     <span>•</span>
-                    <span>Comissão: <strong className="text-tb-rose-primary">Personalizada por Serviço</strong></span>
+                    <span>Comissão Oficial: <strong className="text-tb-rose-primary">{activeProf.commissionPercentage ?? 50}%</strong></span>
                   </div>
                 </div>
               </div>
@@ -724,7 +724,9 @@ export const ProfissionaisPage: React.FC = () => {
                     ) : (
                       filteredTransactions.map(tx => {
                         const commPerc = tx.commissionPercentage || activeProf.commissionPercentage || 50;
-                        const commVal = tx.commissionAmount || ((tx.paidAmount * commPerc) / 100);
+                        const isPkg = tx.description?.includes('CRÉDITO DE PACOTE') || false;
+                        const baseForComm = isPkg ? (tx.grossValue || tx.netValue) : (tx.status === 'pago' ? tx.netValue : tx.paidAmount || tx.netValue);
+                        const commVal = tx.commissionAmount || ((baseForComm * commPerc) / 100);
 
                         return (
                           <tr key={tx.id} className="hover:bg-tb-ivory/50 transition-colors">
@@ -866,9 +868,25 @@ export const ProfissionaisPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-tb-ivory border border-tb-rose-light/50 text-[11px] text-tb-brown-soft">
-                    <strong className="text-tb-brown-dark block mb-0.5">Comissão por Serviço:</strong>
-                    Calculada automaticamente de acordo com o percentual configurado em cada serviço do catálogo.
+                  <div>
+                    <label className="block font-semibold text-tb-brown-dark mb-1">
+                      % de Comissão da Profissional *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        required
+                        value={commissionPercentage}
+                        onChange={e => setCommissionPercentage(Number(e.target.value) || 0)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark text-xs sm:text-sm font-bold focus:ring-2 focus:ring-tb-rose-primary/20"
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-tb-gray-neutral font-bold">%</span>
+                    </div>
+                    <span className="text-[10px] text-tb-gray-neutral mt-0.5 block">
+                      Percentual fixado no admin para pagamentos e repasses diários
+                    </span>
                   </div>
                 </div>
 

@@ -11,8 +11,10 @@ import {
   CreditCard, 
   User, 
   Sparkles, 
-  Scale 
+  Scale,
+  Lock
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { Attendance, PaymentMethod } from '../../types';
 import { formatBRL } from '../../utils/formatters';
@@ -66,6 +68,8 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     clientPackages,
     getClientActivePackages 
   } = useData();
+  const { currentUser } = useAuth();
+  const isProfessional = currentUser?.role === 'profissional';
 
   // Selected client & date
   const targetClientId = attendance?.clientId || initialClientId || '';
@@ -144,7 +148,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     if (isOpen && relatedAttendances.length > 0) {
       const items: ServiceItemState[] = relatedAttendances.map(atd => {
         const srv = services.find(s => s.id === atd.serviceId);
-        const commPercent = atd.commissionPercentage || srv?.commissionPercentage || 50;
+        const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         const gross = atd.grossValue || srv?.price || 0;
         const discVal = atd.discountValue || 0;
         const discType = atd.discountType || 'fixed';
@@ -187,38 +191,64 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
   // Handle service gross value change (Autonomia da profissional)
   const handleServiceGrossChange = (attendanceId: string, newGross: number) => {
-    setServiceItems(prev => prev.map(item => {
-      if (item.attendanceId !== attendanceId) return item;
-      const validGross = Math.max(0, newGross);
-      const calculatedDiscount = item.discountType === 'percentage' 
-        ? (validGross * item.discountInput) / 100 
-        : Math.min(item.discountInput, validGross);
-      const net = item.isPackageCovered ? 0 : Math.max(0, validGross - calculatedDiscount);
-      return {
-        ...item,
-        grossValue: validGross,
-        netValue: net,
-        commissionAmount: ((item.isPackageCovered ? validGross : net) * item.commissionPercentage) / 100,
-      };
-    }));
+    setServiceItems(prev => {
+      const next = prev.map(item => {
+        if (item.attendanceId !== attendanceId) return item;
+        const validGross = Math.max(0, newGross);
+        const calculatedDiscount = item.discountType === 'percentage' 
+          ? (validGross * item.discountInput) / 100 
+          : Math.min(item.discountInput, validGross);
+        const net = item.isPackageCovered ? 0 : Math.max(0, validGross - calculatedDiscount);
+        return {
+          ...item,
+          grossValue: validGross,
+          netValue: net,
+          commissionAmount: ((item.isPackageCovered ? validGross : net) * item.commissionPercentage) / 100,
+        };
+      });
+      // Synchronize payment with new discounted total immediately
+      const newNetTotal = Math.max(0, next.filter(i => i.isSelected).reduce((acc, i) => acc + i.netValue, 0));
+      setPayments(curr => {
+        if (curr.length <= 1) {
+          return [{ ...(curr[0] || { id: 'p_1', method: 'pix', notes: '' }), amount: newNetTotal }];
+        }
+        const otherTotal = curr.slice(0, -1).reduce((acc, p) => acc + (p.amount || 0), 0);
+        const last = curr[curr.length - 1];
+        return [...curr.slice(0, -1), { ...last, amount: Math.max(0, newNetTotal - otherTotal) }];
+      });
+      return next;
+    });
   };
 
   // Handle service discount change
   const handleServiceDiscountChange = (attendanceId: string, discInput: number, discType: 'fixed' | 'percentage') => {
-    setServiceItems(prev => prev.map(item => {
-      if (item.attendanceId !== attendanceId) return item;
-      const calculatedDiscount = discType === 'percentage' 
-        ? (item.grossValue * discInput) / 100 
-        : discInput;
-      const net = item.isPackageCovered ? 0 : Math.max(0, item.grossValue - calculatedDiscount);
-      return {
-        ...item,
-        discountInput: discInput,
-        discountType: discType,
-        netValue: net,
-        commissionAmount: ((item.isPackageCovered ? item.grossValue : net) * item.commissionPercentage) / 100,
-      };
-    }));
+    setServiceItems(prev => {
+      const next = prev.map(item => {
+        if (item.attendanceId !== attendanceId) return item;
+        const calculatedDiscount = discType === 'percentage' 
+          ? (item.grossValue * discInput) / 100 
+          : discInput;
+        const net = item.isPackageCovered ? 0 : Math.max(0, item.grossValue - calculatedDiscount);
+        return {
+          ...item,
+          discountInput: discInput,
+          discountType: discType,
+          netValue: net,
+          commissionAmount: ((item.isPackageCovered ? item.grossValue : net) * item.commissionPercentage) / 100,
+        };
+      });
+      // Synchronize payment with new discounted total immediately
+      const newNetTotal = Math.max(0, next.filter(i => i.isSelected).reduce((acc, i) => acc + i.netValue, 0));
+      setPayments(curr => {
+        if (curr.length <= 1) {
+          return [{ ...(curr[0] || { id: 'p_1', method: 'pix', notes: '' }), amount: newNetTotal }];
+        }
+        const otherTotal = curr.slice(0, -1).reduce((acc, p) => acc + (p.amount || 0), 0);
+        const last = curr[curr.length - 1];
+        return [...curr.slice(0, -1), { ...last, amount: Math.max(0, newNetTotal - otherTotal) }];
+      });
+      return next;
+    });
   };
 
   // Toggle package credit for a service
@@ -566,28 +596,29 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                           {/* Discount */}
                           {!item.isPackageCovered && (
                             <div>
-                              <span className="text-[10px] text-tb-gray-neutral block text-right">Desconto</span>
-                              <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-tb-gray-neutral block text-right font-medium">Desconto</span>
+                              <div className="flex items-center gap-1 justify-end mt-0.5">
                                 <input
                                   type="number"
                                   step="0.01"
                                   min="0"
                                   value={item.discountInput}
                                   onChange={e => handleServiceDiscountChange(item.attendanceId, parseFloat(e.target.value) || 0, item.discountType)}
-                                  className="w-16 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-medium"
+                                  className="w-16 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-medium text-rose-700 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
+                                  placeholder="0,00"
                                 />
                                 <div className="flex rounded-md border border-tb-rose-light overflow-hidden shrink-0 text-[10px]">
                                   <button
                                     type="button"
                                     onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'fixed')}
-                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'fixed' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark'}`}
+                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'fixed' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
                                   >
                                     R$
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'percentage')}
-                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'percentage' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark'}`}
+                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'percentage' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
                                   >
                                     %
                                   </button>
@@ -682,14 +713,27 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                     Combine múltiplas formas (ex: Dinheiro + Pix + Cartão) ou registre pagamento parcial
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddPaymentRow}
-                  className="px-3 py-1.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5 text-tb-rose-primary" />
-                  Outra Forma
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayments([{ id: 'p_1', method: 'pix', amount: netTotal, notes: '' }]);
+                    }}
+                    className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl flex items-center gap-1 transition-all shadow-2xs"
+                    title="Preenche o painel de pagamento com o valor líquido total com desconto"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Valor Total c/ Desconto: {formatBRL(netTotal)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddPaymentRow}
+                    className="px-3 py-1.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-tb-rose-primary" />
+                    Outra Forma
+                  </button>
+                </div>
               </div>
 
               {/* Payments Rows */}

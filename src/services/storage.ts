@@ -12,7 +12,8 @@ import {
   ProductConsumption,
   Comanda,
   AppointmentDeletionLog,
-  ClientPackage
+  ClientPackage,
+  ScheduleBlock
 } from '../types';
 import { 
   getFirebaseInstance, 
@@ -51,7 +52,8 @@ export const STORAGE_KEYS = {
   SETTINGS: 'tb_settings_v3',
   LOGIN_ATTEMPTS: 'tb_login_attempts_v1',
   DELETED_APPOINTMENTS: 'tb_deleted_appointments_v1',
-  CLIENT_PACKAGES: 'tb_client_packages_v1'
+  CLIENT_PACKAGES: 'tb_client_packages_v1',
+  SCHEDULE_BLOCKS: 'tb_schedule_blocks_v1'
 };
 
 // Simple secure hash simulation for browser client-side storage
@@ -159,6 +161,76 @@ export const DEFAULT_USERS: User[] = [
   },
 ];
 
+// Official service commissions map from Desktop screenshots
+export const OFFICIAL_SERVICE_COMMISSIONS: Record<string, number> = {
+  // Cabelo
+  'Ultra gloss raiz': 50,
+  'Ultra gloss raiz + tratamento + escova': 50,
+  'Banho de brilho': 50,
+  'Camuflagem dos brilhos': 50,
+  'Ultra gloss cabelo todo': 50,
+  'Coloração/ tonalização': 50,
+  'Aplic.coloração da cliente': 50,
+  'Combo corte': 60,
+  'Corte masculino': 60,
+  'Corte franja': 60,
+  'Combo nutrição/hidratacao curto': 50,
+  'Combo nutrição/hidratacao médio': 50,
+  'Combo nutrição/hidratacao longo': 50,
+  'Combo reconstrução curto': 50,
+  'Combo reconstrução médio': 50,
+  'Combo reconstrução longo': 50,
+  'Ozônio terapia': 50,
+  'Escova curto': 60,
+  'Escova médio': 60,
+  'Escova longo': 60,
+  'Pacote de Cabelo (4 Escovas - 10% OFF)': 70,
+  'Cachos e ondas': 60,
+  'Pranchas': 60,
+  'Secagem simples': 60,
+  'Higienização': 50,
+  'Higienização especial': 50,
+  'Matização': 50,
+  'Mechas curto parcial': 50,
+  'Mechas médio parcial': 50,
+  'Mechas longo parcial': 50,
+  'Mechas curto global': 50,
+  'Mechas médio global': 50,
+  'Mechas longo global': 50,
+  'Progressiva/selagem curto': 50,
+  'Progressiva/selagem médio': 50,
+  'Progressiva/selagem longo': 50,
+  'Penteado': 60,
+
+  // Maquiagem
+  'Maquiagem': 70,
+  'Maquiagem mais cabelo': 70,
+
+  // Unhas
+  'Pacote de Unha (4 Manicures + 2 Pedicures)': 70,
+  'Manicure': 70,
+  'Pedicure': 70,
+  'Pedicure e manicure': 70,
+  'Esmaltação': 70,
+  'Blindagem mão': 70,
+  'Blindagem pé': 70,
+  'Remoção': 70,
+  'SPA': 70,
+  'Higienização especial (unhas)': 70,
+
+  // Estética / Depilação
+  'Depilação cava': 0,
+  'Depilação perna inteira': 0,
+  'Depilação meia perna': 0,
+  'Depilação axilas': 0,
+  'Depilação buço': 0,
+
+  // Sobrancelhas / Cílios
+  'Designer sobrancelha': 70,
+  'Micropigmentação': 0,
+  'Lash designer': 0,
+};
+
 export const INITIAL_SERVICES: Service[] = [
   // --- CABELEIREIRAS ---
   {
@@ -238,7 +310,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Combo de corte feminino completo com finalização',
     price: 150.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -248,7 +320,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Corte masculino moderno com tesoura e máquina',
     price: 70.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -258,7 +330,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Aparação, alinhamento e modelagem de franja',
     price: 50.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -338,7 +410,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Lavagem e escova modelada para cabelos curtos',
     price: 70.00,
     durationMinutes: 40,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -348,7 +420,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Lavagem e escova modelada para cabelos médios',
     price: 85.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -358,7 +430,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Lavagem e escova modelada para cabelos longos',
     price: 100.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -368,7 +440,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Pacote com 4 escovas modeladas com 10% de desconto. Transforma-se em crédito na conta da cliente para uso durante o mês.',
     price: 252.00,
     durationMinutes: 40,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
     isPackage: true,
     packageConfig: {
@@ -386,7 +458,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Finalização e modelagem térmica de cachos ou ondas com babyliss',
     price: 20.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -396,7 +468,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Alinhamento liso com prancha térmica de alta performance',
     price: 20.00,
     durationMinutes: 40,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -406,7 +478,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Lavagem e secagem simples com secador profissional',
     price: 50.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
   {
@@ -536,7 +608,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Maquiagem social completa para ocasiões e festas',
     price: 160.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -546,7 +618,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Combo completo de maquiagem profissional com produção de cabelo',
     price: 250.00,
     durationMinutes: 120,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -556,7 +628,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Penteado elaborado para eventos e ocasiões especiais',
     price: 250.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 60,
     isActive: true,
   },
 
@@ -568,7 +640,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Pacote mensal de unhas: 4 manicures e 2 pedicures com validade no mês por R$ 205,00. Transforma-se em crédito na conta da cliente.',
     price: 205.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
     isPackage: true,
     packageConfig: {
@@ -587,7 +659,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Cutilagem e esmaltação tradicional das mãos',
     price: 40.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -597,7 +669,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Cutilagem, lixamento e esmaltação tradicional dos pés',
     price: 45.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -607,7 +679,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Combo completo de cuidados para mãos e pés',
     price: 70.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -617,7 +689,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Aplicação e troca de esmalte simples',
     price: 25.00,
     durationMinutes: 15,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -627,7 +699,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Camada de proteção e fortalecimento em gel nas unhas das mãos',
     price: 120.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -637,7 +709,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Camada de proteção e fortalecimento em gel nas unhas dos pés',
     price: 90.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -647,7 +719,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Remoção cuidadosa de blindagem, gel ou esmaltação prolongada',
     price: 30.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -657,7 +729,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Spa dos pés completo com esfoliação, imersão relaxante e hidratação profunda',
     price: 130.00,
     durationMinutes: 120,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -667,7 +739,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Higienização e assepsia profunda especializada para unhas',
     price: 80.00,
     durationMinutes: 60,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
 
@@ -679,7 +751,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Depilação da virilha / cava com cera descartável higiênica',
     price: 70.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
   {
@@ -689,7 +761,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Depilação completa de pernas inteiras',
     price: 70.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
   {
@@ -699,7 +771,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Depilação de meia perna com cera morna',
     price: 45.00,
     durationMinutes: 20,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
   {
@@ -709,7 +781,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Depilação de axilas com cera higiênica e calmante pós-depilatório',
     price: 35.00,
     durationMinutes: 15,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
   {
@@ -719,7 +791,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Depilação facial delicada da região do buço',
     price: 25.00,
     durationMinutes: 10,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
   {
@@ -729,7 +801,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Design de sobrancelhas personalizado com pinça e alinhamento',
     price: 40.00,
     durationMinutes: 30,
-    commissionPercentage: 50,
+    commissionPercentage: 70,
     isActive: true,
   },
   {
@@ -739,7 +811,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Micropigmentação de sobrancelhas com técnica natural e durabilidade',
     price: 300.00,
     durationMinutes: 180,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
 
@@ -751,7 +823,7 @@ export const INITIAL_SERVICES: Service[] = [
     description: 'Extensão de cílios fio a fio personalizada com mapeamento do olhar',
     price: 160.00,
     durationMinutes: 240,
-    commissionPercentage: 50,
+    commissionPercentage: 0,
     isActive: true,
   },
 ];
@@ -767,6 +839,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_geovana',
     username: 'geovana',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_thalita',
@@ -777,6 +850,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: false, // Inativada conforme Requisito 15 (histórico preservado)
     userId: 'user_prof_thalita',
     username: 'thalita',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_talitha',
@@ -787,6 +861,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_talitha',
     username: 'talitha',
+    commissionPercentage: 50,
   },
 
   // --- ESTETICISTA ---
@@ -799,6 +874,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_rose',
     username: 'rose',
+    commissionPercentage: 50,
   },
 
   // --- CABELEIREIRAS ---
@@ -811,6 +887,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_elizama',
     username: 'elizama',
+    commissionPercentage: 50,
   },
   {
     id: 'prof_leila',
@@ -821,6 +898,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_leila',
     username: 'leila',
+    commissionPercentage: 50,
   },
 
   // --- LASH ---
@@ -833,6 +911,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_deborah',
     username: 'deborah',
+    commissionPercentage: 50,
   },
 
   // --- MAQUIAGEM ---
@@ -845,6 +924,7 @@ export const INITIAL_PROFESSIONALS: Professional[] = [
     isActive: true,
     userId: 'user_prof_thais',
     username: 'thais',
+    commissionPercentage: 50,
   },
 ];
 
@@ -881,7 +961,843 @@ export const INITIAL_SETTINGS: CompanySettings = {
   }
 };
 
-export const INITIAL_INVENTORY: InventoryItem[] = [];
+export const INITIAL_INVENTORY: InventoryItem[] = [
+  // Tintas LOWELL cores base coloração
+  {
+    id: 'prod_lowell_base_1_0',
+    name: 'Tinta Lowell Coloração Base 1.0 (Preto)',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_base_4_0',
+    name: 'Tinta Lowell Coloração Base 4.0 (Castanho Médio)',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_base_5_0',
+    name: 'Tinta Lowell Coloração Base 5.0 (Castanho Claro)',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_base_6_0',
+    name: 'Tinta Lowell Coloração Base 6.0 (Louro Escuro)',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_base_7_0',
+    name: 'Tinta Lowell Coloração Base 7.0 (Louro Médio)',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 9,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Color 10 LOWELL
+  {
+    id: 'prod_lowell_c10_3_0',
+    name: 'Color 10 Lowell 3.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 12,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_c10_4_0',
+    name: 'Color 10 Lowell 4.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 12,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_c10_5_0',
+    name: 'Color 10 Lowell 5.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_c10_6_0',
+    name: 'Color 10 Lowell 6.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 6,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_c10_7_0',
+    name: 'Color 10 Lowell 7.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_c10_8_0',
+    name: 'Color 10 Lowell 8.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // LOWELL Tonalizante
+  {
+    id: 'prod_lowell_ton_1_1',
+    name: 'Tonalizante Lowell 1.1',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_1_0',
+    name: 'Tonalizante Lowell 1.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_4_0',
+    name: 'Tonalizante Lowell 4.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_5_0',
+    name: 'Tonalizante Lowell 5.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_6_0',
+    name: 'Tonalizante Lowell 6.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 13,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_7_0',
+    name: 'Tonalizante Lowell 7.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_ton_10_0',
+    name: 'Tonalizante Lowell 10.0',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 10,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Super clareadores LOWELL Tonalizante
+  {
+    id: 'prod_lowell_sup_12_89',
+    name: 'Super Clareador Lowell Tonalizante 12.89',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_sup_12_11',
+    name: 'Super Clareador Lowell Tonalizante 12.11',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 9,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_sup_00s',
+    name: 'Super Clareador Lowell Tonalizante 00S',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 8,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Clean glow LOWELL Coloração
+  {
+    id: 'prod_lowell_cleanglow_00cg',
+    name: 'Clean Glow Lowell Coloração 0.0CG',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // NUANCE LOWELL Tonalizantes
+  {
+    id: 'prod_lowell_nuance_ton_9_89',
+    name: 'Nuance Lowell Tonalizante Perolados 9.89',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_nuance_ton_5_3',
+    name: 'Nuance Lowell Tonalizante Dourados 5.3',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_nuance_ton_6_3',
+    name: 'Nuance Lowell Tonalizante Dourados 6.3',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_nuance_ton_9_3',
+    name: 'Nuance Lowell Tonalizante Dourados 9.3',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Vermelhos LOWELL
+  {
+    id: 'prod_lowell_verm_8_26',
+    name: 'Lowell Vermelhos 8.26',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_verm_66_46',
+    name: 'Lowell Vermelhos 66.46',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Acobreados LOWELL
+  {
+    id: 'prod_lowell_acob_77_44',
+    name: 'Lowell Acobreados 77.44',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_acob_7_4',
+    name: 'Lowell Acobreados 7.4',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Acobreados marrons LOWELL
+  {
+    id: 'prod_lowell_acob_marrom_66_47',
+    name: 'Lowell Acobreados Marrons 66.47',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_acob_marrom_77_47',
+    name: 'Lowell Acobreados Marrons 77.47',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Marrons especiais LOWELL
+  {
+    id: 'prod_lowell_marrom_esp_6_72',
+    name: 'Lowell Marrons Especiais 6.72',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4, // 2 un + 2 un conforme enviado
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_marrom_esp_77_71',
+    name: 'Lowell Marrons Especiais 77.71',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Marrons LOWELL (Tonalizante)
+  {
+    id: 'prod_lowell_marrom_ton_5_7',
+    name: 'Lowell Marrons Tonalizante 5.7',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_marrom_ton_7_7',
+    name: 'Lowell Marrons Tonalizante 7.7',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Beges LOWELL (Tonalizante)
+  {
+    id: 'prod_lowell_bege_ton_8_31',
+    name: 'Lowell Beges Tonalizante 8.31',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Irisados e violetas LOWELL
+  {
+    id: 'prod_lowell_iris_viol_8_2',
+    name: 'Lowell Irisados e Violetas 8.2',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 4,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Acinzentados LOWELL
+  {
+    id: 'prod_lowell_acinz_5_11',
+    name: 'Lowell Acinzentados 5.11',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_acinz_6_1',
+    name: 'Lowell Acinzentados 6.1',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_acinz_7_1',
+    name: 'Lowell Acinzentados 7.1',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Dourados acobreados LOWELL
+  {
+    id: 'prod_lowell_dour_acob_8_34',
+    name: 'Lowell Dourados Acobreados 8.34',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // NUANCE LOWELL Coloração
+  {
+    id: 'prod_lowell_nuance_col_10_89',
+    name: 'Nuance Lowell Coloração Perolados 10.89',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 5,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_nuance_col_0_03',
+    name: 'Nuance Lowell Coloração Dourado 0.03',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Marrons quentes LOWELL
+  {
+    id: 'prod_lowell_marrom_quente_7_73',
+    name: 'Lowell Marrons Quentes 7.73',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_marrom_quente_7_35',
+    name: 'Lowell Marrons Quentes 7.35',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Marrom perolado LOWELL
+  {
+    id: 'prod_lowell_marrom_perol_7_72',
+    name: 'Lowell Marrom Perolado 7.72',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Marrons LOWELL Coloração
+  {
+    id: 'prod_lowell_marrom_col_8_7',
+    name: 'Lowell Marrons Coloração 8.7',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_lowell_marrom_col_5_07',
+    name: 'Lowell Marrons Coloração 5.07',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Beges LOWELL Coloração
+  {
+    id: 'prod_lowell_bege_col_9_31',
+    name: 'Lowell Beges Coloração 9.31',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Dourados acobreados LOWELL Coloração
+  {
+    id: 'prod_lowell_dour_acob_col_8_34',
+    name: 'Lowell Dourados Acobreados Coloração 8.34',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 2,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Irisados LOWELL
+  {
+    id: 'prod_lowell_iris_7_21',
+    name: 'Lowell Irisados 7.21',
+    brand: 'Lowell',
+    category: 'Tintas & Colorações',
+    currentStock: 3,
+    minStock: 2,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // IGORA coloração
+  {
+    id: 'prod_igora_8_77',
+    name: 'IGORA Coloração 8.77',
+    brand: 'Schwarzkopf',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Color 10 Kione
+  {
+    id: 'prod_kione_c10_5_0',
+    name: 'Color 10 Kione 5.0',
+    brand: 'Kione',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Kione express
+  {
+    id: 'prod_kione_express',
+    name: 'Kione Express',
+    brand: 'Kione',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Kione intenso
+  {
+    id: 'prod_kione_intenso',
+    name: 'Kione Intenso',
+    brand: 'Kione',
+    category: 'Tintas & Colorações',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Armário das Tintas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Ultra gloss
+  {
+    id: 'prod_ultra_gloss',
+    name: 'Ultra Gloss',
+    brand: 'Lowell',
+    category: 'Finalizadores & Óleos',
+    currentStock: 3,
+    minStock: 1,
+    unit: 'un',
+    location: 'Bancada de Finalização',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+
+  // Águas Oxigenadas (Ox)
+  {
+    id: 'prod_ox_wella_6v_1l',
+    name: 'Água Oxigenada Wella 1L 6 Volumes',
+    brand: 'Wella',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_wella_13v_1l',
+    name: 'Água Oxigenada Wella 1L 13 Volumes',
+    brand: 'Wella',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_wella_20v_1l',
+    name: 'Água Oxigenada Wella 1L 20 Volumes',
+    brand: 'Wella',
+    category: 'Água Oxigenada',
+    currentStock: 2,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_lowell_20v_900ml',
+    name: 'Água Oxigenada Lowell 900ml 20 Volumes',
+    brand: 'Lowell',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_lowell_30v_900ml',
+    name: 'Água Oxigenada Lowell 900ml 30 Volumes',
+    brand: 'Lowell',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_lowell_40v_900ml',
+    name: 'Água Oxigenada Lowell 900ml 40 Volumes',
+    brand: 'Lowell',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_kione_10v_1l',
+    name: 'Água Oxigenada Kione 1L 10 Volumes',
+    brand: 'Kione',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'prod_ox_dicorlle_30v_900ml',
+    name: 'Água Oxigenada Dicorlle 900ml 30 Volumes',
+    brand: 'Dicorlle',
+    category: 'Água Oxigenada',
+    currentStock: 1,
+    minStock: 1,
+    unit: 'un',
+    location: 'Lavatório / Armário Ox',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
 
 export function getTodayDate(): string {
   const now = new Date();
@@ -1020,6 +1936,52 @@ export function ensureCleanProductionState(): void {
     syncCollectionToFirestore('users', DEFAULT_USERS);
   }
 
+  // Ensure all existing professionals have commission percentage synchronized
+  const hasProfCommissionSync = localStorage.getItem('tb_prof_commission_sync_v1');
+  if (!hasProfCommissionSync) {
+    const rawProfs = localStorage.getItem(STORAGE_KEYS.PROFESSIONALS);
+    if (rawProfs) {
+      try {
+        const profs: Professional[] = JSON.parse(rawProfs);
+        const updated = profs.map(p => ({
+          ...p,
+          commissionPercentage: p.commissionPercentage ?? 50,
+        }));
+        localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(updated));
+        idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, updated);
+        syncCollectionToFirestore('professionals', updated);
+      } catch (e) {
+        console.error('Error syncing prof commissions:', e);
+      }
+    }
+    localStorage.setItem('tb_prof_commission_sync_v1', 'true');
+  }
+
+  // Ensure all official service commission percentages are synchronized from desktop screenshots
+  const SERVICE_COMMISSIONS_SYNC_FLAG = 'tb_service_commissions_official_v2';
+  const hasServiceCommSync = localStorage.getItem(SERVICE_COMMISSIONS_SYNC_FLAG);
+  if (!hasServiceCommSync) {
+    const rawServices = localStorage.getItem(STORAGE_KEYS.SERVICES);
+    if (rawServices) {
+      try {
+        const servicesList: Service[] = JSON.parse(rawServices);
+        const updated = servicesList.map(s => {
+          const officialPct = OFFICIAL_SERVICE_COMMISSIONS[s.name];
+          if (officialPct !== undefined) {
+            return { ...s, commissionPercentage: officialPct };
+          }
+          return s;
+        });
+        localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(updated));
+        idbStorage.setItem(STORAGE_KEYS.SERVICES, updated);
+        syncCollectionToFirestore('services', updated);
+      } catch (e) {
+        console.error('Error syncing service commissions:', e);
+      }
+    }
+    localStorage.setItem(SERVICE_COMMISSIONS_SYNC_FLAG, 'true');
+  }
+
   // Ensure admin user and password hash are 100% active and uncorrupted
   const hasAdminSync = localStorage.getItem(ADMIN_AUTH_SYNC_FLAG);
   if (!hasAdminSync) {
@@ -1055,6 +2017,29 @@ export function ensureCleanProductionState(): void {
   if (!hasCleanedInventory) {
     storageService.cleanupExampleInventory();
     localStorage.setItem('tb_inventory_examples_cleanup_v1', 'true');
+  }
+
+  // Populate official stock inventory items requested by user
+  const OFFICIAL_STOCK_INVENTORY_FLAG = 'tb_official_stock_inventory_v1';
+  const hasOfficialStock = localStorage.getItem(OFFICIAL_STOCK_INVENTORY_FLAG);
+  if (!hasOfficialStock) {
+    let existingInventory: InventoryItem[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+      if (raw) existingInventory = JSON.parse(raw);
+    } catch {
+      existingInventory = [];
+    }
+
+    const existingIds = new Set(existingInventory.map(i => i.id));
+    const mergedInventory = [
+      ...existingInventory,
+      ...INITIAL_INVENTORY.filter(i => !existingIds.has(i.id))
+    ];
+    safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mergedInventory));
+    idbStorage.setItem(STORAGE_KEYS.INVENTORY, mergedInventory);
+    localStorage.setItem(OFFICIAL_STOCK_INVENTORY_FLAG, 'true');
+    syncCollectionToFirestore('inventory', mergedInventory);
   }
 }
 
@@ -1145,10 +2130,10 @@ export const storageService = {
       services = INITIAL_SERVICES;
       safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     }
-    // Ensure commission percentage is present
+    // Ensure commission percentage is present and matches official catalog
     return services.map(s => ({
       ...s,
-      commissionPercentage: s.commissionPercentage ?? 50,
+      commissionPercentage: OFFICIAL_SERVICE_COMMISSIONS[s.name] ?? s.commissionPercentage ?? 50,
     }));
   },
 
@@ -1171,7 +2156,11 @@ export const storageService = {
       safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
     }
     // Requisito 15: Thálita inativada operacionalmente preservando integridade histórica
-    profs = profs.map(p => (p.id === 'prof_thalita' || p.username === 'thalita' ? { ...p, isActive: false } : p));
+    profs = profs.map(p => ({
+      ...p,
+      isActive: (p.id === 'prof_thalita' || p.username === 'thalita') ? false : p.isActive,
+      commissionPercentage: p.commissionPercentage ?? 50,
+    }));
     return profs;
   },
 
@@ -1454,6 +2443,17 @@ export const storageService = {
     syncCollectionToFirestore('clientPackages', packages);
   },
 
+  getScheduleBlocks(): ScheduleBlock[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULE_BLOCKS);
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  saveScheduleBlocks(blocks: ScheduleBlock[]): void {
+    safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(blocks));
+    idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, blocks);
+    syncCollectionToFirestore('scheduleBlocks', blocks);
+  },
+
   /**
    * Hydrate collections from High-Capacity IndexedDB into memory/localStorage
    */
@@ -1473,6 +2473,7 @@ export const storageService = {
         STORAGE_KEYS.USERS,
         STORAGE_KEYS.SETTINGS,
         STORAGE_KEYS.CLIENT_PACKAGES,
+        STORAGE_KEYS.SCHEDULE_BLOCKS,
       ];
 
       let restoredAny = false;
@@ -1541,6 +2542,8 @@ export const storageService = {
       const inventory = this.getInventory();
       const users = this.getUsers();
       const settings = this.getSettings();
+      const clientPackages = this.getClientPackages();
+      const scheduleBlocks = this.getScheduleBlocks();
 
       await Promise.all([
         syncCollectionToFirestore('clients', clients),
@@ -1553,6 +2556,8 @@ export const storageService = {
         syncCollectionToFirestore('inventory', inventory),
         syncCollectionToFirestore('users', users),
         syncCollectionToFirestore('settings', [{ id: 'general', ...settings }]),
+        syncCollectionToFirestore('clientPackages', clientPackages),
+        syncCollectionToFirestore('scheduleBlocks', scheduleBlocks),
       ]);
 
       const totalRecords =
@@ -1565,6 +2570,8 @@ export const storageService = {
         expenses.length +
         inventory.length +
         users.length +
+        clientPackages.length +
+        scheduleBlocks.length +
         1;
 
       return {
@@ -1610,6 +2617,8 @@ export const storageService = {
         remoteInventory,
         remoteUsers,
         remoteSettings,
+        remotePackages,
+        remoteBlocks,
       ] = await Promise.all([
         fetchCollectionFromFirestore<Client>('clients'),
         fetchCollectionFromFirestore<Service>('services'),
@@ -1621,6 +2630,8 @@ export const storageService = {
         fetchCollectionFromFirestore<InventoryItem>('inventory'),
         fetchCollectionFromFirestore<User>('users'),
         fetchCollectionFromFirestore<any>('settings'),
+        fetchCollectionFromFirestore<ClientPackage>('clientPackages'),
+        fetchCollectionFromFirestore<ScheduleBlock>('scheduleBlocks'),
       ]);
 
       let totalRecords = 0;
@@ -1679,6 +2690,16 @@ export const storageService = {
         await idbStorage.setItem(STORAGE_KEYS.USERS, remoteUsers);
         totalRecords += remoteUsers.length;
       }
+      if (remotePackages && remotePackages.length > 0) {
+        safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(remotePackages));
+        await idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, remotePackages);
+        totalRecords += remotePackages.length;
+      }
+      if (remoteBlocks && remoteBlocks.length > 0) {
+        safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(remoteBlocks));
+        await idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, remoteBlocks);
+        totalRecords += remoteBlocks.length;
+      }
       if (remoteSettings && remoteSettings.length > 0) {
         const gen = remoteSettings.find((s: any) => s.id === 'general') || remoteSettings[0];
         if (gen) {
@@ -1729,6 +2750,7 @@ export const storageService = {
       consumptions: this.getConsumptions(),
       comandas: this.getComandas(),
       clientPackages: this.getClientPackages(),
+      scheduleBlocks: this.getScheduleBlocks(),
       settings: this.getSettings(),
     };
     return JSON.stringify(data, null, 2);
@@ -1749,6 +2771,7 @@ export const storageService = {
       if (parsed.consumptions) this.saveConsumptions(parsed.consumptions);
       if (parsed.comandas) this.saveComandas(parsed.comandas);
       if (parsed.clientPackages) this.saveClientPackages(parsed.clientPackages);
+      if (parsed.scheduleBlocks) this.saveScheduleBlocks(parsed.scheduleBlocks);
       if (parsed.settings) this.saveSettings(parsed.settings);
       return true;
     } catch (e) {
@@ -1767,6 +2790,7 @@ export const storageService = {
     this.saveExpenses([]);
     this.saveInventory(INITIAL_INVENTORY);
     this.saveClientPackages([]);
+    this.saveScheduleBlocks([]);
     this.saveUsers(DEFAULT_USERS);
 
     DEFAULT_USERS.forEach(u => {

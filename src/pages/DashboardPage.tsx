@@ -412,7 +412,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 Seus Atendimentos Recentes & Repasses Líquidos
               </h3>
               <p className="text-xs text-tb-gray-neutral">
-                Fórmula transparente: Valor Bruto − Desconto = Base × Sua Comissão % = Seu Repasse
+                Fórmula transparente: Valor Bruto − Desconto = Base Líquida × % Comissão do Serviço = Seu Repasse Líquido
               </p>
             </div>
 

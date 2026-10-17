@@ -22,12 +22,14 @@ import {
   Eye,
   SlidersHorizontal,
   Trash2,
-  X
+  X,
+  Lock
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Appointment, AppointmentStatus, Professional } from '../types';
+import { Appointment, AppointmentStatus, Professional, ScheduleBlock } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday } from '../utils/formatters';
+import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
 
 interface AgendaPageProps {
   onOpenNewAppointment: (initialDate?: string, initialTime?: string, initialClientId?: string, initialProfessionalId?: string) => void;
@@ -88,9 +90,11 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     professionals, 
     clients,
     attendances,
+    scheduleBlocks,
     updateAppointmentStatus, 
     cancelAppointment, 
     deleteAppointment,
+    deleteScheduleBlock,
     startAttendance 
   } = useData();
 
@@ -132,6 +136,15 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   // Selected appointment popover tooltip
   const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Schedule Block Modal & Detail States
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [blockModalInitial, setBlockModalInitial] = useState<{
+    date?: string;
+    time?: string;
+    professionalId?: string;
+  }>({});
+  const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null);
 
   // Open Comandas Count
   const openComandasCount = useMemo(() => {
@@ -348,6 +361,21 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
           </div>
 
           <button
+            onClick={() => {
+              setBlockModalInitial({
+                date: selectedDate,
+                professionalId: selectedProfessional !== 'todos' ? selectedProfessional : (myProfId || '')
+              });
+              setIsBlockModalOpen(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-1.5 shrink-0"
+            title="Bloquear intervalo na agenda de uma profissional"
+          >
+            <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+            Bloquear Horário
+          </button>
+
+          <button
             onClick={() => onOpenNewAppointment(selectedDate)}
             className="px-4 py-2 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-bold shadow-soft hover:shadow-premium transition-all flex items-center justify-center gap-1.5 shrink-0"
           >
@@ -490,6 +518,8 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
             {displayedProfessionals.map(prof => {
               // Appointments for this professional
               const profAppointments = dayAppointments.filter(a => a.professionalId === prof.id);
+              // Schedule blocks for this professional
+              const profBlocks = scheduleBlocks.filter(b => b.date === selectedDate && b.professionalId === prof.id);
 
               return (
                 <div key={prof.id} className="relative h-full pointer-events-none border-r border-transparent">
@@ -557,6 +587,59 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                               Agenda
                             </span>
                           )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Schedule Blocks (Bloqueios de Horário com Justificativa) */}
+                  {profBlocks.map(block => {
+                    const startMins = timeToMinutes(block.startTime);
+                    const dur = Math.max(25, block.durationMinutes);
+                    const topPixels = Math.max(0, ((startMins - START_OF_DAY_MINUTES) / 30) * SLOT_HEIGHT);
+                    const heightPixels = Math.max(38, (dur / 30) * SLOT_HEIGHT - 3);
+
+                    return (
+                      <div
+                        key={block.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedBlock(block);
+                        }}
+                        style={{
+                          top: `${topPixels}px`,
+                          height: `${heightPixels}px`,
+                        }}
+                        className="absolute left-1 right-1 rounded-xl p-2.5 text-white shadow-md pointer-events-auto cursor-pointer border-l-4 border-l-amber-500 bg-gradient-to-r from-[#2c1d18] via-[#3d271f] to-[#241712] backdrop-blur-xs flex flex-col justify-between overflow-hidden group select-none transition-all hover:ring-2 hover:ring-amber-400 z-10"
+                        title={`Horário Bloqueado: ${block.reason} (${block.startTime} às ${block.endTime})`}
+                      >
+                        {/* Diagonal stripes texture overlay */}
+                        <div 
+                          className="absolute inset-0 opacity-25 pointer-events-none"
+                          style={{
+                            backgroundImage: 'repeating-linear-gradient(45deg, #000, #000 8px, transparent 8px, transparent 16px)'
+                          }}
+                        />
+
+                        <div className="relative z-10">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[11px] font-extrabold text-amber-300 tracking-tight flex items-center gap-1">
+                              <Lock className="w-3 h-3 stroke-[2.5] text-amber-400 shrink-0" />
+                              {block.startTime} - {block.endTime}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-400 text-amber-950 uppercase tracking-tighter">
+                              BLOQUEIO
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] font-bold text-white truncate mt-1">
+                            {block.reason}
+                          </p>
+                        </div>
+
+                        <div className="relative z-10 flex items-center justify-between text-[9px] text-amber-200/80 pt-1 border-t border-white/10">
+                          <span>{block.durationMinutes} min</span>
+                          <span className="underline group-hover:text-amber-100 font-bold">Ver detalhes</span>
                         </div>
                       </div>
                     );
@@ -897,6 +980,107 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
               >
                 <Trash2 className="w-4 h-4 stroke-[2.5]" />
                 Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Block Creation Modal */}
+      <ScheduleBlockModal
+        isOpen={isBlockModalOpen}
+        onClose={() => setIsBlockModalOpen(false)}
+        initialDate={blockModalInitial.date || selectedDate}
+        initialTime={blockModalInitial.time}
+        initialProfessionalId={blockModalInitial.professionalId}
+      />
+
+      {/* Schedule Block Details & Unblock Modal */}
+      {selectedBlock && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-tb-white rounded-3xl p-6 border border-amber-300 w-full max-w-md space-y-4 shadow-premium">
+            <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700">
+                  <Lock className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                    Bloqueio de Agenda
+                  </h3>
+                  <p className="text-[11px] text-tb-brown-soft">
+                    Detalhes do período indisponibilizado
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedBlock(null)}
+                className="p-1.5 rounded-xl text-tb-gray-neutral hover:bg-tb-ivory hover:text-tb-brown-dark transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Block Information */}
+            <div className="bg-tb-ivory/80 rounded-2xl p-4 border border-tb-rose-light/50 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Profissional:</span>
+                <span className="font-bold text-tb-brown-dark">{selectedBlock.professionalName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Data:</span>
+                <span className="font-semibold text-tb-brown-dark">{formatDateBR(selectedBlock.date)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-tb-brown-soft font-medium">Horário:</span>
+                <span className="font-bold text-amber-700">
+                  {selectedBlock.startTime} às {selectedBlock.endTime} ({selectedBlock.durationMinutes} min)
+                </span>
+              </div>
+              <div className="pt-2 border-t border-tb-rose-light/30">
+                <span className="text-tb-brown-soft font-medium block mb-1">Justificativa:</span>
+                <p className="font-bold text-tb-brown-dark bg-white p-2.5 rounded-xl border border-amber-200">
+                  {selectedBlock.reason}
+                </p>
+              </div>
+              {selectedBlock.notes && (
+                <div className="pt-1">
+                  <span className="text-tb-brown-soft font-medium block mb-0.5">Observações:</span>
+                  <p className="italic text-tb-brown-soft bg-white/70 p-2 rounded-xl text-[11px]">
+                    {selectedBlock.notes}
+                  </p>
+                </div>
+              )}
+              {selectedBlock.createdBy && (
+                <div className="text-[10px] text-tb-gray-neutral pt-1">
+                  Registrado por: {selectedBlock.createdBy}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-tb-rose-light/30">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Deseja realmente desbloquear o horário de ${selectedBlock.professionalName} (${selectedBlock.startTime} às ${selectedBlock.endTime})?`)) {
+                    deleteScheduleBlock(selectedBlock.id);
+                    setSelectedBlock(null);
+                  }
+                }}
+                className="px-4 py-2.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition-all flex items-center gap-1.5"
+                title="Remover bloqueio e liberar horário na agenda"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                Desbloquear Horário
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedBlock(null)}
+                className="px-5 py-2.5 text-xs font-bold bg-tb-brown-dark hover:bg-black text-white rounded-xl shadow-soft transition-all"
+              >
+                Fechar
               </button>
             </div>
           </div>

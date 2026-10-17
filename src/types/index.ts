@@ -132,6 +132,20 @@ export interface AppointmentDeletionLog {
   deletedAt: string;
 }
 
+export interface ScheduleBlock {
+  id: string;
+  professionalId: string;
+  professionalName: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  durationMinutes: number;
+  reason: string; // Justificativa obrigatória (ex: "Almoço", "Consulta médica", "Compromisso pessoal", "Treinamento")
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
 export interface Attendance {
   id: string;
   appointmentId?: string;

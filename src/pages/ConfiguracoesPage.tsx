@@ -103,6 +103,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
   const [profUsername, setProfUsername] = useState('');
   const [profPassword, setProfPassword] = useState('');
   const [profColor, setProfColor] = useState('#C58F9B');
+  const [profCommissionPercentage, setProfCommissionPercentage] = useState(50);
   const [profError, setProfError] = useState<string | null>(null);
   const [profSuccess, setProfSuccess] = useState<string | null>(null);
 
@@ -263,6 +264,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     setProfUsername('');
     setProfPassword('');
     setProfColor('#C58F9B');
+    setProfCommissionPercentage(50);
     setProfError(null);
     setIsProfFormOpen(true);
   };
@@ -275,6 +277,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
     setProfUsername(p.username || '');
     setProfPassword('');
     setProfColor(p.color || '#C58F9B');
+    setProfCommissionPercentage(p.commissionPercentage ?? 50);
     setProfError(null);
     setIsProfFormOpen(true);
   };
@@ -298,6 +301,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
         specialty: profSpecialty.trim(),
         phone: profPhone.trim(),
         color: profColor,
+        commissionPercentage: profCommissionPercentage,
         username: profUsername.trim(),
         password: profPassword.trim() || undefined,
       });
@@ -316,6 +320,7 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
         specialty: profSpecialty.trim() || 'Especialista',
         phone: profPhone.trim(),
         color: profColor,
+        commissionPercentage: profCommissionPercentage,
         username: profUsername.trim(),
         password: profPassword.trim(),
       });
@@ -484,6 +489,25 @@ export const ConfiguracoesPage: React.FC<ConfiguracoesPageProps> = ({
                   onChange={e => setProfPassword(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-tb-brown-dark mb-1">
+                  % de Comissão da Profissional *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={profCommissionPercentage}
+                    onChange={e => setProfCommissionPercentage(Number(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30 font-bold"
+                  />
+                  <span className="absolute right-3.5 top-2 text-xs text-tb-gray-neutral font-bold">%</span>
+                </div>
+                <span className="text-[10px] text-tb-gray-neutral mt-0.5 block">Repasse diário oficial</span>
               </div>
             </div>
 

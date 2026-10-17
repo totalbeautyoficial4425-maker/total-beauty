@@ -38,9 +38,18 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
 }) => {
   const { currentUser } = useAuth();
   const isProfessional = currentUser?.role === 'profissional';
-  const { services, toggleServiceActive } = useData();
+  const { services, professionals, toggleServiceActive } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('todas');
+
+  const loggedProf = isProfessional
+    ? professionals.find(
+        p =>
+          p.id === currentUser?.professionalId ||
+          p.userId === currentUser?.id ||
+          p.name.toLowerCase() === currentUser?.name?.toLowerCase()
+      )
+    : null;
 
   const filteredServices = useMemo(() => {
     return services.filter(s => {
@@ -197,12 +206,21 @@ export const ServicosPage: React.FC<ServicosPageProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-2 px-3 py-1.5 bg-tb-rose-blush/40 rounded-xl border border-tb-rose-light/40 flex items-center justify-between text-[11px]">
-                  <span className="text-tb-brown-soft font-medium">Comissão da Profissional:</span>
-                  <span className="font-bold text-tb-brown-dark">
-                    {service.commissionPercentage ?? 50}% ({formatBRL(((service.price * (service.commissionPercentage ?? 50)) / 100))})
-                  </span>
-                </div>
+                {(() => {
+                  const commRate = service.commissionPercentage ?? 50;
+                  const commValue = (service.price * commRate) / 100;
+
+                  return (
+                    <div className="mt-2 px-3 py-1.5 bg-tb-rose-blush/40 rounded-xl border border-tb-rose-light/40 flex items-center justify-between text-[11px]">
+                      <span className="text-tb-brown-soft font-medium">
+                        Comissão da Profissional:
+                      </span>
+                      <span className="font-bold text-tb-brown-dark">
+                        {commRate}% ({formatBRL(commValue)})
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Card footer actions */}
                 {!isProfessional ? (

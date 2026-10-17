@@ -17,7 +17,8 @@ import {
   ComandaPayment,
   AppointmentDeletionLog,
   ClientPackage,
-  PackageUsageLog
+  PackageUsageLog,
+  ScheduleBlock
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
 import { getFirebaseInstance, subscribeToCollection, deleteDocumentFromFirestore } from '../services/firebase';
@@ -60,6 +61,7 @@ interface DataContextType {
   consumptions: ProductConsumption[];
   comandas: Comanda[];
   clientPackages: ClientPackage[];
+  scheduleBlocks: ScheduleBlock[];
   lowStockCount: number;
   outOfStockCount: number;
   totalInventoryValue: number;
@@ -110,6 +112,17 @@ interface DataContextType {
   deleteAppointment: (id: string, reason: string) => { success: boolean; error?: string };
   cleanupDeborahAttendances: () => { success: boolean; message: string };
   clearExampleInventory: () => { success: boolean; message: string };
+
+  // Schedule Blocks (Bloqueio de Agenda)
+  addScheduleBlock: (data: { 
+    professionalId: string; 
+    date: string; 
+    startTime: string; 
+    endTime: string; 
+    reason: string; 
+    notes?: string 
+  }) => { success: boolean; block?: ScheduleBlock; error?: string };
+  deleteScheduleBlock: (id: string) => { success: boolean; error?: string };
 
   // Attendances & Execution
   startAttendance: (appointmentId?: string, clientId?: string, serviceId?: string, professionalId?: string) => { success: boolean; attendance?: Attendance; error?: string };
@@ -219,6 +232,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [consumptions, setConsumptions] = useState<ProductConsumption[]>([]);
   const [comandas, setComandas] = useState<Comanda[]>([]);
   const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
+  const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
   const [settings, setSettings] = useState<CompanySettings>(storageService.getSettings());
 
   const loadAllData = useCallback(() => {
@@ -237,6 +251,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadedConsumptions = storageService.getConsumptions();
     const loadedComandas = storageService.getComandas();
     const loadedClientPackages = storageService.getClientPackages();
+    const loadedScheduleBlocks = storageService.getScheduleBlocks();
     const loadedSettings = storageService.getSettings();
 
     // Auto-heal / sync: ensure every finished/paid attendance has its matching PaymentTransaction with professionalId & commissionAmount
@@ -248,30 +263,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
+    const profMap = new Map<string, Professional>();
+    loadedProfessionals.forEach(p => {
+      profMap.set(p.id, p);
+      if (p.name) profMap.set(p.name.toLowerCase(), p);
+      if (p.username) profMap.set(p.username.toLowerCase(), p);
+    });
+
     const repairedPayments = loadedPayments.map(p => {
-      if (p.attendanceId && !p.professionalId) {
-        const atd = loadedAttendances.find(a => a.id === p.attendanceId);
-        if (atd) {
-          hasRepaired = true;
-          return {
-            ...p,
-            professionalId: atd.professionalId,
-            professionalName: atd.professionalName,
-            commissionPercentage: atd.commissionPercentage || 50,
-            commissionAmount: atd.commissionAmount || ((p.paidAmount * (atd.commissionPercentage || 50)) / 100),
-          };
-        }
+      const atd = p.attendanceId ? loadedAttendances.find(a => a.id === p.attendanceId) : undefined;
+      const profId = p.professionalId || atd?.professionalId;
+      const prof = profId ? profMap.get(profId) : (p.professionalName ? profMap.get(p.professionalName.toLowerCase()) : undefined);
+      const srv = atd?.serviceId 
+        ? loadedServices.find(s => s.id === atd.serviceId) 
+        : (p.serviceName ? loadedServices.find(s => s.name.toLowerCase() === (p.serviceName || '').toLowerCase()) : undefined);
+      const expectedCommPercent = srv?.commissionPercentage ?? atd?.commissionPercentage ?? p.commissionPercentage ?? 50;
+      const isPkgCovered = atd?.isPackageCovered || p.description?.includes('CRÉDITO DE PACOTE') || false;
+      const baseForComm = isPkgCovered ? (p.grossValue || p.netValue) : (p.paidAmount || p.netValue);
+      const expectedCommAmount = (baseForComm * expectedCommPercent) / 100;
+
+      let changed = false;
+      const updated = { ...p };
+
+      if (!updated.professionalId && prof?.id) {
+        updated.professionalId = prof.id;
+        updated.professionalName = prof.name;
+        changed = true;
       }
-      return p;
+
+      if (updated.commissionPercentage !== expectedCommPercent) {
+        updated.commissionPercentage = expectedCommPercent;
+        changed = true;
+      }
+
+      if (Math.abs((updated.commissionAmount || 0) - expectedCommAmount) > 0.05) {
+        updated.commissionAmount = expectedCommAmount;
+        changed = true;
+      }
+
+      if (changed) {
+        hasRepaired = true;
+      }
+      return updated;
     });
 
     const missingPayments: PaymentTransaction[] = [];
     loadedAttendances.forEach(atd => {
       if ((atd.paymentStatus === 'pago' || atd.paymentStatus === 'parcial') && !paymentMapByAttendance.has(atd.id)) {
         hasRepaired = true;
-        const commPercent = atd.commissionPercentage || 50;
+        const prof = atd.professionalId ? profMap.get(atd.professionalId) : undefined;
+        const srv = atd.serviceId ? loadedServices.find(s => s.id === atd.serviceId) : undefined;
+        const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         const atdPaidAmount = atd.paidAmount || atd.netValue;
-        const commAmount = atd.commissionAmount || ((atdPaidAmount * commPercent) / 100);
+        const baseForComm = atd.isPackageCovered ? atd.grossValue : atdPaidAmount;
+        const commAmount = atd.commissionAmount || ((baseForComm * commPercent) / 100);
         missingPayments.push({
           id: generateId('pay'),
           attendanceId: atd.id,
@@ -281,7 +326,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           serviceName: atd.serviceName,
           professionalId: atd.professionalId,
           professionalName: atd.professionalName,
-          description: `Atendimento — ${atd.serviceName} (${atd.professionalName})`,
+          description: atd.isPackageCovered
+            ? `Atendimento — ${atd.serviceName} (${atd.professionalName}) via CRÉDITO DE PACOTE`
+            : `Atendimento — ${atd.serviceName} (${atd.professionalName})`,
           grossValue: atd.grossValue || atd.netValue,
           discount: atd.discountValue || 0,
           discountPercentage: atd.grossValue > 0 ? Math.round((atd.discountValue / atd.grossValue) * 100) : 0,
@@ -315,6 +362,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setConsumptions(loadedConsumptions);
     setComandas(loadedComandas);
     setClientPackages(loadedClientPackages);
+    setScheduleBlocks(loadedScheduleBlocks);
     setSettings(loadedSettings);
   }, []);
 
@@ -371,6 +419,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }),
       subscribeToCollection<ClientPackage>('clientPackages', (items) => {
         if (items.length > 0) setClientPackages(items);
+      }),
+      subscribeToCollection<ScheduleBlock>('scheduleBlocks', (items) => {
+        if (items.length > 0) setScheduleBlocks(items);
       }),
     ];
 
@@ -600,6 +651,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextProfessionals = professionals.map(p => (p.id === id ? { ...p, ...data, userId: targetUserId || p.userId } : p));
     setProfessionals(nextProfessionals);
     storageService.saveProfessionals(nextProfessionals);
+
+    // If commission percentage changed, synchronize active attendances and transactions for this professional
+    if (data.commissionPercentage !== undefined) {
+      const newPerc = data.commissionPercentage;
+      const nextAttendances = attendances.map(a => {
+        if (a.professionalId === id && !a.finishedAt) {
+          const disc = a.discountValue || 0;
+          const net = Math.max(0, a.grossValue - disc);
+          const base = a.isPackageCovered ? a.grossValue : net;
+          return {
+            ...a,
+            commissionPercentage: newPerc,
+            commissionAmount: (base * newPerc) / 100,
+          };
+        }
+        return a;
+      });
+      setAttendances(nextAttendances);
+      storageService.saveAttendances(nextAttendances);
+
+      const nextPayments = payments.map(p => {
+        if (p.professionalId === id) {
+          const isPkg = p.description?.includes('CRÉDITO DE PACOTE') || false;
+          const base = isPkg ? (p.grossValue || p.netValue) : (p.paidAmount || p.netValue);
+          return {
+            ...p,
+            commissionPercentage: newPerc,
+            commissionAmount: (base * newPerc) / 100,
+          };
+        }
+        return p;
+      });
+      setPayments(nextPayments);
+      storageService.savePayments(nextPayments);
+    }
+
     return { success: true };
   };
 
@@ -644,10 +731,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const monthGross = monthTransactions.reduce((acc, p) => acc + (p.grossValue || 0), 0);
     const monthNet = monthTransactions.reduce((acc, p) => acc + (p.netValue || 0), 0);
 
+    const prof = professionals.find(p => p.id === professionalId);
+    const profComm = prof?.commissionPercentage ?? 50;
+
     // Pending commissions (attendances concluded but client hasn't fully paid)
     const pendingTransactions = myTransactions.filter(p => p.status !== 'pago');
     const pendingCommissions = pendingTransactions.reduce((acc, p) => {
-      const commPercent = p.commissionPercentage || 50;
+      const commPercent = p.commissionPercentage || profComm;
       return acc + ((p.pendingAmount * commPercent) / 100);
     }, 0);
 
@@ -696,6 +786,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hasConflict: true,
           conflictingAppointment: apt,
           message: `Conflito de horário! A profissional ${apt.professionalName} já possui compromisso (${apt.serviceName} com ${apt.clientName}) das ${apt.startTime} às ${apt.endTime}.`
+        };
+      }
+    }
+
+    // Check against active schedule blocks (Bloqueio de Agenda)
+    const activeBlocks = scheduleBlocks.filter(b => 
+      b.date === date && 
+      b.professionalId === professionalId
+    );
+
+    for (const block of activeBlocks) {
+      if (isTimeOverlapping(startTime, endTime, block.startTime, block.endTime)) {
+        return {
+          hasConflict: true,
+          message: `Horário Bloqueado! A profissional ${block.professionalName} possui bloqueio de agenda neste horário: "${block.reason}" (${block.startTime} às ${block.endTime}).`
         };
       }
     }
@@ -869,6 +974,74 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       success: true,
       message: `${res.deletedItemsCount} item(ns) de exemplo foram removidos do estoque com sucesso.`
     };
+  };
+
+  const addScheduleBlock = (data: {
+    professionalId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    reason: string;
+    notes?: string;
+  }) => {
+    if (!data.professionalId) return { success: false, error: 'Selecione a profissional.' };
+    if (!data.date) return { success: false, error: 'Selecione a data.' };
+    if (!data.startTime) return { success: false, error: 'Informe o horário inicial.' };
+    if (!data.endTime) return { success: false, error: 'Informe o horário final.' };
+    if (!data.reason || !data.reason.trim()) return { success: false, error: 'A justificativa do bloqueio é obrigatória.' };
+
+    const [sh, sm] = data.startTime.split(':').map(Number);
+    const [eh, em] = data.endTime.split(':').map(Number);
+    const startMins = (sh || 0) * 60 + (sm || 0);
+    const endMins = (eh || 0) * 60 + (em || 0);
+
+    if (endMins <= startMins) {
+      return { success: false, error: 'O horário final deve ser posterior ao horário inicial.' };
+    }
+
+    const prof = professionals.find(p => p.id === data.professionalId);
+    const profName = prof?.name || 'Profissional';
+    const duration = endMins - startMins;
+
+    // Check overlap with another schedule block for same professional on same date
+    const overlappingBlock = scheduleBlocks.find(b => 
+      b.date === data.date && 
+      b.professionalId === data.professionalId &&
+      isTimeOverlapping(data.startTime, data.endTime, b.startTime, b.endTime)
+    );
+    if (overlappingBlock) {
+      return { 
+        success: false, 
+        error: `Já existe um bloqueio para ${profName} neste período: "${overlappingBlock.reason}" (${overlappingBlock.startTime} às ${overlappingBlock.endTime}).` 
+      };
+    }
+
+    const newBlock: ScheduleBlock = {
+      id: generateId('block'),
+      professionalId: data.professionalId,
+      professionalName: profName,
+      date: data.date,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      durationMinutes: duration,
+      reason: data.reason.trim(),
+      notes: data.notes?.trim() || undefined,
+      createdBy: 'Sistema Total Beauty',
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextBlocks = [...scheduleBlocks, newBlock];
+    setScheduleBlocks(nextBlocks);
+    storageService.saveScheduleBlocks(nextBlocks);
+    return { success: true, block: newBlock };
+  };
+
+  const deleteScheduleBlock = (id: string) => {
+    const nextBlocks = scheduleBlocks.filter(b => b.id !== id);
+    setScheduleBlocks(nextBlocks);
+    storageService.saveScheduleBlocks(nextBlocks);
+    deleteDocumentFromFirestore('scheduleBlocks', id);
+    return { success: true };
   };
 
   const checkMultiConflict = (
@@ -1093,9 +1266,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const finishedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Calculate commission directly from the service
+    // Calculate commission directly from the service percentage (Admin configured)
     const srv = services.find(s => s.id === atd.serviceId);
-    const commPercent = srv?.commissionPercentage ?? 50;
+    const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
     
     // Commission is calculated based on received payment (if paid) or net value
     const effectiveCommission = options.paymentStatus === 'pago'
@@ -1235,8 +1408,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (update) {
         finishedAttendanceIds.push(atd.id);
         const srv = services.find(s => s.id === atd.serviceId);
-        const prof = professionals.find(p => p.id === atd.professionalId);
-        const commPercent = atd.commissionPercentage || prof?.commissionPercentage || srv?.commissionPercentage || 50;
+        const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         
         // Fair commission calculation: if session is covered by prepaid package, commission is based on gross value
         const commBase = update.isPackageCovered ? update.grossValue : update.netValue;
@@ -1967,6 +2139,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         consumptions,
         comandas,
         clientPackages,
+        scheduleBlocks,
         lowStockCount,
         outOfStockCount,
         totalInventoryValue,
@@ -1992,6 +2165,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteAppointment,
         cleanupDeborahAttendances,
         clearExampleInventory,
+        addScheduleBlock,
+        deleteScheduleBlock,
         startAttendance,
         finishAttendance,
         getComandaByClientAndDate,

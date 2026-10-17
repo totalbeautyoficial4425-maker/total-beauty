@@ -98,7 +98,7 @@ export const MinhaProducaoPage: React.FC = () => {
       tx.grossValue.toFixed(2),
       tx.discount.toFixed(2),
       tx.netValue.toFixed(2),
-      `${tx.commissionPercentage || 50}%`,
+      `${loggedProf?.commissionPercentage || tx.commissionPercentage || 50}%`,
       (tx.commissionAmount || 0).toFixed(2),
       (Math.max(0, tx.netValue - (tx.commissionAmount || 0))).toFixed(2),
       tx.status.toUpperCase()
@@ -140,7 +140,7 @@ export const MinhaProducaoPage: React.FC = () => {
             Minha Produção — {loggedProf?.name || currentUser?.name}
           </h2>
           <p className="text-xs text-tb-gray-neutral mt-1">
-            {loggedProf?.specialty || 'Profissional'} • Comissões transparentes calculadas sobre o valor do serviço após descontos
+            {loggedProf?.specialty || 'Profissional'} • Comissões calculadas conforme as porcentagens oficiais de cada serviço no catálogo • Repasses sobre o valor após descontos
           </p>
         </div>
 
@@ -291,7 +291,7 @@ export const MinhaProducaoPage: React.FC = () => {
           <div className="flex items-center gap-2 text-tb-brown-dark font-medium">
             <Sparkles className="w-4 h-4 text-tb-rose-primary shrink-0" />
             <span>
-              <strong>Regra de Cálculo Transparente:</strong> [Valor Bruto] − [Desconto da Cliente] = <strong>[Base de Cálculo]</strong> × [% Comissão] = <strong>[Seu Repasse Líquido]</strong>
+              <strong>Regra de Cálculo Transparente (Admin):</strong> [Valor Bruto] − [Desconto] = <strong>[Base de Cálculo]</strong> × [% Comissão do Serviço] = <strong>[Seu Repasse Líquido]</strong>
             </span>
           </div>
           <span className="text-[11px] text-tb-brown-soft">
@@ -328,6 +328,7 @@ export const MinhaProducaoPage: React.FC = () => {
                   const disc = tx.discount || 0;
                   const discPct = tx.discountPercentage || (gross > 0 && disc > 0 ? Math.round((disc / gross) * 100) : 0);
                   const salonAmount = Math.max(0, tx.netValue - (tx.commissionAmount || 0));
+                  const profCommission = tx.commissionPercentage || 50;
 
                   return (
                     <tr key={tx.id} className="hover:bg-tb-ivory/50 transition-colors">
@@ -355,7 +356,7 @@ export const MinhaProducaoPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-tb-beige-light text-tb-brown-dark">
-                          {tx.commissionPercentage || 50}%
+                          {profCommission}%
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
