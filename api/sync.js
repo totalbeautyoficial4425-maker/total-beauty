@@ -82,39 +82,75 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Empty body' });
       }
 
-      // Fetch existing data from blob to perform safe server-side merge
-      let existingData = {};
-      try {
-        const existingRes = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
-          headers: { 'Cache-Control': 'no-cache, no-store' }
-        });
-        if (existingRes.ok) {
-          existingData = await existingRes.json();
+      // Fetch existing data from blob with retry to perform safe server-side merge
+      let existingData = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const existingRes = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
+            headers: { 'Cache-Control': 'no-cache, no-store' }
+          });
+          if (existingRes.ok) {
+            existingData = await existingRes.json();
+            break;
+          }
+        } catch (err) {
+          console.warn(`Attempt ${attempt} to fetch existing data failed:`, err);
         }
-      } catch (err) {
-        console.warn('Failed to fetch existing data for merge:', err);
+      }
+
+      // If existing data cannot be loaded, do NOT overwrite with incoming data to prevent catastrophic loss!
+      if (!existingData) {
+        return res.status(503).json({ success: false, error: 'Cannot verify cloud state. Aborting push to prevent data loss.' });
       }
 
       const now = new Date().toISOString();
       const version = Date.now().toString();
 
+      const mergedClients = mergeArrayById(existingData.clients, body.clients);
+      const mergedServices = mergeArrayById(existingData.services, body.services);
+      const mergedProfessionals = mergeArrayById(existingData.professionals, body.professionals);
+      const mergedAppointments = mergeArrayById(existingData.appointments, body.appointments);
+      const mergedAttendances = mergeArrayById(existingData.attendances, body.attendances);
+      const mergedComandas = mergeArrayById(existingData.comandas, body.comandas);
+      const mergedPayments = mergeArrayById(existingData.payments, body.payments);
+      const mergedExpenses = mergeArrayById(existingData.expenses, body.expenses);
+      const mergedInventory = mergeArrayById(existingData.inventory, body.inventory);
+      const mergedConsumptions = mergeArrayById(existingData.consumptions, body.consumptions);
+      const mergedClientPackages = mergeArrayById(existingData.clientPackages, body.clientPackages);
+      const mergedScheduleBlocks = mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks);
+      const mergedUsers = mergeArrayById(existingData.users, body.users);
+
+      // CRITICAL INTEGRITY CHECK: Under NO circumstances can appointments, comandas, attendances, or clients shrink!
+      if (existingData.appointments?.length && mergedAppointments.length < existingData.appointments.length) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: appointments cannot be reduced.' });
+      }
+      if (existingData.comandas?.length && mergedComandas.length < existingData.comandas.length) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: comandas cannot be reduced.' });
+      }
+      if (existingData.attendances?.length && mergedAttendances.length < existingData.attendances.length) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: attendances cannot be reduced.' });
+      }
+      if (existingData.clients?.length && mergedClients.length < existingData.clients.length) {
+        return res.status(400).json({ success: false, error: 'Integrity check failed: clients cannot be reduced.' });
+      }
+
       const mergedPayload = {
         version,
         updatedAt: now,
         exportedAt: now,
-        clients: mergeArrayById(existingData.clients, body.clients),
-        services: mergeArrayById(existingData.services, body.services),
-        professionals: mergeArrayById(existingData.professionals, body.professionals),
-        appointments: mergeArrayById(existingData.appointments, body.appointments),
-        attendances: mergeArrayById(existingData.attendances, body.attendances),
-        comandas: mergeArrayById(existingData.comandas, body.comandas),
-        payments: mergeArrayById(existingData.payments, body.payments),
-        expenses: mergeArrayById(existingData.expenses, body.expenses),
-        inventory: mergeArrayById(existingData.inventory, body.inventory),
-        consumptions: mergeArrayById(existingData.consumptions, body.consumptions),
-        clientPackages: mergeArrayById(existingData.clientPackages, body.clientPackages),
-        scheduleBlocks: mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks),
-        users: mergeArrayById(existingData.users, body.users),
+        clients: mergedClients,
+        services: mergedServices,
+        professionals: mergedProfessionals,
+        appointments: mergedAppointments,
+        attendances: mergedAttendances,
+        comandas: mergedComandas,
+        payments: mergedPayments,
+        expenses: mergedExpenses,
+        inventory: mergedInventory,
+        consumptions: mergedConsumptions,
+        clientPackages: mergedClientPackages,
+        scheduleBlocks: mergedScheduleBlocks,
+        users: mergedUsers,
         settings: { ...(existingData.settings || {}), ...(body.settings || {}) },
       };
 
@@ -125,6 +161,19 @@ export default async function handler(req, res) {
         contentType: 'application/json',
         token: process.env.BLOB_READ_WRITE_TOKEN,
       });
+
+      // Keep redundant backup file on blob storage
+      try {
+        await put('total_beauty_db_backup.json', JSON.stringify(mergedPayload), {
+          access: 'public',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+      } catch (backupErr) {
+        console.warn('Backup put failed (non-fatal):', backupErr);
+      }
 
       return res.status(200).json({
         success: true,

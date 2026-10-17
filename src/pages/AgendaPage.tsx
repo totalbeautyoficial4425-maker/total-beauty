@@ -31,6 +31,7 @@ import { useAuth } from '../context/AuthContext';
 import { Appointment, AppointmentStatus, Professional, ScheduleBlock } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday } from '../utils/formatters';
 import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
+import { getTodayDate } from '../services/storage';
 
 interface AgendaPageProps {
   onOpenNewAppointment: (initialDate?: string, initialTime?: string, initialClientId?: string, initialProfessionalId?: string) => void;
@@ -113,10 +114,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   }, [professionals]);
 
   const [viewMode, setViewMode] = useState<ViewMode>('grade_profissionais');
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getTodayDate());
 
   // Filters
   const [selectedProfessional, setSelectedProfessional] = useState<string>('todos');
@@ -153,21 +151,26 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     return attendances.filter(a => !a.finishedAt || a.paymentStatus !== 'pago').length;
   }, [attendances]);
 
+  const addDaysToDateStr = (dateStr: string, days: number): string => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d + days);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // Navigate date
   const handlePrevDate = () => {
-    const d = new Date(selectedDate + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(prev => addDaysToDateStr(prev, -1));
   };
 
   const handleNextDate = () => {
-    const d = new Date(selectedDate + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(prev => addDaysToDateStr(prev, 1));
   };
 
   const handleToday = () => {
-    setSelectedDate(new Date().toISOString().split('T')[0]);
+    setSelectedDate(getTodayDate());
   };
 
   // Filtered professionals to display in columns
@@ -185,6 +188,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   // Appointments for the selected date
   const dayAppointments = useMemo(() => {
     return appointments.filter(apt => {
+      if (apt.deletedAt) return false;
       if (apt.date !== selectedDate) return false;
       if (selectedStatus !== 'todos' && apt.status !== selectedStatus) return false;
       if (searchQuery.trim()) {

@@ -15,12 +15,13 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { formatBRL, formatDateBR, downloadCSV } from '../utils/formatters';
+import { getTodayDate } from '../services/storage';
 
 export const RelatoriosPage: React.FC = () => {
   const { clients, appointments, attendances, payments, expenses, professionals, services } = useData();
   const [period, setPeriod] = useState<'mes_atual' | 'ultimos_30' | 'ano' | 'tudo'>('mes_atual');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDate();
   const currentMonthPrefix = todayStr.substring(0, 7);
   const currentYearPrefix = todayStr.substring(0, 4);
 

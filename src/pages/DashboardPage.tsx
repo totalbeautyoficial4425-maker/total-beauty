@@ -35,6 +35,7 @@ import {
   parseBirthMonthDay
 } from '../utils/formatters';
 import { Appointment, NavigationPage } from '../types';
+import { getTodayDate } from '../services/storage';
 
 interface DashboardPageProps {
   onNavigate: (page: NavigationPage) => void;
@@ -85,7 +86,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     );
     const profId = prof?.id || currentUser.professionalId || '';
     const myMetrics = getProfessionalMetrics(profId);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     const allTodayAppointments = appointments
       .filter(a => a.date === today && !['cancelado', 'nao_compareceu'].includes(a.status))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -521,7 +522,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }
 
   const [chartPeriod, setChartPeriod] = useState<'7dias' | 'mes' | 'tudo'>('mes');
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDate();
 
   // Prepare chart data dynamically from real data
   // 1. Revenue over time

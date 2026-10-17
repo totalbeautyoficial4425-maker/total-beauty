@@ -300,14 +300,23 @@ export const cloudSyncService = {
    */
   async pushToCloud(): Promise<{ success: boolean; error?: string }> {
     if (isPushing) return { success: false, error: 'Push in progress' };
+
+    // SAFETY GUARD: Never push if local database is not yet hydrated!
+    const localClients = storageService.getClients();
+    const localProfs = storageService.getProfessionals();
+    if (localClients.length === 0 || localProfs.length === 0) {
+      console.warn('Skipping pushToCloud: local database is not yet hydrated.');
+      return { success: false, error: 'Database not hydrated' };
+    }
+
     isPushing = true;
 
     try {
       const payload = {
         exportedAt: new Date().toISOString(),
-        clients: storageService.getClients(),
+        clients: localClients,
         services: storageService.getServices(),
-        professionals: storageService.getProfessionals(),
+        professionals: localProfs,
         appointments: storageService.getAppointments(),
         attendances: storageService.getAttendances(),
         comandas: storageService.getComandas(),

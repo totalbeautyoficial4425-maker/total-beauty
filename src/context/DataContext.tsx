@@ -948,8 +948,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     storageService.saveAppointmentDeletionLog(deletionLog);
 
-    // 2. Remove appointment from state and persistent storage
-    const nextAppointments = appointments.filter(a => a.id !== id);
+    // 2. Mark appointment as deleted (soft delete with audit tombstone)
+    const nextAppointments = appointments.map(a => {
+      if (a.id === id) {
+        return {
+          ...a,
+          status: 'cancelado' as AppointmentStatus,
+          cancellationReason: reason.trim(),
+          deletedAt: nowIso,
+          updatedAt: nowIso,
+        };
+      }
+      return a;
+    });
     setAppointments(nextAppointments);
     storageService.saveAppointments(nextAppointments);
     deleteDocumentFromFirestore('appointments', id);

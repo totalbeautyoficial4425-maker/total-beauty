@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { formatBRL, formatDateBR, downloadCSV } from '../utils/formatters';
+import { getTodayDate } from '../services/storage';
 
 export const MinhaProducaoPage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -55,7 +56,7 @@ export const MinhaProducaoPage: React.FC = () => {
 
   // Filter transactions based on date filter and search query
   const filteredTransactions = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     const currentMonth = today.substring(0, 7);
 
     return profMetrics.myTransactions.filter(tx => {
@@ -104,7 +105,7 @@ export const MinhaProducaoPage: React.FC = () => {
       tx.status.toUpperCase()
     ]);
 
-    downloadCSV(`minha_producao_${currentUser?.username || 'prof'}_${new Date().toISOString().split('T')[0]}`, headers, rows);
+    downloadCSV(`minha_producao_${currentUser?.username || 'prof'}_${getTodayDate()}`, headers, rows);
   };
 
   const handlePrint = () => {

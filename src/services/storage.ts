@@ -2524,9 +2524,32 @@ export const storageService = {
           } else if (Array.isArray(idbVal)) {
             try {
               const localArr = JSON.parse(localRaw);
-              if (Array.isArray(localArr) && idbVal.length > localArr.length) {
-                safeSetItem(key, JSON.stringify(idbVal));
-                restoredAny = true;
+              if (Array.isArray(localArr)) {
+                // Merge by id so neither local nor IndexedDB loses any items
+                const map = new Map<string, any>();
+                localArr.forEach((item: any) => {
+                  if (item && item.id) map.set(item.id, item);
+                });
+                idbVal.forEach((item: any) => {
+                  if (item && item.id) {
+                    if (!map.has(item.id)) {
+                      map.set(item.id, item);
+                    } else {
+                      const localItem = map.get(item.id);
+                      const localTime = new Date(localItem.updatedAt || localItem.createdAt || 0).getTime();
+                      const idbTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+                      if (idbTime >= localTime) {
+                        map.set(item.id, item);
+                      }
+                    }
+                  }
+                });
+                const merged = Array.from(map.values());
+                if (merged.length !== localArr.length || JSON.stringify(merged) !== JSON.stringify(localArr)) {
+                  safeSetItem(key, JSON.stringify(merged));
+                  await idbStorage.setItem(key, merged);
+                  restoredAny = true;
+                }
               }
             } catch {
               // ignore parse error

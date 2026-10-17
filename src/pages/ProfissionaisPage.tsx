@@ -29,6 +29,7 @@ import {
 import { useData } from '../context/DataContext';
 import { Professional } from '../types';
 import { formatBRL, formatDateBR } from '../utils/formatters';
+import { getTodayDate } from '../services/storage';
 
 export const ProfissionaisPage: React.FC = () => {
   const { 
@@ -104,7 +105,7 @@ export const ProfissionaisPage: React.FC = () => {
   // Filtered transactions for selected professional
   const filteredTransactions = useMemo(() => {
     if (!selectedMetrics) return [];
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     const currentMonth = today.substring(0, 7);
 
     return selectedMetrics.myTransactions.filter(t => {
