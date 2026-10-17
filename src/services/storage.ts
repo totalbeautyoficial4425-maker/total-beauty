@@ -2012,34 +2012,26 @@ export function ensureCleanProductionState(): void {
     localStorage.setItem('tb_deborah_examples_cleanup_v1', 'true');
   }
 
-  // Cleanup example stock/inventory items if not already cleaned
-  const hasCleanedInventory = localStorage.getItem('tb_inventory_examples_cleanup_v1');
-  if (!hasCleanedInventory) {
-    storageService.cleanupExampleInventory();
-    localStorage.setItem('tb_inventory_examples_cleanup_v1', 'true');
+  // Ensure official stock inventory items requested by user are always present
+  let existingInventory: InventoryItem[] = [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+    if (raw) existingInventory = JSON.parse(raw);
+  } catch {
+    existingInventory = [];
   }
 
-  // Populate official stock inventory items requested by user
-  const OFFICIAL_STOCK_INVENTORY_FLAG = 'tb_official_stock_inventory_v1';
-  const hasOfficialStock = localStorage.getItem(OFFICIAL_STOCK_INVENTORY_FLAG);
-  if (!hasOfficialStock) {
-    let existingInventory: InventoryItem[] = [];
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
-      if (raw) existingInventory = JSON.parse(raw);
-    } catch {
-      existingInventory = [];
-    }
-
+  if (!Array.isArray(existingInventory) || existingInventory.length === 0) {
+    safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+    idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+  } else {
     const existingIds = new Set(existingInventory.map(i => i.id));
-    const mergedInventory = [
-      ...existingInventory,
-      ...INITIAL_INVENTORY.filter(i => !existingIds.has(i.id))
-    ];
-    safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mergedInventory));
-    idbStorage.setItem(STORAGE_KEYS.INVENTORY, mergedInventory);
-    localStorage.setItem(OFFICIAL_STOCK_INVENTORY_FLAG, 'true');
-    syncCollectionToFirestore('inventory', mergedInventory);
+    const missingItems = INITIAL_INVENTORY.filter(i => !existingIds.has(i.id));
+    if (missingItems.length > 0) {
+      const mergedInventory = [...existingInventory, ...missingItems];
+      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mergedInventory));
+      idbStorage.setItem(STORAGE_KEYS.INVENTORY, mergedInventory);
+    }
   }
 }
 
@@ -2257,15 +2249,25 @@ export const storageService = {
   },
 
   getInventory(): InventoryItem[] {
+    ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
     if (!raw) {
-      return [];
+      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+      return INITIAL_INVENTORY;
     }
     try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      const parsed: InventoryItem[] = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+        idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+        return INITIAL_INVENTORY;
+      }
+      return parsed;
     } catch {
-      return [];
+      safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+      idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
+      return INITIAL_INVENTORY;
     }
   },
 

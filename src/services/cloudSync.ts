@@ -152,8 +152,9 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.inventory)) {
         const localInv = storageService.getInventory();
         const mergedInv = mergeById(localInv, cloudData.inventory);
-        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mergedInv));
-        idbStorage.setItem(STORAGE_KEYS.INVENTORY, mergedInv);
+        const finalInv = mergedInv.length > 0 ? mergedInv : localInv;
+        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(finalInv));
+        idbStorage.setItem(STORAGE_KEYS.INVENTORY, finalInv);
       }
 
       if (Array.isArray(cloudData.consumptions)) {

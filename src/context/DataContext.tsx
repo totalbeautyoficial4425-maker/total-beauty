@@ -237,9 +237,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [settings, setSettings] = useState<CompanySettings>(storageService.getSettings());
 
   const loadAllData = useCallback(() => {
-    // Proactive cleanup of Deborah's example training attendances and example inventory
+    // Proactive cleanup of Deborah's example training attendances
     storageService.cleanupDeborahExampleData();
-    storageService.cleanupExampleInventory();
 
     const loadedClients = storageService.getClients();
     const loadedServices = storageService.getServices();
