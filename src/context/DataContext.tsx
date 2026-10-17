@@ -127,6 +127,7 @@ interface DataContextType {
 
   // Attendances & Execution
   startAttendance: (appointmentId?: string, clientId?: string, serviceId?: string, professionalId?: string) => { success: boolean; attendance?: Attendance; error?: string };
+  revertAttendance: (attendanceId: string) => { success: boolean; error?: string };
   finishAttendance: (attendanceId: string, options: { 
     grossValue: number; 
     discountValue: number; 
@@ -1256,6 +1257,70 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, attendance: newAttendance };
   };
 
+  const revertAttendance = (attendanceId: string): { success: boolean; error?: string } => {
+    const atd = attendances.find(a => a.id === attendanceId);
+    if (!atd) {
+      return { success: false, error: 'Atendimento não encontrado.' };
+    }
+
+    // 1. If tied to an appointment, restore appointment status back to 'agendado'
+    // Preserving all appointment information (client, service, professional, date, time, notes)
+    if (atd.appointmentId) {
+      const nextAppointments = appointments.map(apt => {
+        if (apt.id === atd.appointmentId) {
+          return {
+            ...apt,
+            status: 'agendado' as const,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return apt;
+      });
+      setAppointments(nextAppointments);
+      storageService.saveAppointments(nextAppointments);
+    }
+
+    // 2. Remove the attendance from attendances state and storage
+    const nextAttendances = attendances.filter(a => a.id !== attendanceId);
+    setAttendances(nextAttendances);
+    storageService.saveAttendances(nextAttendances);
+    storageService.deleteFromCloud('attendances', attendanceId);
+
+    // 3. Clean up comanda: remove this attendance from any comanda
+    const nextComandas = comandas
+      .map(c => ({
+        ...c,
+        attendanceIds: c.attendanceIds.filter(id => id !== attendanceId)
+      }))
+      .filter(c => c.attendanceIds.length > 0);
+    setComandas(nextComandas);
+    storageService.saveComandas(nextComandas);
+
+    // 4. Remove any product consumption records linked to this attendance
+    const consumptionsToRemove = consumptions.filter(c => c.attendanceId === attendanceId);
+    if (consumptionsToRemove.length > 0) {
+      consumptionsToRemove.forEach(c => {
+        storageService.deleteFromCloud('consumptions', c.id);
+      });
+      const nextConsumptions = consumptions.filter(c => c.attendanceId !== attendanceId);
+      setConsumptions(nextConsumptions);
+      storageService.saveConsumptions(nextConsumptions);
+    }
+
+    // 5. Remove any payment transaction linked to this attendance
+    const paymentsToRemove = payments.filter(p => p.attendanceId === attendanceId);
+    if (paymentsToRemove.length > 0) {
+      paymentsToRemove.forEach(p => {
+        storageService.deleteFromCloud('payments', p.id);
+      });
+      const nextPayments = payments.filter(p => p.attendanceId !== attendanceId);
+      setPayments(nextPayments);
+      storageService.savePayments(nextPayments);
+    }
+
+    return { success: true };
+  };
+
   const finishAttendance = (
     attendanceId: string, 
     options: {
@@ -2176,6 +2241,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addScheduleBlock,
         deleteScheduleBlock,
         startAttendance,
+        revertAttendance,
         finishAttendance,
         getComandaByClientAndDate,
         finishUnifiedComanda,

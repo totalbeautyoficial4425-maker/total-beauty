@@ -23,7 +23,8 @@ import {
   SlidersHorizontal,
   Trash2,
   X,
-  Lock
+  Lock,
+  RotateCcw
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -95,7 +96,8 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     cancelAppointment, 
     deleteAppointment,
     deleteScheduleBlock,
-    startAttendance 
+    startAttendance,
+    revertAttendance 
   } = useData();
 
   const isProfessional = currentUser?.role === 'profissional';
@@ -752,6 +754,28 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   Iniciar
+                </button>
+              )}
+
+              {/* Desfazer início / Reverter atendimento se iniciado por engano */}
+              {popoverAppointment.status === 'em_atendimento' && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Deseja desfazer o início do atendimento de "${popoverAppointment.clientName}" e voltar para "Agendado"? O horário e agendamento permanecerão intactos na agenda.`)) {
+                      const atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
+                      if (atd) {
+                        revertAttendance(atd.id);
+                      } else {
+                        updateAppointmentStatus(popoverAppointment.id, 'agendado');
+                      }
+                      setPopoverAppointment(null);
+                    }
+                  }}
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
+                  title="Desfazer início de atendimento errôneo e voltar para agendado"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Desfazer Início
                 </button>
               )}
 

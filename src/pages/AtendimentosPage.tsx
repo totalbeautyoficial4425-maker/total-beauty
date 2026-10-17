@@ -13,7 +13,8 @@ import {
   Receipt,
   Check,
   ChevronRight,
-  Filter
+  Filter,
+  RotateCcw
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +39,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     services, 
     professionals, 
     startAttendance,
+    revertAttendance,
     updateAppointmentStatus 
   } = useData();
 
@@ -67,6 +69,28 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
 
   // Consumption Modal
   const [attendanceForConsumption, setAttendanceForConsumption] = useState<Attendance | null>(null);
+
+  // Revert attendance state
+  const [revertConfirmAttendance, setRevertConfirmAttendance] = useState<Attendance | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleConfirmRevert = (atd: Attendance) => {
+    const res = revertAttendance(atd.id);
+    if (res.success) {
+      setFeedbackMessage({
+        type: 'success',
+        text: `Atendimento de "${atd.serviceName}" foi revertido com sucesso! O agendamento retornou para a lista de aguardando início sem alterar a agenda.`,
+      });
+      setRevertConfirmAttendance(null);
+      setTimeout(() => setFeedbackMessage(null), 5000);
+    } else {
+      setFeedbackMessage({
+        type: 'error',
+        text: res.error || 'Erro ao reverter atendimento.',
+      });
+      setTimeout(() => setFeedbackMessage(null), 5000);
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -209,6 +233,26 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Reversion Feedback Notification */}
+      {feedbackMessage && (
+        <div className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in shadow-soft ${
+          feedbackMessage.type === 'success'
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            : 'bg-rose-50 border-rose-300 text-rose-950'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">{feedbackMessage.type === 'success' ? '✓' : '⚠️'}</span>
+            <span>{feedbackMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackMessage(null)}
+            className="text-xs opacity-60 hover:opacity-100 font-bold px-2 py-0.5"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Ad-hoc Attendance Box */}
       {isStartingNew && (
@@ -481,6 +525,19 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                               Produtos
                             </button>
 
+                            {/* Voltar para Solicitação / Reverter Início Errôneo */}
+                            {(!isProfessional || isMine) && (
+                              <button
+                                type="button"
+                                onClick={() => setRevertConfirmAttendance(atd)}
+                                className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                title="Voltar atendimento para solicitação/agendamento caso tenha sido iniciado por engano"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Voltar Atendimento
+                              </button>
+                            )}
+
                             {/* Individual Finish Button (Authorized Professional or Admin) */}
                             {!atd.finishedAt && (!isProfessional || isMine) && (
                               <button
@@ -526,6 +583,59 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
         onClose={() => setAttendanceForConsumption(null)}
         attendance={attendanceForConsumption}
       />
+
+      {/* Revert Attendance Confirmation Modal */}
+      {revertConfirmAttendance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-tb-brown-dark/50 backdrop-blur-xs animate-fade-in">
+          <div className="bg-tb-white rounded-3xl p-6 max-w-md w-full border border-tb-rose-light/50 shadow-premium space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-serif-brand text-lg font-bold text-tb-brown-dark">
+                  Voltar Atendimento para Agendamento
+                </h3>
+                <p className="text-xs text-tb-gray-neutral">
+                  Reverter início errôneo na comanda
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-2 text-xs text-amber-950">
+              <p>
+                Deseja realmente voltar o atendimento de <strong className="text-tb-brown-dark">{revertConfirmAttendance.clientName}</strong> no serviço <strong className="text-tb-brown-dark">{revertConfirmAttendance.serviceName}</strong>?
+              </p>
+              <div className="text-[11px] text-amber-900 bg-white/80 p-2.5 rounded-xl border border-amber-200/70 space-y-1">
+                <p className="font-bold flex items-center gap-1 text-emerald-800">
+                  <span>✓</span> A agenda e a cliente permanecem 100% intactas
+                </p>
+                <p className="text-tb-brown-soft leading-relaxed">
+                  O horário agendado não será excluído nem alterado na agenda. O agendamento voltará imediatamente para a lista de <em>"Clientes Agendadas Aguardando Início"</em>, pronto para ser iniciado no momento correto.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRevertConfirmAttendance(null)}
+                className="px-4 py-2 rounded-xl border border-tb-rose-light text-tb-brown-dark hover:bg-tb-ivory text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmRevert(revertConfirmAttendance)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-soft transition-all"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Sim, Voltar para Solicitação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

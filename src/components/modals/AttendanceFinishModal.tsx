@@ -12,7 +12,8 @@ import {
   User, 
   Sparkles, 
   Scale,
-  Lock
+  Lock,
+  RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -65,6 +66,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     professionals, 
     finishUnifiedComanda,
     finishAttendance,
+    revertAttendance,
     clientPackages,
     getClientActivePackages 
   } = useData();
@@ -284,6 +286,26 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     setServiceItems(prev => prev.map(item => 
       item.attendanceId === attendanceId ? { ...item, isSelected: !item.isSelected } : item
     ));
+  };
+
+  // Revert attendance back to scheduled/awaiting start
+  const handleRevertItem = (attendanceId: string, serviceName: string) => {
+    const isConfirmed = window.confirm(
+      `Deseja realmente voltar o serviço "${serviceName}" para a solicitação de agendamento?\n\nEle sairá desta comanda e retornará para a lista de aguardando atendimento. O horário e agendamento permanecerão intactos na agenda.`
+    );
+    if (!isConfirmed) return;
+
+    const res = revertAttendance(attendanceId);
+    if (!res.success) {
+      setError(res.error || 'Erro ao reverter atendimento.');
+      return;
+    }
+
+    if (serviceItems.length <= 1) {
+      onClose();
+    } else {
+      setServiceItems(prev => prev.filter(item => item.attendanceId !== attendanceId));
+    }
   };
 
   // Totals calculations
@@ -568,6 +590,15 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                               >
                                 <Scale className="w-3 h-3" />
                                 Produtos / Gramatura
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRevertItem(item.attendanceId, item.serviceName)}
+                                className="text-[10px] text-rose-700 hover:text-rose-800 font-semibold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                title="Voltar serviço para solicitação/agendamento caso tenha sido iniciado por engano"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Voltar p/ Agendamento
                               </button>
                             </div>
                           </div>
