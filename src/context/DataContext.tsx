@@ -21,6 +21,7 @@ import {
   ScheduleBlock
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
+import { cloudSyncService } from '../services/cloudSync';
 import { getFirebaseInstance, subscribeToCollection, deleteDocumentFromFirestore } from '../services/firebase';
 import { 
   addMinutesToTime, 
@@ -376,56 +377,64 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // 2. If Firebase Cloud Firestore is connected, pull latest data & subscribe to real-time updates
-    const { isConnected } = getFirebaseInstance();
-    if (!isConnected) return;
-
-    storageService.pullAllFromFirestore().then((res) => {
-      if (res.success) {
-        loadAllData();
-      }
+    // 2. Start Vercel Cloud Auto-Sync (bidirectional real-time sync across PC, iPhone, Android)
+    const stopCloudSync = cloudSyncService.startAutoSync(() => {
+      loadAllData();
     });
 
-    const unsubscribers: Array<(() => void) | null> = [
-      subscribeToCollection<Client>('clients', (items) => {
-        if (items.length > 0) {
-          setClients((prev) => {
-            if (items.length >= prev.length) return items;
-            const itemMap = new Map(items.map(i => [i.id, i]));
-            return prev.map(p => itemMap.get(p.id) || p);
-          });
+    // 3. If Firebase Cloud Firestore is connected, pull latest data & subscribe to real-time updates
+    const { isConnected } = getFirebaseInstance();
+    let unsubscribers: Array<(() => void) | null> = [];
+
+    if (isConnected) {
+      storageService.pullAllFromFirestore().then((res) => {
+        if (res.success) {
+          loadAllData();
         }
-      }),
-      subscribeToCollection<Service>('services', (items) => {
-        if (items.length > 0) setServices(items);
-      }),
-      subscribeToCollection<Professional>('professionals', (items) => {
-        if (items.length > 0) setProfessionals(items);
-      }),
-      subscribeToCollection<Appointment>('appointments', (items) => {
-        if (items.length > 0) setAppointments(items);
-      }),
-      subscribeToCollection<Attendance>('attendances', (items) => {
-        if (items.length > 0) setAttendances(items);
-      }),
-      subscribeToCollection<PaymentTransaction>('payments', (items) => {
-        if (items.length > 0) setPayments(items);
-      }),
-      subscribeToCollection<Expense>('expenses', (items) => {
-        if (items.length > 0) setExpenses(items);
-      }),
-      subscribeToCollection<InventoryItem>('inventory', (items) => {
-        if (items.length > 0) setInventory(items);
-      }),
-      subscribeToCollection<ClientPackage>('clientPackages', (items) => {
-        if (items.length > 0) setClientPackages(items);
-      }),
-      subscribeToCollection<ScheduleBlock>('scheduleBlocks', (items) => {
-        if (items.length > 0) setScheduleBlocks(items);
-      }),
-    ];
+      });
+
+      unsubscribers = [
+        subscribeToCollection<Client>('clients', (items) => {
+          if (items.length > 0) {
+            setClients((prev) => {
+              if (items.length >= prev.length) return items;
+              const itemMap = new Map(items.map(i => [i.id, i]));
+              return prev.map(p => itemMap.get(p.id) || p);
+            });
+          }
+        }),
+        subscribeToCollection<Service>('services', (items) => {
+          if (items.length > 0) setServices(items);
+        }),
+        subscribeToCollection<Professional>('professionals', (items) => {
+          if (items.length > 0) setProfessionals(items);
+        }),
+        subscribeToCollection<Appointment>('appointments', (items) => {
+          if (items.length > 0) setAppointments(items);
+        }),
+        subscribeToCollection<Attendance>('attendances', (items) => {
+          if (items.length > 0) setAttendances(items);
+        }),
+        subscribeToCollection<PaymentTransaction>('payments', (items) => {
+          if (items.length > 0) setPayments(items);
+        }),
+        subscribeToCollection<Expense>('expenses', (items) => {
+          if (items.length > 0) setExpenses(items);
+        }),
+        subscribeToCollection<InventoryItem>('inventory', (items) => {
+          if (items.length > 0) setInventory(items);
+        }),
+        subscribeToCollection<ClientPackage>('clientPackages', (items) => {
+          if (items.length > 0) setClientPackages(items);
+        }),
+        subscribeToCollection<ScheduleBlock>('scheduleBlocks', (items) => {
+          if (items.length > 0) setScheduleBlocks(items);
+        }),
+      ];
+    }
 
     return () => {
+      stopCloudSync();
       unsubscribers.forEach((unsub) => {
         if (unsub) unsub();
       });

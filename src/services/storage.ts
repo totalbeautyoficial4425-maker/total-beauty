@@ -2043,6 +2043,25 @@ export function ensureCleanProductionState(): void {
   }
 }
 
+let dataChangeListeners: Array<() => void> = [];
+
+export function registerDataChangeListener(fn: () => void): () => void {
+  dataChangeListeners.push(fn);
+  return () => {
+    dataChangeListeners = dataChangeListeners.filter(l => l !== fn);
+  };
+}
+
+export function notifyDataChanged(): void {
+  dataChangeListeners.forEach(fn => {
+    try {
+      fn();
+    } catch (e) {
+      console.warn('Data change listener error:', e);
+    }
+  });
+}
+
 // LocalStorage helpers with automatic seeding
 export const storageService = {
   getUsers(): User[] {
@@ -2076,6 +2095,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
     idbStorage.setItem(STORAGE_KEYS.USERS, users);
     syncCollectionToFirestore('users', users);
+    notifyDataChanged();
   },
 
   getUserPasswordHash(userId: string): string | null {
@@ -2116,6 +2136,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
     idbStorage.setItem(STORAGE_KEYS.CLIENTS, clients);
     syncCollectionToFirestore('clients', clients);
+    notifyDataChanged();
   },
 
   getServices(): Service[] {
@@ -2141,6 +2162,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
     idbStorage.setItem(STORAGE_KEYS.SERVICES, services);
     syncCollectionToFirestore('services', services);
+    notifyDataChanged();
   },
 
   getProfessionals(): Professional[] {
@@ -2168,6 +2190,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
     idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, professionals);
     syncCollectionToFirestore('professionals', professionals);
+    notifyDataChanged();
   },
 
   getAppointments(): Appointment[] {
@@ -2184,6 +2207,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
     idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, appointments);
     syncCollectionToFirestore('appointments', appointments);
+    notifyDataChanged();
   },
 
   getAttendances(): Attendance[] {
@@ -2195,6 +2219,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attendances));
     idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, attendances);
     syncCollectionToFirestore('attendances', attendances);
+    notifyDataChanged();
   },
 
   getPayments(): PaymentTransaction[] {
@@ -2211,6 +2236,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
     idbStorage.setItem(STORAGE_KEYS.PAYMENTS, payments);
     syncCollectionToFirestore('payments', payments);
+    notifyDataChanged();
   },
 
   getExpenses(): Expense[] {
@@ -2227,6 +2253,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
     idbStorage.setItem(STORAGE_KEYS.EXPENSES, expenses);
     syncCollectionToFirestore('expenses', expenses);
+    notifyDataChanged();
   },
 
   getInventory(): InventoryItem[] {
@@ -2246,6 +2273,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
     idbStorage.setItem(STORAGE_KEYS.INVENTORY, inventory);
     syncCollectionToFirestore('inventory', inventory);
+    notifyDataChanged();
   },
 
   getConsumptions(): ProductConsumption[] {
@@ -2257,6 +2285,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(consumptions));
     idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, consumptions);
     syncCollectionToFirestore('consumptions', consumptions);
+    notifyDataChanged();
   },
 
   getComandas(): Comanda[] {
@@ -2268,6 +2297,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(comandas));
     idbStorage.setItem(STORAGE_KEYS.COMANDAS, comandas);
     syncCollectionToFirestore('comandas', comandas);
+    notifyDataChanged();
   },
 
   getSettings(): CompanySettings {
@@ -2292,10 +2322,12 @@ export const storageService = {
     if (isConnected && db) {
       syncCollectionToFirestore('settings', [{ id: 'general', ...settings }]);
     }
+    notifyDataChanged();
   },
 
   deleteFromCloud(collectionName: string, docId: string): void {
     deleteDocumentFromFirestore(collectionName, docId);
+    notifyDataChanged();
   },
 
   getAppointmentDeletionLogs(): AppointmentDeletionLog[] {
@@ -2309,6 +2341,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.DELETED_APPOINTMENTS, JSON.stringify(next));
     idbStorage.setItem(STORAGE_KEYS.DELETED_APPOINTMENTS, next);
     syncCollectionToFirestore('deletedAppointments', next);
+    notifyDataChanged();
   },
 
   cleanupDeborahExampleData(): { deletedAttendances: number; deletedPayments: number; deletedAppointments: number } {
@@ -2441,6 +2474,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(packages));
     idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, packages);
     syncCollectionToFirestore('clientPackages', packages);
+    notifyDataChanged();
   },
 
   getScheduleBlocks(): ScheduleBlock[] {
@@ -2452,6 +2486,7 @@ export const storageService = {
     safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(blocks));
     idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, blocks);
     syncCollectionToFirestore('scheduleBlocks', blocks);
+    notifyDataChanged();
   },
 
   /**
