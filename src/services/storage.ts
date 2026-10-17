@@ -1847,10 +1847,10 @@ export function ensureCleanProductionState(): void {
     idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
-    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
+    if (!localStorage.getItem(STORAGE_KEYS.APPOINTMENTS)) localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
+    if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCES)) localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
+    if (!localStorage.getItem(STORAGE_KEYS.PAYMENTS)) localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
+    if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
 
     // Set passwords for all default users

@@ -76,6 +76,8 @@ function mergeById<T extends { id: string; updatedAt?: string; createdAt?: strin
   return Array.from(map.values());
 }
 
+const mergeCollections = mergeById;
+
 export const cloudSyncService = {
   /**
    * Pull the complete database from Vercel Cloud and merge into local storage.
@@ -116,75 +118,162 @@ export const cloudSyncService = {
       const cloudVersion = cloudData.version || cloudData.updatedAt || resJson.version;
       const storedVersion = localStorage.getItem(LAST_CLOUD_VERSION_KEY) || lastKnownVersion;
 
-      // If version is identical, no need to re-parse and overwrite
-      if (cloudVersion && cloudVersion === storedVersion && storedVersion !== '') {
+      // Check if local storage is missing any critical collections that remote has
+      const localAtds = storageService.getAttendances();
+      const localCmds = storageService.getComandas();
+      const localPays = storageService.getPayments();
+      const localApts = storageService.getAppointments();
+
+      const isLocalMissingData = 
+        (localAtds.length === 0 && (cloudData.attendances?.length || 0) > 0) ||
+        (localCmds.length === 0 && (cloudData.comandas?.length || 0) > 0) ||
+        (localPays.length === 0 && (cloudData.payments?.length || 0) > 0) ||
+        (localApts.length === 0 && (cloudData.appointments?.length || 0) > 0);
+
+      // If version is identical and local has data, skip re-parse
+      if (!isLocalMissingData && cloudVersion && cloudVersion === storedVersion && storedVersion !== '') {
         return { success: true, hasChanges: false };
       }
 
-      // Update each collection directly from the cloud authoritative snapshot
+      let hasAnyChange = false;
+
+      // 1. Appointments
       if (Array.isArray(cloudData.appointments)) {
-        safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(cloudData.appointments));
-        idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, cloudData.appointments);
+        const merged = mergeCollections(localApts, cloudData.appointments);
+        if (merged.length !== localApts.length || JSON.stringify(merged) !== JSON.stringify(localApts)) {
+          safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 2. Attendances
       if (Array.isArray(cloudData.attendances)) {
-        safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(cloudData.attendances));
-        idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, cloudData.attendances);
+        const merged = mergeCollections(localAtds, cloudData.attendances);
+        if (merged.length !== localAtds.length || JSON.stringify(merged) !== JSON.stringify(localAtds)) {
+          safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 3. Comandas
       if (Array.isArray(cloudData.comandas)) {
-        safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(cloudData.comandas));
-        idbStorage.setItem(STORAGE_KEYS.COMANDAS, cloudData.comandas);
+        const merged = mergeCollections(localCmds, cloudData.comandas);
+        if (merged.length !== localCmds.length || JSON.stringify(merged) !== JSON.stringify(localCmds)) {
+          safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.COMANDAS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 4. Payments
       if (Array.isArray(cloudData.payments)) {
-        safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(cloudData.payments));
-        idbStorage.setItem(STORAGE_KEYS.PAYMENTS, cloudData.payments);
+        const merged = mergeCollections(localPays, cloudData.payments);
+        if (merged.length !== localPays.length || JSON.stringify(merged) !== JSON.stringify(localPays)) {
+          safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.PAYMENTS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 5. Expenses
       if (Array.isArray(cloudData.expenses)) {
-        safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(cloudData.expenses));
-        idbStorage.setItem(STORAGE_KEYS.EXPENSES, cloudData.expenses);
+        const local = storageService.getExpenses();
+        const merged = mergeCollections(local, cloudData.expenses);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.EXPENSES, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 6. Inventory
       if (Array.isArray(cloudData.inventory) && cloudData.inventory.length > 0) {
-        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(cloudData.inventory));
-        idbStorage.setItem(STORAGE_KEYS.INVENTORY, cloudData.inventory);
+        const local = storageService.getInventory();
+        const merged = mergeCollections(local, cloudData.inventory);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.INVENTORY, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 7. Consumptions
       if (Array.isArray(cloudData.consumptions)) {
-        safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(cloudData.consumptions));
-        idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, cloudData.consumptions);
+        const local = storageService.getConsumptions();
+        const merged = mergeCollections(local, cloudData.consumptions);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 8. Client Packages
       if (Array.isArray(cloudData.clientPackages)) {
-        safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(cloudData.clientPackages));
-        idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, cloudData.clientPackages);
+        const local = storageService.getClientPackages();
+        const merged = mergeCollections(local, cloudData.clientPackages);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 9. Schedule Blocks
       if (Array.isArray(cloudData.scheduleBlocks)) {
-        safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(cloudData.scheduleBlocks));
-        idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, cloudData.scheduleBlocks);
+        const local = storageService.getScheduleBlocks();
+        const merged = mergeCollections(local, cloudData.scheduleBlocks);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 10. Clients
       if (Array.isArray(cloudData.clients) && cloudData.clients.length > 0) {
-        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(cloudData.clients));
-        idbStorage.setItem(STORAGE_KEYS.CLIENTS, cloudData.clients);
+        const local = storageService.getClients();
+        const merged = mergeCollections(local, cloudData.clients);
+        if (merged.length !== local.length) {
+          safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.CLIENTS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 11. Services
       if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
-        safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(cloudData.services));
-        idbStorage.setItem(STORAGE_KEYS.SERVICES, cloudData.services);
+        const local = storageService.getServices();
+        const merged = mergeCollections(local, cloudData.services);
+        if (merged.length !== local.length) {
+          safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.SERVICES, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 12. Professionals
       if (Array.isArray(cloudData.professionals) && cloudData.professionals.length > 0) {
-        safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(cloudData.professionals));
-        idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, cloudData.professionals);
+        const local = storageService.getProfessionals();
+        const merged = mergeCollections(local, cloudData.professionals);
+        if (merged.length !== local.length) {
+          safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, merged);
+          hasAnyChange = true;
+        }
       }
 
+      // 13. Users
       if (Array.isArray(cloudData.users) && cloudData.users.length > 0) {
-        safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(cloudData.users));
-        idbStorage.setItem(STORAGE_KEYS.USERS, cloudData.users);
+        const local = storageService.getUsers();
+        const merged = mergeCollections(local, cloudData.users);
+        if (merged.length !== local.length) {
+          safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.USERS, merged);
+          hasAnyChange = true;
+        }
       }
 
       if (cloudData.settings && typeof cloudData.settings === 'object') {
@@ -197,7 +286,7 @@ export const cloudSyncService = {
         safeSetItem(LAST_CLOUD_VERSION_KEY, cloudVersion);
       }
 
-      return { success: true, hasChanges: true };
+      return { success: true, hasChanges: hasAnyChange };
     } catch (err) {
       console.warn('Cloud sync pull error:', err);
       return { success: false, hasChanges: false };

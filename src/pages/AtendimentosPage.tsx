@@ -20,6 +20,7 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Attendance } from '../types';
 import { formatBRL, formatDateBR } from '../utils/formatters';
+import { getTodayDate } from '../services/storage';
 import { ProductConsumptionModal } from '../components/modals/ProductConsumptionModal';
 
 interface AtendimentosPageProps {
@@ -92,7 +93,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     }
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDate();
 
   // Appointments ready to be started (today)
   const readyAppointments = useMemo(() => {
@@ -149,7 +150,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
   const todayComandas = useMemo(() => {
     const map = new Map<string, { client: any; attendances: Attendance[]; subtotal: number; isAllFinished: boolean }>();
 
-    filteredAttendances.filter(a => a.date === todayStr).forEach(atd => {
+    filteredAttendances.filter(a => a.date === todayStr || a.createdAt?.startsWith(todayStr)).forEach(atd => {
       const cli = clients.find(c => c.id === atd.clientId) || { id: atd.clientId, name: atd.clientName, phone: '' };
       const groupKey = atd.clientId;
       if (!map.has(groupKey)) {
@@ -173,7 +174,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
 
   // In-progress single services
   const inProgressAttendances = useMemo(() => {
-    return filteredAttendances.filter(a => !a.finishedAt && a.date === todayStr);
+    return filteredAttendances.filter(a => !a.finishedAt && (a.date === todayStr || a.createdAt?.startsWith(todayStr)));
   }, [filteredAttendances, todayStr]);
 
   return (

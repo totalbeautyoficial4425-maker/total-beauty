@@ -3,6 +3,38 @@ import { put } from '@vercel/blob';
 const BLOB_FILE_NAME = 'total_beauty_db.json';
 const BLOB_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
 
+function mergeArrayById(existingList, incomingList) {
+  if (!Array.isArray(existingList) && !Array.isArray(incomingList)) return [];
+  if (!Array.isArray(incomingList)) return existingList || [];
+  if (!Array.isArray(existingList)) return incomingList || [];
+
+  const map = new Map();
+  // Seed with existing items
+  existingList.forEach(item => {
+    if (item && item.id) {
+      map.set(item.id, item);
+    }
+  });
+
+  // Merge incoming items (take newer or add new)
+  incomingList.forEach(item => {
+    if (item && item.id) {
+      const existing = map.get(item.id);
+      if (!existing) {
+        map.set(item.id, item);
+      } else {
+        const oldTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+        const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+        if (newTime >= oldTime) {
+          map.set(item.id, item);
+        }
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 export default async function handler(req, res) {
   // CORS configuration to allow cross-origin requests from any client / phone
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -50,16 +82,43 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Empty body' });
       }
 
+      // Fetch existing data from blob to perform safe server-side merge
+      let existingData = {};
+      try {
+        const existingRes = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache, no-store' }
+        });
+        if (existingRes.ok) {
+          existingData = await existingRes.json();
+        }
+      } catch (err) {
+        console.warn('Failed to fetch existing data for merge:', err);
+      }
+
       const now = new Date().toISOString();
       const version = Date.now().toString();
 
-      const payload = {
-        ...body,
+      const mergedPayload = {
         version,
         updatedAt: now,
+        exportedAt: now,
+        clients: mergeArrayById(existingData.clients, body.clients),
+        services: mergeArrayById(existingData.services, body.services),
+        professionals: mergeArrayById(existingData.professionals, body.professionals),
+        appointments: mergeArrayById(existingData.appointments, body.appointments),
+        attendances: mergeArrayById(existingData.attendances, body.attendances),
+        comandas: mergeArrayById(existingData.comandas, body.comandas),
+        payments: mergeArrayById(existingData.payments, body.payments),
+        expenses: mergeArrayById(existingData.expenses, body.expenses),
+        inventory: mergeArrayById(existingData.inventory, body.inventory),
+        consumptions: mergeArrayById(existingData.consumptions, body.consumptions),
+        clientPackages: mergeArrayById(existingData.clientPackages, body.clientPackages),
+        scheduleBlocks: mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks),
+        users: mergeArrayById(existingData.users, body.users),
+        settings: { ...(existingData.settings || {}), ...(body.settings || {}) },
       };
 
-      const result = await put(BLOB_FILE_NAME, JSON.stringify(payload), {
+      const result = await put(BLOB_FILE_NAME, JSON.stringify(mergedPayload), {
         access: 'public',
         addRandomSuffix: false,
         allowOverwrite: true,

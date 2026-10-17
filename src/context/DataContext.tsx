@@ -238,9 +238,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [settings, setSettings] = useState<CompanySettings>(storageService.getSettings());
 
   const loadAllData = useCallback(() => {
-    // Proactive cleanup of Deborah's example training attendances
-    storageService.cleanupDeborahExampleData();
-
     const loadedClients = storageService.getClients();
     const loadedServices = storageService.getServices();
     const loadedProfessionals = storageService.getProfessionals();
@@ -898,19 +895,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateAppointmentStatus = (id: string, status: AppointmentStatus, cancellationReason?: string) => {
-    const nextAppointments = appointments.map(a => {
-      if (a.id === id) {
-        return {
-          ...a,
-          status,
-          cancellationReason: cancellationReason || a.cancellationReason,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return a;
+    setAppointments(prev => {
+      const nextAppointments = prev.map(a => {
+        if (a.id === id) {
+          return {
+            ...a,
+            status,
+            cancellationReason: cancellationReason || a.cancellationReason,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return a;
+      });
+      storageService.saveAppointments(nextAppointments);
+      return nextAppointments;
     });
-    setAppointments(nextAppointments);
-    storageService.saveAppointments(nextAppointments);
     return { success: true };
   };
 
@@ -1475,11 +1474,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updateMap = new Map(data.attendancesUpdates.map(u => [u.attendanceId, u]));
     const finishedAttendanceIds: string[] = [];
     const finishedAttendances: Attendance[] = [];
+    const appointmentIdsToComplete = new Set<string>();
 
     const nextAttendances = attendances.map(atd => {
       const update = updateMap.get(atd.id);
       if (update) {
         finishedAttendanceIds.push(atd.id);
+        if (atd.appointmentId) {
+          appointmentIdsToComplete.add(atd.appointmentId);
+        }
         const srv = services.find(s => s.id === atd.serviceId);
         const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         
@@ -1490,10 +1493,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subtotal += update.grossValue;
         discountTotal += update.discountValue;
         netTotal += update.netValue;
-
-        if (atd.appointmentId) {
-          updateAppointmentStatus(atd.appointmentId, 'concluido');
-        }
 
         const updatedAtd: Attendance = {
           ...atd,
@@ -1541,6 +1540,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setAttendances(finalAttendances);
     storageService.saveAttendances(finalAttendances);
+
+    // Conclude all associated appointments in a single batch
+    if (appointmentIdsToComplete.size > 0) {
+      setAppointments(prev => {
+        const nextAppointments = prev.map(a => {
+          if (appointmentIdsToComplete.has(a.id)) {
+            return {
+              ...a,
+              status: 'concluido' as AppointmentStatus,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return a;
+        });
+        storageService.saveAppointments(nextAppointments);
+        return nextAppointments;
+      });
+    }
 
     const newPaymentsList: ComandaPayment[] = data.payments.map(p => ({
       id: generateId('cmp'),
