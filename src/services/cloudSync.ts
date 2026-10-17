@@ -25,6 +25,14 @@ let lastKnownVersion = '';
 let isPushing = false;
 let isPulling = false;
 let pendingPushTimeout: any = null;
+let broadcastChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    broadcastChannel = new BroadcastChannel('tb_realtime_sync');
+  }
+} catch {
+  broadcastChannel = null;
+}
 
 function safeSetItem(key: string, value: string): void {
   try {
@@ -113,78 +121,55 @@ export const cloudSyncService = {
         return { success: true, hasChanges: false };
       }
 
-      // Merge each collection
+      // Update each collection directly from the cloud authoritative snapshot
       if (Array.isArray(cloudData.appointments)) {
-        const localApts = storageService.getAppointments();
-        const mergedApts = mergeById(localApts, cloudData.appointments);
-        safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(mergedApts));
-        idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, mergedApts);
+        safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(cloudData.appointments));
+        idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, cloudData.appointments);
       }
 
       if (Array.isArray(cloudData.attendances)) {
-        const localAtds = storageService.getAttendances();
-        const mergedAtds = mergeById(localAtds, cloudData.attendances);
-        safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(mergedAtds));
-        idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, mergedAtds);
+        safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(cloudData.attendances));
+        idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, cloudData.attendances);
       }
 
       if (Array.isArray(cloudData.comandas)) {
-        const localComs = storageService.getComandas();
-        const mergedComs = mergeById(localComs, cloudData.comandas);
-        safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(mergedComs));
-        idbStorage.setItem(STORAGE_KEYS.COMANDAS, mergedComs);
+        safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(cloudData.comandas));
+        idbStorage.setItem(STORAGE_KEYS.COMANDAS, cloudData.comandas);
       }
 
       if (Array.isArray(cloudData.payments)) {
-        const localPays = storageService.getPayments();
-        const mergedPays = mergeById(localPays, cloudData.payments);
-        safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(mergedPays));
-        idbStorage.setItem(STORAGE_KEYS.PAYMENTS, mergedPays);
+        safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(cloudData.payments));
+        idbStorage.setItem(STORAGE_KEYS.PAYMENTS, cloudData.payments);
       }
 
       if (Array.isArray(cloudData.expenses)) {
-        const localExps = storageService.getExpenses();
-        const mergedExps = mergeById(localExps, cloudData.expenses);
-        safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(mergedExps));
-        idbStorage.setItem(STORAGE_KEYS.EXPENSES, mergedExps);
+        safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(cloudData.expenses));
+        idbStorage.setItem(STORAGE_KEYS.EXPENSES, cloudData.expenses);
       }
 
-      if (Array.isArray(cloudData.inventory)) {
-        const localInv = storageService.getInventory();
-        const mergedInv = mergeById(localInv, cloudData.inventory);
-        const finalInv = mergedInv.length > 0 ? mergedInv : localInv;
-        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(finalInv));
-        idbStorage.setItem(STORAGE_KEYS.INVENTORY, finalInv);
+      if (Array.isArray(cloudData.inventory) && cloudData.inventory.length > 0) {
+        safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(cloudData.inventory));
+        idbStorage.setItem(STORAGE_KEYS.INVENTORY, cloudData.inventory);
       }
 
       if (Array.isArray(cloudData.consumptions)) {
-        const localCons = storageService.getConsumptions();
-        const mergedCons = mergeById(localCons, cloudData.consumptions);
-        safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(mergedCons));
-        idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, mergedCons);
+        safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(cloudData.consumptions));
+        idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, cloudData.consumptions);
       }
 
       if (Array.isArray(cloudData.clientPackages)) {
-        const localPkgs = storageService.getClientPackages();
-        const mergedPkgs = mergeById(localPkgs, cloudData.clientPackages);
-        safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(mergedPkgs));
-        idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, mergedPkgs);
+        safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(cloudData.clientPackages));
+        idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, cloudData.clientPackages);
       }
 
       if (Array.isArray(cloudData.scheduleBlocks)) {
-        const localBlocks = storageService.getScheduleBlocks();
-        const mergedBlocks = mergeById(localBlocks, cloudData.scheduleBlocks);
-        safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(mergedBlocks));
-        idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, mergedBlocks);
+        safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(cloudData.scheduleBlocks));
+        idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, cloudData.scheduleBlocks);
       }
 
       if (Array.isArray(cloudData.clients) && cloudData.clients.length > 0) {
-        const localClients = storageService.getClients();
-        if (cloudData.clients.length >= localClients.length) {
-          const mergedClients = mergeById(localClients, cloudData.clients);
-          safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(mergedClients));
-          idbStorage.setItem(STORAGE_KEYS.CLIENTS, mergedClients);
-        }
+        safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(cloudData.clients));
+        idbStorage.setItem(STORAGE_KEYS.CLIENTS, cloudData.clients);
       }
 
       if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
@@ -195,6 +180,16 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.professionals) && cloudData.professionals.length > 0) {
         safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(cloudData.professionals));
         idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, cloudData.professionals);
+      }
+
+      if (Array.isArray(cloudData.users) && cloudData.users.length > 0) {
+        safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(cloudData.users));
+        idbStorage.setItem(STORAGE_KEYS.USERS, cloudData.users);
+      }
+
+      if (cloudData.settings && typeof cloudData.settings === 'object') {
+        safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cloudData.settings));
+        idbStorage.setItem(STORAGE_KEYS.SETTINGS, cloudData.settings);
       }
 
       if (cloudVersion) {
@@ -255,6 +250,11 @@ export const cloudSyncService = {
       if (resJson.version) {
         lastKnownVersion = resJson.version;
         safeSetItem(LAST_CLOUD_VERSION_KEY, resJson.version);
+        try {
+          broadcastChannel?.postMessage({ type: 'sync_update', version: resJson.version });
+        } catch {
+          // ignore
+        }
       }
 
       return { success: true };
@@ -289,7 +289,7 @@ export const cloudSyncService = {
       }
     });
 
-    // 2. Periodic sync heartbeat every 8 seconds
+    // 2. Periodic sync heartbeat every 4 seconds (fast cross-device sync)
     const interval = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Pause while app is in background to save battery
@@ -298,9 +298,21 @@ export const cloudSyncService = {
       if (res.hasChanges) {
         onRemoteUpdate();
       }
-    }, 8000);
+    }, 4000);
 
-    // 3. Immediate pull on focus (user switches back to tab or unlocks phone)
+    // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
+    const handleBroadcast = (ev: MessageEvent) => {
+      if (ev.data?.type === 'sync_update') {
+        this.pullFromCloud().then(res => {
+          if (res.hasChanges) {
+            onRemoteUpdate();
+          }
+        });
+      }
+    };
+    broadcastChannel?.addEventListener('message', handleBroadcast);
+
+    // 4. Immediate pull on focus (user switches back to tab or unlocks phone)
     const handleFocus = async () => {
       const res = await this.pullFromCloud();
       if (res.hasChanges) {
@@ -308,7 +320,7 @@ export const cloudSyncService = {
       }
     };
 
-    // 4. Immediate pull on visibilitychange (e.g. iPhone / Android home screen resume)
+    // 5. Immediate pull on visibilitychange (e.g. iPhone / Android home screen resume)
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
         const res = await this.pullFromCloud();
@@ -318,7 +330,7 @@ export const cloudSyncService = {
       }
     };
 
-    // 5. Online event
+    // 6. Online event
     const handleOnline = async () => {
       await this.pushToCloud();
       const res = await this.pullFromCloud();
@@ -333,6 +345,7 @@ export const cloudSyncService = {
 
     return () => {
       clearInterval(interval);
+      broadcastChannel?.removeEventListener('message', handleBroadcast);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
