@@ -952,6 +952,7 @@ export const INITIAL_SETTINGS: CompanySettings = {
   },
   defaultServiceDuration: 60,
   defaultBufferMinutes: 10,
+  financialStartDate: '2026-10-22',
   whatsappTemplates: {
     confirmacao: 'Olá, [NOME]! Tudo bem? Aqui é da Total Beauty. Passando para confirmar seu horário no dia [DATA], às [HORÁRIO], para [SERVIÇO] com [PROFISSIONAL]. Será um prazer receber você!',
     lembrete: 'Olá, [NOME]! Passando para lembrar do seu horário especial hoje, às [HORÁRIO], na Total Beauty ([SERVIÇO]). Estamos preparando tudo com muito carinho para você!',
@@ -2013,6 +2014,67 @@ export function ensureCleanProductionState(): void {
     localStorage.setItem('tb_deborah_examples_cleanup_v1', 'true');
   }
 
+  // Migration: Reset faturamento do mês a partir de 22/10/2026 conforme solicitação oficial
+  const hasResetFinancial20261022 = localStorage.getItem('tb_financial_reset_20261022_v1');
+  if (!hasResetFinancial20261022) {
+    try {
+      const rawPayments = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
+      if (rawPayments) {
+        const paymentsList: PaymentTransaction[] = JSON.parse(rawPayments);
+        paymentsList.forEach(p => {
+          if (!p.date || p.date < '2026-10-22') {
+            storageService.recordDeletedId(p.id);
+          }
+        });
+        const remainingPayments = paymentsList.filter(p => p.date && p.date >= '2026-10-22');
+        safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(remainingPayments));
+        idbStorage.setItem(STORAGE_KEYS.PAYMENTS, remainingPayments);
+      }
+
+      const rawAttendances = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
+      if (rawAttendances) {
+        const attendancesList: Attendance[] = JSON.parse(rawAttendances);
+        attendancesList.forEach(a => {
+          if (!a.date || a.date < '2026-10-22') {
+            storageService.recordDeletedId(a.id);
+          }
+        });
+        const remainingAttendances = attendancesList.filter(a => a.date && a.date >= '2026-10-22');
+        safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(remainingAttendances));
+        idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, remainingAttendances);
+      }
+
+      const rawComandas = localStorage.getItem(STORAGE_KEYS.COMANDAS);
+      if (rawComandas) {
+        const comandasList: Comanda[] = JSON.parse(rawComandas);
+        comandasList.forEach(c => {
+          if (!c.date || c.date < '2026-10-22') {
+            storageService.recordDeletedId(c.id);
+          }
+        });
+        const remainingComandas = comandasList.filter(c => c.date && c.date >= '2026-10-22');
+        safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(remainingComandas));
+        idbStorage.setItem(STORAGE_KEYS.COMANDAS, remainingComandas);
+      }
+
+      const rawConsumptions = localStorage.getItem(STORAGE_KEYS.CONSUMPTIONS);
+      if (rawConsumptions) {
+        const consumptionsList: ProductConsumption[] = JSON.parse(rawConsumptions);
+        consumptionsList.forEach(c => {
+          if (!c.date || c.date < '2026-10-22') {
+            storageService.recordDeletedId(c.id);
+          }
+        });
+        const remainingConsumptions = consumptionsList.filter(c => c.date && c.date >= '2026-10-22');
+        safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(remainingConsumptions));
+        idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, remainingConsumptions);
+      }
+    } catch (e) {
+      console.warn('Financial reset 2026-10-22 error:', e);
+    }
+    localStorage.setItem('tb_financial_reset_20261022_v1', 'true');
+  }
+
   // Ensure official stock inventory items requested by user are always present
   let existingInventory: InventoryItem[] = [];
   try {
@@ -2340,6 +2402,9 @@ export const storageService = {
       parsed.whatsappTemplates = INITIAL_SETTINGS.whatsappTemplates;
     } else if (!parsed.whatsappTemplates.aniversario) {
       parsed.whatsappTemplates.aniversario = INITIAL_SETTINGS.whatsappTemplates.aniversario;
+    }
+    if (!parsed.financialStartDate) {
+      parsed.financialStartDate = '2026-10-22';
     }
     return parsed;
   },

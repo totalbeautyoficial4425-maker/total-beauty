@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   Trash2,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Cake
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -86,6 +87,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [isCreatingNewClient, setIsCreatingNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientBirthDate, setNewClientBirthDate] = useState('');
   const [quickClientError, setQuickClientError] = useState<string | null>(null);
   const [clientSearch, setClientSearch] = useState('');
 
@@ -289,6 +291,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     const res = addClient({
       name: newClientName.trim(),
       phone: newClientPhone.trim(),
+      whatsapp: newClientPhone.trim(),
+      birthDate: newClientBirthDate || undefined,
       communicationConsent: true,
     });
 
@@ -299,6 +303,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
       setIsCreatingNewClient(false);
       setNewClientName('');
       setNewClientPhone('');
+      setNewClientBirthDate('');
     }
   };
 
@@ -499,26 +504,51 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 {quickClientError && (
                   <p className="text-xs text-rose-600 font-medium">{quickClientError}</p>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    placeholder="Nome completo *"
-                    value={newClientName}
-                    onChange={e => setNewClientName(e.target.value)}
-                    className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Celular com DDD *"
-                    value={newClientPhone}
-                    onChange={e => setNewClientPhone(e.target.value)}
-                    className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-semibold text-tb-brown-dark block mb-1">
+                      Nome completo *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Maria Silva"
+                      value={newClientName}
+                      onChange={e => setNewClientName(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-tb-brown-dark block mb-1">
+                      Celular com DDD *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="(34) 99999-9999"
+                      value={newClientPhone}
+                      onChange={e => setNewClientPhone(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-tb-brown-dark block mb-1 flex items-center gap-1">
+                      <Cake className="w-3.5 h-3.5 text-tb-rose-primary" />
+                      Data de Aniversário
+                    </label>
+                    <input
+                      type="date"
+                      value={newClientBirthDate}
+                      onChange={e => setNewClientBirthDate(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark focus:ring-2 focus:ring-tb-rose-primary/30"
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setIsCreatingNewClient(false)}
+                    onClick={() => {
+                      setIsCreatingNewClient(false);
+                      setNewClientBirthDate('');
+                    }}
                     className="px-3 py-1.5 text-xs text-tb-gray-neutral hover:text-tb-brown-dark"
                   >
                     Cancelar

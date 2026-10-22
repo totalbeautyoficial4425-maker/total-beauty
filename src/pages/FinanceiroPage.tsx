@@ -28,7 +28,7 @@ export const FinanceiroPage: React.FC<FinanceiroPageProps> = ({
   onOpenNewExpense,
   onEditExpense,
 }) => {
-  const { payments, expenses, financialSummary, deleteExpense } = useData();
+  const { payments, expenses, financialSummary, deleteExpense, settings } = useData();
 
   const [activeTab, setActiveTab] = useState<'receitas' | 'despesas' | 'extrato'>('receitas');
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,7 +38,9 @@ export const FinanceiroPage: React.FC<FinanceiroPageProps> = ({
 
   // Filter Payments
   const filteredPayments = useMemo(() => {
+    const finStartDate = settings?.financialStartDate || '2026-10-22';
     return payments.filter(p => {
+      if (p.date && p.date < finStartDate) return false;
       if (filterStatus !== 'todos' && p.status !== filterStatus) return false;
       if (filterPaymentMethod !== 'todos' && p.paymentMethod !== filterPaymentMethod) return false;
       if (searchQuery.trim()) {
@@ -51,11 +53,14 @@ export const FinanceiroPage: React.FC<FinanceiroPageProps> = ({
       }
       return true;
     });
-  }, [payments, filterStatus, filterPaymentMethod, searchQuery]);
+  }, [payments, filterStatus, filterPaymentMethod, searchQuery, settings]);
 
   // Filter Expenses
   const filteredExpenses = useMemo(() => {
+    const finStartDate = settings?.financialStartDate || '2026-10-22';
     return expenses.filter(e => {
+      const dt = e.paymentDate || e.competenceDate || e.dueDate;
+      if (dt && dt < finStartDate) return false;
       if (filterStatus !== 'todos' && e.status !== filterStatus) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();

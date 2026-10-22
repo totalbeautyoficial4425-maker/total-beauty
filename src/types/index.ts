@@ -335,6 +335,7 @@ export interface CompanySettings {
   };
   defaultServiceDuration: number;
   defaultBufferMinutes: number;
+  financialStartDate?: string;
   whatsappTemplates: {
     confirmacao: string;
     lembrete: string;

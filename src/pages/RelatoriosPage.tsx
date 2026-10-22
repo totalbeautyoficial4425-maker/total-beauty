@@ -18,12 +18,13 @@ import { formatBRL, formatDateBR, downloadCSV } from '../utils/formatters';
 import { getTodayDate } from '../services/storage';
 
 export const RelatoriosPage: React.FC = () => {
-  const { clients, appointments, attendances, payments, expenses, professionals, services } = useData();
+  const { clients, appointments, attendances, payments, expenses, professionals, services, settings } = useData();
   const [period, setPeriod] = useState<'mes_atual' | 'ultimos_30' | 'ano' | 'tudo'>('mes_atual');
 
   const todayStr = getTodayDate();
   const currentMonthPrefix = todayStr.substring(0, 7);
   const currentYearPrefix = todayStr.substring(0, 4);
+  const finStartDate = settings?.financialStartDate || '2026-10-22';
 
   // Filter datasets based on selected period
   const filteredAppointments = useMemo(() => {
@@ -40,6 +41,7 @@ export const RelatoriosPage: React.FC = () => {
 
   const filteredPayments = useMemo(() => {
     return payments.filter(p => {
+      if (p.date && p.date < finStartDate) return false;
       if (period === 'mes_atual') return p.date.startsWith(currentMonthPrefix);
       if (period === 'ano') return p.date.startsWith(currentYearPrefix);
       if (period === 'ultimos_30') {
@@ -48,11 +50,12 @@ export const RelatoriosPage: React.FC = () => {
       }
       return true;
     });
-  }, [payments, period, currentMonthPrefix, currentYearPrefix]);
+  }, [payments, period, currentMonthPrefix, currentYearPrefix, finStartDate]);
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
       const dt = e.paymentDate || e.dueDate;
+      if (dt && dt < finStartDate) return false;
       if (period === 'mes_atual') return dt.startsWith(currentMonthPrefix);
       if (period === 'ano') return dt.startsWith(currentYearPrefix);
       if (period === 'ultimos_30') {
@@ -61,7 +64,7 @@ export const RelatoriosPage: React.FC = () => {
       }
       return true;
     });
-  }, [expenses, period, currentMonthPrefix, currentYearPrefix]);
+  }, [expenses, period, currentMonthPrefix, currentYearPrefix, finStartDate]);
 
   // Calculated metrics
   const totalReceived = filteredPayments.filter(p => p.status === 'pago').reduce((acc, p) => acc + p.paidAmount, 0);

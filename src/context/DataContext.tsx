@@ -718,10 +718,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getProfessionalMetrics = (professionalId: string): ProfessionalMetrics => {
     const today = getTodayDate();
     const currentMonth = today.substring(0, 7);
+    const finStartDate = settings?.financialStartDate || '2026-10-22';
 
-    // All payments for this professional
+    // All payments for this professional starting from financialStartDate
     const myTransactions = payments
-      .filter(p => p.professionalId === professionalId)
+      .filter(p => p.professionalId === professionalId && (!p.date || p.date >= finStartDate))
       .sort((a, b) => b.date.localeCompare(a.date));
 
     // Today's metrics (paid commissions + gross + net)
@@ -2243,6 +2244,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // METRICS & INDICATORS
   const financialSummary = useMemo(() => {
+    const finStartDate = settings?.financialStartDate || '2026-10-22';
+    const activePayments = payments.filter(p => !p.date || p.date >= finStartDate);
+    const activeExpenses = expenses.filter(e => {
+      const dt = e.paymentDate || e.competenceDate || e.dueDate;
+      return !dt || dt >= finStartDate;
+    });
+
     let grossRevenue = 0;
     let discountsGiven = 0;
     let netRevenue = 0;
@@ -2250,7 +2258,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let pendingAmount = 0;
     let totalCommissionsPaid = 0;
 
-    payments.forEach(p => {
+    activePayments.forEach(p => {
       grossRevenue += p.grossValue;
       discountsGiven += p.discount;
       netRevenue += p.netValue;
@@ -2264,7 +2272,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let paidExpenses = 0;
     let pendingExpenses = 0;
 
-    expenses.forEach(e => {
+    activeExpenses.forEach(e => {
       if (e.status === 'pago') {
         paidExpenses += e.amount;
       } else {
@@ -2274,7 +2282,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const periodNetResult = receivedAmount - paidExpenses;
 
-    const paidTransactionsCount = payments.filter(p => p.status === 'pago' && p.paidAmount > 0).length;
+    const paidTransactionsCount = activePayments.filter(p => p.status === 'pago' && p.paidAmount > 0).length;
     const averageTicket = paidTransactionsCount > 0 ? receivedAmount / paidTransactionsCount : 0;
 
     return {
@@ -2289,11 +2297,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       averageTicket,
       totalCommissionsPaid,
     };
-  }, [payments, expenses]);
+  }, [payments, expenses, settings]);
 
   const dashboardMetrics = useMemo(() => {
     const today = getTodayDate();
     const currentMonth = today.substring(0, 7); // YYYY-MM
+    const finStartDate = settings?.financialStartDate || '2026-10-22';
 
     const todayAppointments = appointments.filter(a => a.date === today);
     const todayAppointmentsCount = todayAppointments.filter(a => !['cancelado', 'nao_compareceu'].includes(a.status)).length;
@@ -2302,7 +2311,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const totalActiveClients = clients.filter(c => !c.isArchived).length;
 
     // Today's financials
-    const todayPayments = payments.filter(p => p.date === today);
+    const todayPayments = payments.filter(p => p.date === today && (!p.date || p.date >= finStartDate));
     const todayGrossRevenue = todayPayments.reduce((acc, p) => acc + p.grossValue, 0);
     const todayReceivedRevenue = todayPayments.reduce((acc, p) => acc + p.paidAmount, 0);
     const todayCommissionsToPay = todayPayments
@@ -2311,11 +2320,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const todaySalonNet = Math.max(0, todayReceivedRevenue - todayCommissionsToPay);
 
     // Month's financials
-    const monthPayments = payments.filter(p => p.date.startsWith(currentMonth));
+    const monthPayments = payments.filter(p => p.date.startsWith(currentMonth) && (!p.date || p.date >= finStartDate));
     const monthGrossRevenue = monthPayments.reduce((acc, p) => acc + p.grossValue, 0);
     const monthReceivedRevenue = monthPayments.reduce((acc, p) => acc + p.paidAmount, 0);
 
-    const monthExpenses = expenses.filter(e => e.competenceDate.startsWith(currentMonth) || e.dueDate.startsWith(currentMonth));
+    const monthExpenses = expenses.filter(e => {
+      const dt = e.competenceDate || e.dueDate;
+      return dt.startsWith(currentMonth) && (!finStartDate || dt >= finStartDate);
+    });
     const monthPaidExpenses = monthExpenses.filter(e => e.status === 'pago').reduce((acc, e) => acc + e.amount, 0);
     
     const monthNetResult = monthReceivedRevenue - monthPaidExpenses;
