@@ -13,7 +13,8 @@ import {
   CheckCircle2,
   UserCheck,
   Package,
-  Gift
+  Gift,
+  KeyRound
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { getFirebaseInstance } from '../../services/firebase';
@@ -25,6 +26,7 @@ interface SidebarProps {
   onNavigate: (page: NavigationPage) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  onOpenChangePassword?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   isOpenMobile,
   onCloseMobile,
+  onOpenChangePassword,
 }) => {
   const { currentUser } = useAuth();
   const { lowStockCount, outOfStockCount } = useData();
@@ -146,6 +149,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        {/* Admin Password Change Quick Access */}
+        {currentUser?.role === 'admin' && onOpenChangePassword && (
+          <div className="px-3 mb-2">
+            <button
+              onClick={() => {
+                onOpenChangePassword();
+                onCloseMobile();
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-tb-rose-blush/60 to-tb-beige-light border border-tb-rose-light/70 text-xs font-bold text-tb-brown-dark hover:shadow-soft transition-all"
+              title="Trocar a senha de administrador por segurança"
+            >
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-tb-rose-primary" />
+                <span>Trocar Senha Admin</span>
+              </div>
+              <span className="text-[10px] bg-tb-rose-primary text-white px-2 py-0.5 rounded-md">
+                Segurança
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Database Connection & Status Footer */}
         <div className="p-4 mx-3 mb-4 rounded-2xl bg-tb-ivory border border-tb-rose-light/50">

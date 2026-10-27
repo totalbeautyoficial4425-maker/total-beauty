@@ -347,14 +347,67 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (hasRepaired) {
       loadedPayments = [...missingPayments, ...repairedPayments];
+    }
+
+    // --- DEDUPLICATION & SANITIZATION PASS ---
+    // 1. Purge unfinished attendances linked to canceled or deleted appointments
+    const canceledOrDeletedAptIds = new Set(
+      loadedAppointments
+        .filter(a => a.status === 'cancelado' || a.status === 'nao_compareceu' || !!(a as any).deletedAt)
+        .map(a => a.id)
+    );
+
+    let sanitizedAttendances = loadedAttendances.filter(a => {
+      if (a.appointmentId && canceledOrDeletedAptIds.has(a.appointmentId) && (!a.finishedAt || a.paymentStatus !== 'pago')) {
+        hasRepaired = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 2. Deduplicate attendances sharing identical appointmentId
+    const seenAtdAppointments = new Map<string, Attendance>();
+    sanitizedAttendances = sanitizedAttendances.filter(a => {
+      if (!a.appointmentId) return true;
+      const existing = seenAtdAppointments.get(a.appointmentId);
+      if (!existing) {
+        seenAtdAppointments.set(a.appointmentId, a);
+        return true;
+      }
+      if (!existing.finishedAt && a.finishedAt) {
+        seenAtdAppointments.set(a.appointmentId, a);
+        hasRepaired = true;
+        return true;
+      }
+      hasRepaired = true;
+      return false; // duplicate attendance
+    });
+
+    // 3. Deduplicate payments: strictly keep only one financial transaction per attendance
+    const seenPaymentAttendanceIds = new Set<string>();
+    const deduplicatedPayments: PaymentTransaction[] = [];
+    (hasRepaired ? loadedPayments : repairedPayments).forEach(p => {
+      if (p.attendanceId) {
+        if (seenPaymentAttendanceIds.has(p.attendanceId)) {
+          hasRepaired = true;
+          return; // Skip duplicate transaction!
+        }
+        seenPaymentAttendanceIds.add(p.attendanceId);
+      }
+      deduplicatedPayments.push(p);
+    });
+
+    if (hasRepaired) {
+      loadedPayments = deduplicatedPayments;
       storageService.savePayments(loadedPayments);
+      storageService.saveAttendances(sanitizedAttendances);
     }
 
     setClients(loadedClients);
     setServices(loadedServices);
     setProfessionals(loadedProfessionals);
     setAppointments(loadedAppointments);
-    setAttendances(loadedAttendances);
+    setAttendances(sanitizedAttendances);
     setPayments(loadedPayments);
     setExpenses(loadedExpenses);
     setInventory(loadedInventory);
@@ -896,6 +949,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const removeUnfinishedAttendancesForAppointment = (appointmentId: string) => {
+    setAttendances(prev => {
+      const toRemove = prev.filter(a => a.appointmentId === appointmentId && (!a.finishedAt || a.paymentStatus !== 'pago'));
+      if (toRemove.length === 0) return prev;
+      
+      const toRemoveIds = new Set(toRemove.map(a => a.id));
+      const next = prev.filter(a => !toRemoveIds.has(a.id));
+      storageService.saveAttendances(next);
+      toRemove.forEach(a => {
+        deleteDocumentFromFirestore('attendances', a.id);
+      });
+
+      // Also clean up any pending/unpaid payment transactions linked to these attendances
+      setPayments(currPayments => {
+        const cleaned = currPayments.filter(p => !p.attendanceId || !toRemoveIds.has(p.attendanceId));
+        if (cleaned.length !== currPayments.length) {
+          storageService.savePayments(cleaned);
+        }
+        return cleaned;
+      });
+
+      return next;
+    });
+  };
+
   const updateAppointmentStatus = (id: string, status: AppointmentStatus, cancellationReason?: string) => {
     setAppointments(prev => {
       const nextAppointments = prev.map(a => {
@@ -912,11 +990,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storageService.saveAppointments(nextAppointments);
       return nextAppointments;
     });
+
+    // When an appointment is canceled or marked as no-show, immediately remove it from attendance queue / comandas
+    if (status === 'cancelado' || status === 'nao_compareceu') {
+      removeUnfinishedAttendancesForAppointment(id);
+    }
+
     return { success: true };
   };
 
   const cancelAppointment = (id: string, reason: string) => {
-    return updateAppointmentStatus(id, 'cancelado', reason);
+    const res = updateAppointmentStatus(id, 'cancelado', reason);
+    removeUnfinishedAttendancesForAppointment(id);
+    return res;
   };
 
   const deleteAppointment = (id: string, reason: string): { success: boolean; error?: string } => {
@@ -967,14 +1053,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageService.saveAppointments(nextAppointments);
     deleteDocumentFromFirestore('appointments', id);
 
-    // 3. Remove unfinished attendance if linked to this appointment
-    const linkedAttendance = attendances.find(a => a.appointmentId === id);
-    if (linkedAttendance && (!linkedAttendance.finishedAt || linkedAttendance.paymentStatus !== 'pago')) {
-      const nextAttendances = attendances.filter(a => a.id !== linkedAttendance.id);
-      setAttendances(nextAttendances);
-      storageService.saveAttendances(nextAttendances);
-      deleteDocumentFromFirestore('attendances', linkedAttendance.id);
-    }
+    // 3. Completely remove ALL unfinished attendances linked to this appointment from the queue
+    removeUnfinishedAttendancesForAppointment(id);
 
     return { success: true };
   };
@@ -1221,6 +1301,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let profObj: Professional | undefined;
 
     if (appointmentId) {
+      // Guard against creating duplicate attendance for the same appointment
+      const existing = attendances.find(a => a.appointmentId === appointmentId && a.paymentStatus !== 'pago');
+      if (existing) {
+        return { success: true, attendance: existing };
+      }
+
       const apt = appointments.find(a => a.id === appointmentId);
       if (apt) {
         clientObj = clients.find(c => c.id === apt.clientId);
@@ -1477,6 +1563,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const atd = attendances.find(a => a.id === attendanceId);
     if (!atd) return { success: false, error: 'Atendimento não encontrado.' };
 
+    if (atd.finishedAt && atd.paymentStatus === 'pago') {
+      return { success: false, error: 'Este atendimento já foi finalizado e quitado anteriormente. O valor não pode ser duplicado.' };
+    }
+
     const finishedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     // Calculate commission directly from the service percentage (Admin configured)
@@ -1606,6 +1696,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Nenhum serviço selecionado para fechamento da comanda.' };
     }
 
+    const existingComanda = comandas.find(c => c.clientId === data.clientId && c.date === data.date);
+    
+    // Guard: Prevent saving a comanda more than once when already finalized and paid
+    const allUpdatesAlreadyPaid = data.attendancesUpdates.every(u => {
+      const atd = attendances.find(a => a.id === u.attendanceId);
+      return atd?.paymentStatus === 'pago' && atd?.finishedAt;
+    });
+    if (existingComanda && existingComanda.status === 'pago' && allUpdatesAlreadyPaid) {
+      return { 
+        success: false, 
+        error: 'Esta comanda já foi finalizada e quitada anteriormente. Para evitar duplicidades financeiras, ela não pode ser salva novamente.' 
+      };
+    }
+
     const finishedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     let subtotal = 0;
@@ -1659,7 +1763,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const status: 'pago' | 'parcial' | 'pendente' = 
       pendingTotal <= 0.01 ? 'pago' : paidTotal > 0 ? 'parcial' : 'pendente';
 
-    const existingComanda = comandas.find(c => c.clientId === data.clientId && c.date === data.date);
     const comandaId = existingComanda?.id || generateId('cmd');
 
     const finalAttendances = nextAttendances.map(atd => {
@@ -1709,9 +1812,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     }));
 
-    const allComandaPayments = existingComanda 
-      ? [...existingComanda.payments, ...newPaymentsList]
-      : newPaymentsList;
+    // Definitive payments of this comanda (prevents accumulating duplicate payment entries on repeated saves)
+    const allComandaPayments: ComandaPayment[] = newPaymentsList;
 
     const comandaObj: Comanda = {
       id: comandaId,
@@ -1740,9 +1842,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageService.saveComandas(nextComandas);
 
     // Register financial revenues cleanly per professional attendance
-    // This guarantees immediate daily calculation of gross value and commission payout!
+    // Purges any previous transactions linked to this comanda or these attendances to guarantee zero duplicates!
     const oldPaymentAttendanceIds = new Set(finishedAttendanceIds);
-    const cleanedPayments = payments.filter(p => !p.attendanceId || !oldPaymentAttendanceIds.has(p.attendanceId));
+    const cleanedPayments = payments.filter(p => {
+      if (p.comandaId && p.comandaId === comandaId) return false;
+      if (p.attendanceId && oldPaymentAttendanceIds.has(p.attendanceId)) return false;
+      return true;
+    });
 
     const primaryPaymentMethod: PaymentMethod = data.payments.length === 1 
       ? data.payments[0].paymentMethod 

@@ -65,6 +65,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     clients, 
     services, 
     professionals, 
+    comandas,
     finishUnifiedComanda,
     finishAttendance,
     revertAttendance,
@@ -81,6 +82,11 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
   const client = clients.find(c => c.id === targetClientId);
 
+  // Existing comanda in storage
+  const existingComanda = useMemo(() => {
+    return comandas.find(c => c.clientId === targetClientId && c.date === targetDate);
+  }, [comandas, targetClientId, targetDate]);
+
   // Active packages with remaining sessions for this client
   const clientActivePackages = useMemo(() => {
     if (!targetClientId) return [];
@@ -96,6 +102,12 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     }
     return list;
   }, [attendances, targetClientId, targetDate, attendance]);
+
+  // Guard: Check if comanda is already closed and fully paid
+  const isAlreadyFullyPaid = useMemo(() => {
+    if (existingComanda && existingComanda.status === 'pago') return true;
+    return relatedAttendances.length > 0 && relatedAttendances.every(a => !!a.finishedAt && a.paymentStatus === 'pago');
+  }, [existingComanda, relatedAttendances]);
 
   // Helper to find if an active package can cover this service
   const findApplicablePackage = (serviceName: string, serviceId: string) => {
@@ -143,6 +155,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [comandaNotes, setComandaNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal to register product consumption directly
   const [activeAttendanceForConsumption, setActiveAttendanceForConsumption] = useState<Attendance | null>(null);
@@ -178,20 +191,34 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
       setServiceItems(items);
 
-      // Default single payment with the total
-      const initialTotal = items.reduce((acc, i) => acc + i.netValue, 0);
-      setPayments([
-        {
-          id: 'p_1',
-          method: 'pix',
-          amount: initialTotal,
-          notes: '',
+      // If comanda already has registered payments, display them; otherwise initialize single payment
+      if (existingComanda && existingComanda.payments && existingComanda.payments.length > 0) {
+        setPayments(existingComanda.payments.map((p, idx) => ({
+          id: p.id || `p_${idx}`,
+          method: p.paymentMethod,
+          amount: p.amount,
+          notes: p.notes || '',
+        })));
+        if (existingComanda.notes) {
+          setComandaNotes(existingComanda.notes);
         }
-      ]);
-      setComandaNotes('');
+      } else {
+        const initialTotal = items.reduce((acc, i) => acc + i.netValue, 0);
+        setPayments([
+          {
+            id: 'p_1',
+            method: 'pix',
+            amount: initialTotal,
+            notes: '',
+          }
+        ]);
+        setComandaNotes('');
+      }
+
       setError(null);
+      setIsSubmitting(false);
     }
-  }, [isOpen, relatedAttendances, services]);
+  }, [isOpen, relatedAttendances, services, existingComanda]);
 
   // Handle service gross value change (Autonomia da profissional)
   const handleServiceGrossChange = (attendanceId: string, newGross: number) => {
@@ -433,6 +460,13 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     e.preventDefault();
     setError(null);
 
+    if (isSubmitting) return;
+
+    if (isAlreadyFullyPaid) {
+      setError('Esta comanda já foi finalizada e quitada anteriormente. Não é permitido salvar novamente para evitar duplicidade financeira.');
+      return;
+    }
+
     if (selectedServices.length === 0) {
       setError('Selecione pelo menos um serviço para fechar na comanda.');
       return;
@@ -443,40 +477,49 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       return;
     }
 
-    // Call unified finish
-    const res = finishUnifiedComanda({
-      clientId: targetClientId,
-      date: targetDate,
-      attendancesUpdates: selectedServices.map(s => {
-        const discVal = s.isPackageCovered
-          ? 0
-          : s.discountType === 'percentage' 
-            ? (s.grossValue * s.discountInput) / 100 
-            : s.discountInput;
-        return {
-          attendanceId: s.attendanceId,
-          grossValue: s.grossValue,
-          discountValue: discVal,
-          discountType: s.discountType,
-          netValue: s.netValue,
-          packageId: s.packageId,
-          isPackageCovered: s.isPackageCovered,
-        };
-      }),
-      payments: payments.filter(p => p.amount > 0).map(p => ({
-        paymentMethod: p.method,
-        amount: p.amount,
-        notes: p.notes,
-      })),
-      notes: comandaNotes,
-    });
+    setIsSubmitting(true);
 
-    if (!res.success) {
-      setError(res.error || 'Erro ao finalizar a comanda.');
-      return;
+    try {
+      // Call unified finish
+      const res = finishUnifiedComanda({
+        clientId: targetClientId,
+        date: targetDate,
+        attendancesUpdates: selectedServices.map(s => {
+          const discVal = s.isPackageCovered
+            ? 0
+            : s.discountType === 'percentage' 
+              ? (s.grossValue * s.discountInput) / 100 
+              : s.discountInput;
+          return {
+            attendanceId: s.attendanceId,
+            grossValue: s.grossValue,
+            discountValue: discVal,
+            discountType: s.discountType,
+            netValue: s.netValue,
+            packageId: s.packageId,
+            isPackageCovered: s.isPackageCovered,
+          };
+        }),
+        payments: payments.filter(p => p.amount > 0).map(p => ({
+          paymentMethod: p.method,
+          amount: p.amount,
+          notes: p.notes,
+        })),
+        notes: comandaNotes,
+      });
+
+      if (!res.success) {
+        setError(res.error || 'Erro ao finalizar a comanda.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao processar fechamento da comanda.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -515,6 +558,24 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
           {/* Body */}
           <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
+            {isAlreadyFullyPaid && (
+              <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-xs text-emerald-950 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Comanda Finalizada & Quitada (Visualização / Recibo)</p>
+                    <p className="text-[11px] text-emerald-800">
+                      O pagamento desta comanda já foi processado e registrado no caixa. O valor salva uma única vez para garantir integridade financeira e zero duplicidades.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full shrink-0">
+                  ✓ PAGO
+                </span>
+              </div>
+            )}
             {error && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -955,20 +1016,53 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
             {/* Footer Actions */}
             <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Concluir Fechamento da Comanda
-              </button>
+              {isAlreadyFullyPaid ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-4 py-2.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl shadow-xs transition-all flex items-center gap-2"
+                  >
+                    <Receipt className="w-4 h-4 text-tb-rose-primary" />
+                    Imprimir Recibo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-6 py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft transition-all"
+                  >
+                    Fechar Comanda
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSubmitting}
+                    className="px-4 py-2.5 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Salvando Fechamento...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Concluir Fechamento da Comanda
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </form>
         </div>

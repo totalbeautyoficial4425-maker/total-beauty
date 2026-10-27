@@ -156,15 +156,25 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     }
   };
 
-  // Filter attendances based on role/filter
+  // Filter attendances based on role/filter and strictly exclude canceled or deleted appointments from the queue
   const filteredAttendances = useMemo(() => {
+    const canceledOrDeletedAptIds = new Set(
+      appointments
+        .filter(apt => apt.status === 'cancelado' || apt.status === 'nao_compareceu' || !!(apt as any).deletedAt)
+        .map(apt => apt.id)
+    );
+
     return attendances.filter(a => {
+      // Immediately purge from queue if linked appointment was canceled or deleted
+      if (a.appointmentId && canceledOrDeletedAptIds.has(a.appointmentId) && (!a.finishedAt || a.paymentStatus !== 'pago')) {
+        return false;
+      }
       if (isProfessional && filterMode === 'meus' && myProfId) {
         return a.professionalId === myProfId;
       }
       return true;
     });
-  }, [attendances, isProfessional, filterMode, myProfId]);
+  }, [attendances, appointments, isProfessional, filterMode, myProfId]);
 
   // Group attendances by Client for Unified Comanda View (Today's Attendances)
   const todayComandas = useMemo(() => {

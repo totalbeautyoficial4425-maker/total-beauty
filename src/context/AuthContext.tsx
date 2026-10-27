@@ -11,7 +11,7 @@ interface AuthContextType {
   lockoutRemainingSeconds: number;
   resetLockout: () => void;
   login: (usernameOrEmail: string, passwordPlain: string, rememberMe?: boolean) => { success: boolean; error?: string };
-  changePassword: (newPasswordPlain: string) => { success: boolean; error?: string };
+  changePassword: (newPasswordPlain: string, currentPasswordPlain?: string) => { success: boolean; error?: string };
   logout: () => void;
 }
 
@@ -124,21 +124,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isPasswordValid = true;
     }
 
-    // 2. Admin resilience: accept both 'admin123' and 'admin' always
+    // 2. Admin initial fallback: ONLY accepted if no custom secure password was set yet
     if (matchedUser.role === 'admin' || isAdminAttempt) {
-      if (cleanPassword === 'admin123' || cleanPassword === 'admin' || cleanPassword === 'admin@123') {
-        isPasswordValid = true;
-        // Keep hash fresh in storage
-        storageService.setUserPassword(matchedUser.id, cleanPassword === 'admin' ? 'admin' : 'admin123');
+      const defaultAdminHash = hashPassword('admin123');
+      const isCustomPasswordSet = currentHash && currentHash !== defaultAdminHash;
+      if (!isCustomPasswordSet) {
+        if (cleanPassword === 'admin123' || cleanPassword === 'admin' || cleanPassword === 'admin@123') {
+          isPasswordValid = true;
+        }
       }
     }
 
-    // 3. Professional resilience: accept default pattern [username]123
+    // 3. Professional resilience: accept default pattern [username]123 if custom password not yet defined
     if (matchedUser.role === 'profissional') {
       const defaultProfPwd = `${matchedUser.username.toLowerCase()}123`;
-      if (cleanPassword === defaultProfPwd) {
+      if (cleanPassword === defaultProfPwd && (!currentHash || currentHash === hashPassword(defaultProfPwd))) {
         isPasswordValid = true;
-        storageService.setUserPassword(matchedUser.id, defaultProfPwd);
       }
     }
 
@@ -183,16 +184,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const changePassword = (newPasswordPlain: string): { success: boolean; error?: string } => {
+  const changePassword = (newPasswordPlain: string, currentPasswordPlain?: string): { success: boolean; error?: string } => {
     if (!currentUser) {
       return { success: false, error: 'Nenhum usuário conectado.' };
+    }
+
+    if (currentPasswordPlain) {
+      const currentHash = storageService.getUserPasswordHash(currentUser.id);
+      const providedCurrentHash = hashPassword(currentPasswordPlain);
+      const defaultAdminHash = hashPassword('admin123');
+      const isDefault = currentHash === defaultAdminHash;
+      
+      const isCurrentValid = (currentHash === providedCurrentHash) || 
+        (isDefault && (currentPasswordPlain === 'admin123' || currentPasswordPlain === 'admin'));
+
+      if (!isCurrentValid) {
+        return { success: false, error: 'A senha atual informada está incorreta.' };
+      }
     }
 
     if (newPasswordPlain.length < 6) {
       return { success: false, error: 'A nova senha deve ter no mínimo 6 caracteres.' };
     }
 
-    if (newPasswordPlain === 'admin123') {
+    if (newPasswordPlain === 'admin123' && currentUser.role === 'admin') {
       return { success: false, error: 'A nova senha não pode ser a senha padrão provisória (admin123).' };
     }
 
@@ -203,7 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const users = storageService.getUsers();
     const updatedUsers = users.map(u => {
       if (u.id === currentUser.id) {
-        return { ...u, forcePasswordChange: false };
+        return { ...u, forcePasswordChange: false, passwordUpdatedAt: new Date().toISOString() };
       }
       return u;
     });
@@ -213,6 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(updatedCurrent);
     setRequiresPasswordChange(false);
     sessionStorage.setItem('tb_session_v2', JSON.stringify(updatedCurrent));
+    localStorage.setItem('tb_session_v2', JSON.stringify(updatedCurrent));
 
     return { success: true };
   };

@@ -161,6 +161,7 @@ export const AppContent: React.FC = () => {
         onNavigate={setCurrentPage}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onOpenChangePassword={() => setIsChangePasswordOpen(true)}
       />
 
       {/* Main Content Area */}

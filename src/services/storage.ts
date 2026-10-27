@@ -2154,15 +2154,22 @@ export const storageService = {
   },
 
   getUserPasswordHash(userId: string): string | null {
+    const local = localStorage.getItem('tb_pwd_' + userId);
+    if (local) return local;
     const user = this.getUsers().find(u => u.id === userId);
+    if ((user as any)?.passwordHash) return (user as any).passwordHash;
     const defaultPlain = user?.role === 'admin' ? 'admin123' : `${user?.username || 'prof'}123`;
-    return localStorage.getItem('tb_pwd_' + userId) || hashPassword(defaultPlain);
+    return hashPassword(defaultPlain);
   },
 
   setUserPassword(userId: string, newPlainPassword: string): void {
     const hashed = hashPassword(newPlainPassword);
     safeSetItem('tb_pwd_' + userId, hashed);
     idbStorage.setItem('tb_pwd_' + userId, hashed);
+    const users = this.getUsers().map(u => u.id === userId ? { ...u, passwordHash: hashed, passwordUpdatedAt: new Date().toISOString() } : u);
+    safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    idbStorage.setItem(STORAGE_KEYS.USERS, users);
+    syncCollectionToFirestore('users', users);
   },
 
   getClients(): Client[] {

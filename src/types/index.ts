@@ -8,6 +8,8 @@ export interface User {
   role: UserRole;
   professionalId?: string; // Link to professional profile if role === 'profissional'
   forcePasswordChange: boolean;
+  passwordHash?: string;
+  passwordUpdatedAt?: string;
   createdAt: string;
   lastLogin?: string;
 }
