@@ -33,6 +33,7 @@ interface AttendanceFinishModalProps {
 interface ServiceItemState {
   attendanceId: string;
   serviceName: string;
+  professionalId?: string;
   professionalName: string;
   grossValue: number;
   discountType: 'fixed' | 'percentage';
@@ -70,11 +71,16 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     finishAttendance,
     revertAttendance,
     removeServiceFromComanda,
+    reopenComanda,
+    updateAttendanceProfessional,
     clientPackages,
     getClientActivePackages 
   } = useData();
   const { currentUser } = useAuth();
   const isProfessional = currentUser?.role === 'profissional';
+
+  const [isReopened, setIsReopened] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Selected client & date
   const targetClientId = attendance?.clientId || initialClientId || '';
@@ -103,11 +109,12 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     return list;
   }, [attendances, targetClientId, targetDate, attendance]);
 
-  // Guard: Check if comanda is already closed and fully paid
+  // Guard: Check if comanda is already closed and fully paid (disabled if user explicitly reopens for correction)
   const isAlreadyFullyPaid = useMemo(() => {
+    if (isReopened) return false;
     if (existingComanda && existingComanda.status === 'pago') return true;
     return relatedAttendances.length > 0 && relatedAttendances.every(a => !!a.finishedAt && a.paymentStatus === 'pago');
-  }, [existingComanda, relatedAttendances]);
+  }, [existingComanda, relatedAttendances, isReopened]);
 
   // Helper to find if an active package can cover this service
   const findApplicablePackage = (serviceName: string, serviceId: string) => {
@@ -311,10 +318,74 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   };
 
   // Toggle service selection
+  // Reset reopened state when modal opens or closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsReopened(false);
+      setSuccessMessage(null);
+      setError(null);
+    }
+  }, [isOpen]);
+
   const handleToggleSelectService = (attendanceId: string) => {
     setServiceItems(prev => prev.map(item => 
       item.attendanceId === attendanceId ? { ...item, isSelected: !item.isSelected } : item
     ));
+  };
+
+  // Change professional for an individual service item inside the comanda
+  const handleProfessionalChange = (attendanceId: string, newProfId: string) => {
+    const newProf = professionals.find(p => p.id === newProfId);
+    if (!newProf) return;
+
+    // 1. Update in DataContext
+    updateAttendanceProfessional(attendanceId, newProfId);
+
+    // 2. Update local service items state
+    setServiceItems(prev => prev.map(item => {
+      if (item.attendanceId === attendanceId) {
+        const srv = services.find(s => s.id === item.attendanceObj.serviceId);
+        const commPercent = srv?.commissionPercentage ?? item.commissionPercentage ?? 50;
+        const calcCommAmount = (item.grossValue * commPercent) / 100;
+        return {
+          ...item,
+          professionalId: newProf.id,
+          professionalName: newProf.name,
+          commissionPercentage: commPercent,
+          commissionAmount: calcCommAmount,
+          attendanceObj: {
+            ...item.attendanceObj,
+            professionalId: newProf.id,
+            professionalName: newProf.name,
+            commissionPercentage: commPercent,
+            commissionAmount: calcCommAmount,
+          }
+        };
+      }
+      return item;
+    }));
+  };
+
+  // Reopen comanda for corrections with zero financial duplication
+  const handleReopenComanda = () => {
+    const isConfirmed = window.confirm(
+      'Deseja reabrir esta comanda para trocar a profissional ou corrigir valores?\n\n' +
+      '• Os pagamentos e repasses anteriores serão estornados do caixa temporariamente.\n' +
+      '• Você poderá trocar a profissional e salvar novamente.\n' +
+      '• O sistema garante ZERO duplicidade: a comanda salva apenas uma vez com os dados corretos.'
+    );
+    if (!isConfirmed) return;
+
+    setError(null);
+    const targetCmdId = existingComanda?.id || attendance?.comandaId || attendance?.id || targetClientId;
+    const res = reopenComanda(targetCmdId, targetDate);
+    if (!res.success) {
+      setError(res.error || 'Erro ao reabrir comanda.');
+      return;
+    }
+
+    setIsReopened(true);
+    setSuccessMessage('Comanda reaberta com sucesso! Agora você pode trocar a profissional no menu de serviços ou ajustar valores e concluir novamente sem duplicidades.');
   };
 
   // Revert attendance back to scheduled/awaiting start
@@ -559,7 +630,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
           {/* Body */}
           <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
             {isAlreadyFullyPaid && (
-              <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-xs text-emerald-950 flex items-center justify-between gap-3 shadow-xs">
+              <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-xs text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-5 h-5" />
@@ -567,13 +638,30 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                   <div>
                     <p className="font-bold text-sm">Comanda Finalizada & Quitada (Visualização / Recibo)</p>
                     <p className="text-[11px] text-emerald-800">
-                      O pagamento desta comanda já foi processado e registrado no caixa. O valor salva uma única vez para garantir integridade financeira e zero duplicidades.
+                      O pagamento já foi registrado no caixa. Precisa corrigir a profissional ou os valores? Reabra a comanda abaixo sem risco de duplicidade.
                     </p>
                   </div>
                 </div>
-                <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full shrink-0">
-                  ✓ PAGO
-                </span>
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={handleReopenComanda}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
+                    title="Reabrir comanda para trocar profissional ou valores sem duplicar"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reabrir / Corrigir
+                  </button>
+                  <span className="px-3 py-1 bg-emerald-600 text-white font-bold text-xs rounded-full shrink-0">
+                    ✓ PAGO
+                  </span>
+                </div>
+              </div>
+            )}
+            {successMessage && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-start gap-2 shadow-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>{successMessage}</span>
               </div>
             )}
             {error && (
@@ -659,9 +747,23 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-tb-brown-soft">
-                              Profissional: <span className="font-semibold text-tb-brown-dark">{item.professionalName}</span>
-                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[11px] text-tb-brown-soft font-medium">Profissional:</span>
+                              {!isAlreadyFullyPaid ? (
+                                <select
+                                  value={item.professionalId || item.attendanceObj.professionalId}
+                                  onChange={e => handleProfessionalChange(item.attendanceId, e.target.value)}
+                                  className="text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light/90 rounded-lg px-2 py-0.5 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
+                                  title="Selecione a profissional correta para este serviço"
+                                >
+                                  {professionals.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="font-semibold text-tb-brown-dark">{item.professionalName}</span>
+                              )}
+                            </div>
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                               <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
                                 Repasse: {item.commissionPercentage}% ({formatBRL(item.commissionAmount)})
@@ -1020,6 +1122,15 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                 <>
                   <button
                     type="button"
+                    onClick={handleReopenComanda}
+                    className="px-4 py-2.5 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2"
+                    title="Reabrir esta comanda para trocar a profissional ou corrigir valores sem duplicar o caixa"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reabrir / Corrigir Profissional
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => window.print()}
                     className="px-4 py-2.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl shadow-xs transition-all flex items-center gap-2"
                   >
@@ -1031,7 +1142,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                     onClick={onClose}
                     className="px-6 py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft transition-all"
                   >
-                    Fechar Comanda
+                    Fechar Visualização
                   </button>
                 </>
               ) : (

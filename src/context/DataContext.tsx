@@ -161,6 +161,8 @@ interface DataContextType {
     }>;
     notes?: string;
   }) => { success: boolean; comanda?: Comanda; error?: string };
+  reopenComanda: (comandaIdOrClientId: string, date?: string) => { success: boolean; error?: string };
+  updateAttendanceProfessional: (attendanceId: string, newProfessionalId: string) => { success: boolean; error?: string };
 
   // Client Packages & Prepaid Credits
   getClientActivePackages: (clientId: string) => ClientPackage[];
@@ -2035,6 +2037,227 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, comanda: comandaObj };
   };
 
+  /**
+   * Reopen/Revert a finalized comanda with 100% zero-duplication guarantee.
+   * Completely purges prior financial transactions and returns attendances to open state
+   * so the receptionist can change the professional or edit prices before saving anew.
+   */
+  const reopenComanda = (comandaIdOrClientId: string, date?: string): { success: boolean; error?: string } => {
+    // 1. Locate target comanda
+    let targetComanda = comandas.find(c => c.id === comandaIdOrClientId);
+    if (!targetComanda && date) {
+      targetComanda = comandas.find(c => c.clientId === comandaIdOrClientId && c.date === date);
+    }
+    if (!targetComanda) {
+      const atdWithCmd = attendances.find(a => a.comandaId === comandaIdOrClientId || a.id === comandaIdOrClientId);
+      if (atdWithCmd) {
+        targetComanda = comandas.find(c => c.clientId === atdWithCmd.clientId && c.date === atdWithCmd.date);
+      }
+    }
+
+    const comandaId = targetComanda?.id || comandaIdOrClientId;
+    const targetClientId = targetComanda?.clientId;
+    const targetDate = targetComanda?.date || date;
+
+    // 2. Identify all attendances belonging to this comanda
+    const atdIdsToRevert = new Set<string>(targetComanda?.attendanceIds || []);
+    attendances.forEach(a => {
+      if (a.comandaId === comandaId || (targetClientId && targetDate && a.clientId === targetClientId && a.date === targetDate)) {
+        atdIdsToRevert.add(a.id);
+      }
+    });
+
+    if (atdIdsToRevert.size === 0 && !targetComanda) {
+      return { success: false, error: 'Comanda não encontrada para reversão.' };
+    }
+
+    // 3. ZERO-DUPLICATION GUARANTEE:
+    // Delete all financial payment transactions tied to this comanda or to its attendances
+    const paymentsToPurge = payments.filter(p => {
+      if (p.comandaId && p.comandaId === comandaId) return true;
+      if (p.attendanceId && atdIdsToRevert.has(p.attendanceId)) return true;
+      return false;
+    });
+
+    paymentsToPurge.forEach(p => {
+      storageService.deleteFromCloud('payments', p.id);
+    });
+
+    const nextPayments = payments.filter(p => {
+      if (p.comandaId && p.comandaId === comandaId) return false;
+      if (p.attendanceId && atdIdsToRevert.has(p.attendanceId)) return false;
+      return true;
+    });
+    setPayments(nextPayments);
+    storageService.savePayments(nextPayments);
+
+    // 4. Restore any prepaid client package sessions that were deducted
+    let updatedPackages = [...clientPackages];
+    let packagesChanged = false;
+    attendances.forEach(a => {
+      if (atdIdsToRevert.has(a.id) && a.packageId && a.isPackageCovered) {
+        const pkgIdx = updatedPackages.findIndex(p => p.id === a.packageId);
+        if (pkgIdx >= 0) {
+          const pkg = updatedPackages[pkgIdx];
+          const hasUsage = pkg.usageHistory.some(u => u.attendanceId === a.id);
+          if (hasUsage) {
+            const updatedItems = pkg.items.map(it => {
+              if (it.serviceName.toLowerCase().includes(a.serviceName.toLowerCase()) || 
+                  a.serviceName.toLowerCase().includes(it.serviceName.toLowerCase())) {
+                return {
+                  ...it,
+                  remainingQty: it.remainingQty + 1,
+                  usedQty: Math.max(0, it.usedQty - 1)
+                };
+              }
+              return it;
+            });
+            const updatedUsage = pkg.usageHistory.filter(u => u.attendanceId !== a.id);
+            updatedPackages[pkgIdx] = {
+              ...pkg,
+              status: 'ativo',
+              items: updatedItems,
+              usageHistory: updatedUsage,
+              updatedAt: new Date().toISOString()
+            };
+            packagesChanged = true;
+          }
+        }
+      }
+    });
+    if (packagesChanged) {
+      setClientPackages(updatedPackages);
+      storageService.saveClientPackages(updatedPackages);
+    }
+
+    // 5. Update attendances back to open state (pending payment)
+    const appointmentIdsToReopen = new Set<string>();
+    const nextAttendances = attendances.map(a => {
+      if (atdIdsToRevert.has(a.id)) {
+        if (a.appointmentId) {
+          appointmentIdsToReopen.add(a.appointmentId);
+        }
+        return {
+          ...a,
+          paymentStatus: 'pendente' as const,
+          paidAmount: 0,
+          finishedAt: undefined, // Reset so finish modal and finishUnifiedComanda can re-save cleanly
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return a;
+    });
+    setAttendances(nextAttendances);
+    storageService.saveAttendances(nextAttendances);
+
+    // 6. Restore appointment status if linked
+    if (appointmentIdsToReopen.size > 0) {
+      const nextAppointments = appointments.map(apt => {
+        if (appointmentIdsToReopen.has(apt.id)) {
+          return {
+            ...apt,
+            status: 'agendado' as AppointmentStatus,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return apt;
+      });
+      setAppointments(nextAppointments);
+      storageService.saveAppointments(nextAppointments);
+    }
+
+    // 7. Reset the comanda status to 'pendente'
+    if (targetComanda) {
+      const updatedComanda: Comanda = {
+        ...targetComanda,
+        status: 'pendente',
+        paidTotal: 0,
+        pendingTotal: targetComanda.netTotal || targetComanda.subtotal || 0,
+        payments: [], // Empty comanda payments list
+        updatedAt: new Date().toISOString()
+      };
+      const nextComandas = comandas.map(c => c.id === targetComanda!.id ? updatedComanda : c);
+      setComandas(nextComandas);
+      storageService.saveComandas(nextComandas);
+    }
+
+    // 8. Recalculate client statistics cleanly
+    const recalculatedClients = recalculateClientStats(nextPayments, clients);
+    setClients(recalculatedClients);
+    storageService.saveClients(recalculatedClients);
+
+    return { success: true };
+  };
+
+  /**
+   * Update the professional assigned to an attendance and recalculate their commission
+   */
+  const updateAttendanceProfessional = (attendanceId: string, newProfessionalId: string): { success: boolean; error?: string } => {
+    const atd = attendances.find(a => a.id === attendanceId);
+    if (!atd) return { success: false, error: 'Atendimento não encontrado.' };
+
+    const newProf = professionals.find(p => p.id === newProfessionalId);
+    if (!newProf) return { success: false, error: 'Profissional não encontrada.' };
+
+    const srv = services.find(s => s.id === atd.serviceId);
+    const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
+    const baseValue = atd.isPackageCovered ? (atd.grossValue || 0) : (atd.netValue || atd.grossValue || 0);
+    const commAmount = (baseValue * commPercent) / 100;
+
+    const nextAttendances = attendances.map(a => {
+      if (a.id === attendanceId) {
+        return {
+          ...a,
+          professionalId: newProf.id,
+          professionalName: newProf.name,
+          commissionPercentage: commPercent,
+          commissionAmount: commAmount,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return a;
+    });
+    setAttendances(nextAttendances);
+    storageService.saveAttendances(nextAttendances);
+
+    // If tied to an appointment, update appointment's professional as well
+    if (atd.appointmentId) {
+      const nextAppointments = appointments.map(apt => {
+        if (apt.id === atd.appointmentId) {
+          return {
+            ...apt,
+            professionalId: newProf.id,
+            professionalName: newProf.name,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return apt;
+      });
+      setAppointments(nextAppointments);
+      storageService.saveAppointments(nextAppointments);
+    }
+
+    // If any payments already exist for this attendance, update their professional attribution
+    const nextPayments = payments.map(p => {
+      if (p.attendanceId === attendanceId) {
+        return {
+          ...p,
+          professionalId: newProf.id,
+          professionalName: newProf.name,
+          commissionPercentage: commPercent,
+          commissionAmount: commAmount,
+        };
+      }
+      return p;
+    });
+    if (JSON.stringify(nextPayments) !== JSON.stringify(payments)) {
+      setPayments(nextPayments);
+      storageService.savePayments(nextPayments);
+    }
+
+    return { success: true };
+  };
+
   // CLIENT PACKAGES & PREPAID CREDITS HELPERS
   const getClientActivePackages = (clientId: string): ClientPackage[] => {
     return clientPackages.filter(p => 
@@ -2521,6 +2744,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         finishAttendance,
         getComandaByClientAndDate,
         finishUnifiedComanda,
+        reopenComanda,
+        updateAttendanceProfessional,
         getClientActivePackages,
         addClientPackage,
         deductPackageSession,

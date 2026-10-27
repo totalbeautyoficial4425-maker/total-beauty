@@ -43,6 +43,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     startAttendance,
     revertAttendance,
     removeServiceFromComanda,
+    reopenComanda,
     updateAppointmentStatus 
   } = useData();
 
@@ -601,18 +602,41 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                   </div>
 
                   {/* Comanda Footer: Unify & Pay Button */}
-                  <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between">
+                  <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between gap-2">
                     <span className="text-xs text-tb-brown-soft font-semibold">
                       {group.attendances.length > 1 ? 'Múltiplos profissionais envolvidos' : 'Serviço individual'}
                     </span>
 
-                    <button
-                      onClick={() => onOpenFinishAttendance(group.attendances[0])}
-                      className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
-                    >
-                      <Receipt className="w-4 h-4" />
-                      {isFullyPaid ? 'Ver Comanda / Recibo' : 'Fechar Comanda Unificada'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {isFullyPaid && !isProfessional && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const isConfirmed = window.confirm(
+                              `Deseja reabrir a comanda de "${cli.name}" para trocar a profissional ou corrigir valores?\n\nO caixa anterior será estornado para permitir a nova finalização sem duplicidade.`
+                            );
+                            if (!isConfirmed) return;
+                            const res = reopenComanda(group.attendances[0].comandaId || cli.id, todayStr);
+                            if (res.success) {
+                              onOpenFinishAttendance(group.attendances[0]);
+                            }
+                          }}
+                          className="px-3 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
+                          title="Reabrir comanda para trocar profissional sem duplicidade"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Reabrir Comanda
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onOpenFinishAttendance(group.attendances[0])}
+                        className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
+                      >
+                        <Receipt className="w-4 h-4" />
+                        {isFullyPaid ? 'Ver Comanda / Recibo' : 'Fechar Comanda Unificada'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
