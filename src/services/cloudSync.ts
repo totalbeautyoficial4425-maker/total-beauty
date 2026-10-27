@@ -274,10 +274,56 @@ export const cloudSyncService = {
       // 13. Users
       if (Array.isArray(cloudData.users) && cloudData.users.length > 0) {
         const local = storageService.getUsers();
-        const merged = mergeCollections(local, cloudData.users);
-        if (merged.length !== local.length) {
-          safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(merged));
-          idbStorage.setItem(STORAGE_KEYS.USERS, merged);
+        let usersModified = false;
+        
+        const mergedUsers = cloudData.users.map((remoteUser: User) => {
+          const localUser = local.find(l => l.id === remoteUser.id);
+          // If remote user has a passwordHash, immediately sync to tb_pwd_
+          if (remoteUser.passwordHash) {
+            safeSetItem('tb_pwd_' + remoteUser.id, remoteUser.passwordHash);
+            idbStorage.setItem('tb_pwd_' + remoteUser.id, remoteUser.passwordHash);
+          }
+
+          if (!localUser) {
+            usersModified = true;
+            return remoteUser;
+          }
+
+          const localTime = new Date(localUser.passwordUpdatedAt || localUser.updatedAt || localUser.createdAt || 0).getTime();
+          const remoteTime = new Date(remoteUser.passwordUpdatedAt || remoteUser.updatedAt || remoteUser.createdAt || 0).getTime();
+
+          if (remoteTime >= localTime || (!localUser.passwordHash && remoteUser.passwordHash)) {
+            if (JSON.stringify(localUser) !== JSON.stringify(remoteUser)) {
+              usersModified = true;
+            }
+            return {
+              ...localUser,
+              ...remoteUser,
+              passwordHash: remoteUser.passwordHash || localUser.passwordHash,
+              passwordUpdatedAt: remoteUser.passwordUpdatedAt || localUser.passwordUpdatedAt
+            };
+          } else {
+            // Local is newer
+            return {
+              ...remoteUser,
+              ...localUser,
+              passwordHash: localUser.passwordHash || remoteUser.passwordHash,
+              passwordUpdatedAt: localUser.passwordUpdatedAt || remoteUser.passwordUpdatedAt
+            };
+          }
+        });
+
+        // Add any local users not in remote
+        local.forEach(l => {
+          if (!mergedUsers.some((m: User) => m.id === l.id)) {
+            mergedUsers.push(l);
+            usersModified = true;
+          }
+        });
+
+        if (usersModified || mergedUsers.length !== local.length || JSON.stringify(local) !== JSON.stringify(mergedUsers)) {
+          safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
+          idbStorage.setItem(STORAGE_KEYS.USERS, mergedUsers);
           hasAnyChange = true;
         }
       }
@@ -318,6 +364,16 @@ export const cloudSyncService = {
     isPushing = true;
 
     try {
+      const usersToPush = storageService.getUsers().map(u => {
+        const pwdHash = storageService.getUserPasswordHash(u.id) || u.passwordHash;
+        return {
+          ...u,
+          passwordHash: pwdHash || undefined,
+          passwordUpdatedAt: u.passwordUpdatedAt || (pwdHash ? new Date().toISOString() : undefined),
+          updatedAt: u.updatedAt || new Date().toISOString(),
+        };
+      });
+
       const payload = {
         exportedAt: new Date().toISOString(),
         deletedIds: storageService.getDeletedIds(),
@@ -334,7 +390,7 @@ export const cloudSyncService = {
         clientPackages: storageService.getClientPackages(),
         scheduleBlocks: storageService.getScheduleBlocks(),
         settings: storageService.getSettings(),
-        users: storageService.getUsers(),
+        users: usersToPush,
       };
 
       const res = await fetch(SYNC_API_ENDPOINT, {
@@ -368,6 +424,85 @@ export const cloudSyncService = {
       return { success: false, error: err?.message || 'Network error' };
     } finally {
       isPushing = false;
+    }
+  },
+
+  /**
+   * Fast, atomic cloud synchronization for user password change
+   */
+  async syncUserPasswordToCloud(userId: string, passwordHash: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch(SYNC_API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'change_password',
+          userId,
+          passwordHash,
+          passwordUpdatedAt: new Date().toISOString(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        return { success: false, error: errText };
+      }
+
+      const resJson = await res.json();
+      if (resJson.version) {
+        lastKnownVersion = resJson.version;
+        safeSetItem(LAST_CLOUD_VERSION_KEY, resJson.version);
+        try {
+          broadcastChannel?.postMessage({ type: 'sync_update', version: resJson.version });
+        } catch {}
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.warn('Direct password cloud sync failed:', err);
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  },
+
+  /**
+   * Fast, atomic admin password reset with salon identity verification
+   */
+  async resetAdminPasswordInCloud(verification: string, newPasswordHash: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch(SYNC_API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'reset_admin_password',
+          verification,
+          newPasswordHash,
+        }),
+      });
+
+      if (!res.ok) {
+        let errJson: any = null;
+        try {
+          errJson = await res.json();
+        } catch {}
+        return { success: false, error: errJson?.error || 'Erro ao redefinir senha no servidor.' };
+      }
+
+      const resJson = await res.json();
+      if (resJson.version) {
+        lastKnownVersion = resJson.version;
+        safeSetItem(LAST_CLOUD_VERSION_KEY, resJson.version);
+        try {
+          broadcastChannel?.postMessage({ type: 'sync_update', version: resJson.version });
+        } catch {}
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Erro de conexão com o servidor.' };
     }
   },
 

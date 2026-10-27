@@ -35,6 +35,48 @@ function mergeArrayById(existingList, incomingList, deletedIds = new Set()) {
   return Array.from(map.values());
 }
 
+function mergeUsers(existingList, incomingList) {
+  if (!Array.isArray(existingList) && !Array.isArray(incomingList)) return [];
+  if (!Array.isArray(incomingList)) return existingList || [];
+  if (!Array.isArray(existingList)) return incomingList || [];
+
+  const map = new Map();
+  existingList.forEach(u => {
+    if (u && u.id) map.set(u.id, u);
+  });
+
+  incomingList.forEach(u => {
+    if (!u || !u.id) return;
+    const existing = map.get(u.id);
+    if (!existing) {
+      map.set(u.id, u);
+    } else {
+      const existingTime = new Date(existing.passwordUpdatedAt || existing.updatedAt || existing.createdAt || 0).getTime();
+      const incomingTime = new Date(u.passwordUpdatedAt || u.updatedAt || u.createdAt || 0).getTime();
+
+      // If incoming has passwordHash and is newer or equal, or if existing has no passwordHash
+      if (incomingTime >= existingTime || (u.passwordHash && !existing.passwordHash)) {
+        map.set(u.id, {
+          ...existing,
+          ...u,
+          passwordHash: u.passwordHash || existing.passwordHash,
+          passwordUpdatedAt: u.passwordUpdatedAt || existing.passwordUpdatedAt || new Date().toISOString(),
+          updatedAt: u.updatedAt || new Date().toISOString()
+        });
+      } else {
+        // existing has a newer passwordUpdatedAt, preserve existing passwordHash
+        map.set(u.id, {
+          ...u,
+          ...existing,
+          passwordHash: existing.passwordHash || u.passwordHash,
+        });
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 export default async function handler(req, res) {
   // CORS configuration to allow cross-origin requests from any client / phone
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -109,6 +151,127 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
       const version = Date.now().toString();
 
+      // FAST ATOMIC ACTION: Change or Reset Password directly in Cloud Blob
+      if (body.action === 'change_password') {
+        const { userId, passwordHash, passwordUpdatedAt } = body;
+        if (!userId || !passwordHash) {
+          return res.status(400).json({ success: false, error: 'Missing userId or passwordHash' });
+        }
+        
+        let usersList = Array.isArray(existingData.users) ? existingData.users : [];
+        let found = false;
+        usersList = usersList.map(u => {
+          if (u.id === userId) {
+            found = true;
+            return {
+              ...u,
+              passwordHash,
+              passwordUpdatedAt: passwordUpdatedAt || now,
+              updatedAt: now,
+              forcePasswordChange: false
+            };
+          }
+          return u;
+        });
+
+        if (!found) {
+          usersList.push({
+            id: userId,
+            username: userId === 'user_admin_01' ? 'admin' : userId,
+            role: userId === 'user_admin_01' ? 'admin' : 'profissional',
+            passwordHash,
+            passwordUpdatedAt: passwordUpdatedAt || now,
+            updatedAt: now,
+            forcePasswordChange: false,
+            createdAt: now,
+          });
+        }
+
+        existingData.users = usersList;
+        existingData.updatedAt = now;
+        existingData.version = version;
+
+        await put(BLOB_FILE_NAME, JSON.stringify(existingData), {
+          access: 'public',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+
+        return res.status(200).json({ success: true, message: 'Senha atualizada na nuvem com sucesso.', version });
+      }
+
+      // FAST ATOMIC ACTION: Reset Admin Password with Salon Identity Verification
+      if (body.action === 'reset_admin_password') {
+        const { verification, newPasswordHash } = body;
+        if (!verification || !newPasswordHash) {
+          return res.status(400).json({ success: false, error: 'Código ou dado de verificação e nova senha são obrigatórios.' });
+        }
+
+        const cleanVerif = String(verification).replace(/\D/g, ''); // digits only
+        const cleanEmail = String(verification).trim().toLowerCase();
+        
+        const salonPhone = String(existingData.settings?.whatsapp || '34998876017').replace(/\D/g, '');
+        const salonEmail = String(existingData.settings?.email || 'totalbeautyoficial4425@gmail.com').trim().toLowerCase();
+        const adminEmail = 'gestao@totalbeautyoficial.com.br';
+
+        const isPhoneMatch = (cleanVerif.length >= 4 && salonPhone.endsWith(cleanVerif)) || (cleanVerif === salonPhone);
+        const isEmailMatch = cleanEmail === salonEmail || cleanEmail === adminEmail;
+
+        if (!isPhoneMatch && !isEmailMatch) {
+          return res.status(401).json({ 
+            success: false, 
+            error: 'Verificação incorreta. Digite o WhatsApp oficial do salão (ex: final 6017 ou completo) ou o e-mail cadastrado.' 
+          });
+        }
+
+        let usersList = Array.isArray(existingData.users) ? existingData.users : [];
+        let found = false;
+        usersList = usersList.map(u => {
+          if (u.id === 'user_admin_01' || u.role === 'admin' || u.username === 'admin') {
+            found = true;
+            return {
+              ...u,
+              passwordHash: newPasswordHash,
+              passwordUpdatedAt: now,
+              updatedAt: now,
+              forcePasswordChange: false
+            };
+          }
+          return u;
+        });
+
+        if (!found) {
+          usersList.push({
+            id: 'user_admin_01',
+            username: 'admin',
+            role: 'admin',
+            name: 'Administradora Total Beauty',
+            email: 'gestao@totalbeautyoficial.com.br',
+            passwordHash: newPasswordHash,
+            passwordUpdatedAt: now,
+            updatedAt: now,
+            forcePasswordChange: false,
+            createdAt: now,
+          });
+        }
+
+        existingData.users = usersList;
+        existingData.updatedAt = now;
+        existingData.version = version;
+
+        await put(BLOB_FILE_NAME, JSON.stringify(existingData), {
+          access: 'public',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+
+        return res.status(200).json({ success: true, message: 'Senha do administrador redefinida com sucesso na nuvem.', version });
+      }
+
       const allDeletedIds = new Set([
         ...(Array.isArray(existingData.deletedIds) ? existingData.deletedIds : []),
         ...(Array.isArray(body.deletedIds) ? body.deletedIds : [])
@@ -126,7 +289,7 @@ export default async function handler(req, res) {
       const mergedConsumptions = mergeArrayById(existingData.consumptions, body.consumptions, allDeletedIds);
       const mergedClientPackages = mergeArrayById(existingData.clientPackages, body.clientPackages, allDeletedIds);
       const mergedScheduleBlocks = mergeArrayById(existingData.scheduleBlocks, body.scheduleBlocks, allDeletedIds);
-      const mergedUsers = mergeArrayById(existingData.users, body.users, allDeletedIds);
+      const mergedUsers = mergeUsers(existingData.users, body.users);
 
       // CATASTROPHIC WIPE PREVENTION GUARD:
       // Prevent unhydrated or corrupted client from wiping out established database tables

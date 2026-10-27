@@ -21,12 +21,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
   const isAdmin = currentUser?.role === 'admin';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -50,18 +51,25 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       return;
     }
 
-    const res = changePassword(newPassword, !isForcedFirstLogin ? currentPassword : undefined);
-    if (!res.success) {
-      setError(res.error || 'Erro ao alterar a senha.');
-    } else {
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        if (onClose) onClose();
-      }, 1500);
+    setIsSaving(true);
+    try {
+      const res = await changePassword(newPassword, !isForcedFirstLogin ? currentPassword : undefined);
+      if (!res.success) {
+        setError(res.error || 'Erro ao alterar a senha.');
+      } else {
+        setSuccess(true);
+        setTimeout(() => {
+          setSuccess(false);
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+          if (onClose) onClose();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao salvar e sincronizar a senha.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -186,10 +194,17 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             )}
             <button
               type="submit"
-              disabled={success}
-              className="w-full py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft hover:shadow-premium transition-all disabled:opacity-50"
+              disabled={isSaving || success}
+              className="w-full py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft hover:shadow-premium transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isForcedFirstLogin ? 'Salvar e Entrar no Sistema' : 'Atualizar Senha de Acesso'}
+              {isSaving ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Sincronizando com Nuvem (PC & Celular)...</span>
+                </>
+              ) : (
+                isForcedFirstLogin ? 'Salvar e Entrar no Sistema' : 'Atualizar Senha de Acesso'
+              )}
             </button>
           </div>
         </form>

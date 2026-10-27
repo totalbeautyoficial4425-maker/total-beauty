@@ -10,6 +10,7 @@ export interface User {
   forcePasswordChange: boolean;
   passwordHash?: string;
   passwordUpdatedAt?: string;
+  updatedAt?: string;
   createdAt: string;
   lastLogin?: string;
 }

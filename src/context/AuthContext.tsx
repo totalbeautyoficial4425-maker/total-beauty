@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { storageService, hashPassword } from '../services/storage';
+import { cloudSyncService } from '../services/cloudSync';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -10,8 +11,9 @@ interface AuthContextType {
   isLockedOut: boolean;
   lockoutRemainingSeconds: number;
   resetLockout: () => void;
-  login: (usernameOrEmail: string, passwordPlain: string, rememberMe?: boolean) => { success: boolean; error?: string };
-  changePassword: (newPasswordPlain: string, currentPasswordPlain?: string) => { success: boolean; error?: string };
+  login: (usernameOrEmail: string, passwordPlain: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (newPasswordPlain: string, currentPasswordPlain?: string) => Promise<{ success: boolean; error?: string }>;
+  resetAdminPassword: (verification: string, newPasswordPlain: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -33,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoginAttempts(0);
   };
 
-  // Restore session (clear legacy v1 pre-saved sessions)
+  // Restore session and trigger initial background sync
   useEffect(() => {
     try {
       localStorage.removeItem('tb_session_v1');
@@ -52,6 +54,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error('Error restoring auth session:', err);
     }
+
+    // Immediately pull latest credentials and salon data from cloud on mount
+    cloudSyncService.pullFromCloud().catch(err => {
+      console.warn('Initial auth cloud pull error (safe fallback to local):', err);
+    });
   }, []);
 
   // Lockout timer ticker
@@ -74,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
-  const login = (usernameOrEmail: string, passwordPlain: string, rememberMe = false): { success: boolean; error?: string } => {
+  const login = async (usernameOrEmail: string, passwordPlain: string, rememberMe = false): Promise<{ success: boolean; error?: string }> => {
     const cleanInput = (usernameOrEmail || '').trim().toLowerCase();
     const cleanPassword = (passwordPlain || '').trim();
     const isAdminAttempt = cleanInput === 'admin' || cleanInput === 'gestao@totalbeautyoficial.com.br';
@@ -86,6 +93,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         success: false, 
         error: `Muitas tentativas incorretas. Sistema temporariamente bloqueado por segurança. Aguarde ${secs} segundos.` 
       };
+    }
+
+    // 1. Instantly pull latest credentials from Cloud Blob (guarantees cross-device password sync PC <-> Phone)
+    try {
+      await Promise.race([
+        cloudSyncService.pullFromCloud(),
+        new Promise(resolve => setTimeout(resolve, 2500))
+      ]);
+    } catch (e) {
+      console.warn('Pre-login cloud sync fallback to local cache:', e);
     }
 
     let users = storageService.getUsers();
@@ -124,10 +141,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isPasswordValid = true;
     }
 
+    // Direct hash match with user object hash (from cloud sync)
+    if (!isPasswordValid && matchedUser.passwordHash && matchedUser.passwordHash === providedHash) {
+      isPasswordValid = true;
+      storageService.setUserPassword(matchedUser.id, cleanPassword);
+    }
+
     // 2. Admin initial fallback: ONLY accepted if no custom secure password was set yet
     if (matchedUser.role === 'admin' || isAdminAttempt) {
       const defaultAdminHash = hashPassword('admin123');
-      const isCustomPasswordSet = currentHash && currentHash !== defaultAdminHash;
+      const isCustomPasswordSet = (currentHash && currentHash !== defaultAdminHash) || 
+                                 (matchedUser.passwordHash && matchedUser.passwordHash !== defaultAdminHash);
       if (!isCustomPasswordSet) {
         if (cleanPassword === 'admin123' || cleanPassword === 'admin' || cleanPassword === 'admin@123') {
           isPasswordValid = true;
@@ -184,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const changePassword = (newPasswordPlain: string, currentPasswordPlain?: string): { success: boolean; error?: string } => {
+  const changePassword = async (newPasswordPlain: string, currentPasswordPlain?: string): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) {
       return { success: false, error: 'Nenhum usuário conectado.' };
     }
@@ -211,24 +235,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'A nova senha não pode ser a senha padrão provisória (admin123).' };
     }
 
-    // Save new hash
+    // 1. Save new hash locally
     storageService.setUserPassword(currentUser.id, newPasswordPlain);
+    const newHash = hashPassword(newPasswordPlain);
+    const now = new Date().toISOString();
 
-    // Remove forcePasswordChange
+    // 2. Remove forcePasswordChange and attach hash to users list
     const users = storageService.getUsers();
     const updatedUsers = users.map(u => {
       if (u.id === currentUser.id) {
-        return { ...u, forcePasswordChange: false, passwordUpdatedAt: new Date().toISOString() };
+        return { 
+          ...u, 
+          passwordHash: newHash, 
+          forcePasswordChange: false, 
+          passwordUpdatedAt: now,
+          updatedAt: now 
+        };
       }
       return u;
     });
     storageService.saveUsers(updatedUsers);
 
-    const updatedCurrent = { ...currentUser, forcePasswordChange: false };
+    // 3. Instant atomic push to cloud so phone and computer are immediately synchronized!
+    await cloudSyncService.syncUserPasswordToCloud(currentUser.id, newHash);
+    await cloudSyncService.pushToCloud();
+
+    const updatedCurrent = { ...currentUser, passwordHash: newHash, forcePasswordChange: false };
     setCurrentUser(updatedCurrent);
     setRequiresPasswordChange(false);
     sessionStorage.setItem('tb_session_v2', JSON.stringify(updatedCurrent));
     localStorage.setItem('tb_session_v2', JSON.stringify(updatedCurrent));
+
+    return { success: true };
+  };
+
+  const resetAdminPassword = async (verification: string, newPasswordPlain: string): Promise<{ success: boolean; error?: string }> => {
+    if (newPasswordPlain.length < 6) {
+      return { success: false, error: 'A nova senha deve ter no mínimo 6 caracteres.' };
+    }
+    if (newPasswordPlain === 'admin123') {
+      return { success: false, error: 'Escolha uma nova senha diferente de admin123.' };
+    }
+
+    const newHash = hashPassword(newPasswordPlain);
+
+    // 1. Attempt atomic cloud reset
+    const cloudRes = await cloudSyncService.resetAdminPasswordInCloud(verification, newHash);
+    if (!cloudRes.success) {
+      return { success: false, error: cloudRes.error || 'Não foi possível redefinir a senha do administrador.' };
+    }
+
+    // 2. Save locally
+    const now = new Date().toISOString();
+    storageService.setUserPassword('user_admin_01', newPasswordPlain);
+    const users = storageService.getUsers().map(u => {
+      if (u.id === 'user_admin_01' || u.role === 'admin') {
+        return {
+          ...u,
+          passwordHash: newHash,
+          passwordUpdatedAt: now,
+          updatedAt: now,
+          forcePasswordChange: false,
+        };
+      }
+      return u;
+    });
+    storageService.saveUsers(users);
 
     return { success: true };
   };
@@ -254,6 +326,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetLockout,
         login,
         changePassword,
+        resetAdminPassword,
         logout,
       }}
     >

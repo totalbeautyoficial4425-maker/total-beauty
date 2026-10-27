@@ -1853,15 +1853,17 @@ export function ensureCleanProductionState(): void {
     if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCES)) localStorage.setItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify([]));
     if (!localStorage.getItem(STORAGE_KEYS.PAYMENTS)) localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
     if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
-
-    // Set passwords for all default users
-    DEFAULT_USERS.forEach(u => {
-      const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
-      if (!localStorage.getItem('tb_pwd_' + u.id)) {
-        localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
-      }
-    });
+    
+    // Only initialize default users if no users key exists, preventing overwriting custom credentials
+    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+      DEFAULT_USERS.forEach(u => {
+        const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
+        if (!localStorage.getItem('tb_pwd_' + u.id)) {
+          localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
+        }
+      });
+    }
 
     localStorage.setItem(CLEAN_PROD_FLAG, 'true');
     localStorage.setItem(CATALOG_VERSION_FLAG, 'true');
@@ -2127,14 +2129,26 @@ export const storageService = {
     // Ensure all default users (admin and registered professionals) exist
     let modified = false;
     DEFAULT_USERS.forEach(defUser => {
-      if (!users.some(u => u.username.toLowerCase() === defUser.username.toLowerCase())) {
+      let existing = users.find(u => u.username.toLowerCase() === defUser.username.toLowerCase());
+      if (!existing) {
         users.push(defUser);
+        existing = defUser;
         modified = true;
       }
-      // Ensure password hash exists
-      const pwd = defUser.role === 'admin' ? 'admin123' : `${defUser.username}123`;
-      if (!localStorage.getItem('tb_pwd_' + defUser.id)) {
-        localStorage.setItem('tb_pwd_' + defUser.id, hashPassword(pwd));
+      
+      // Ensure password hash exists and is synchronized
+      const localHash = localStorage.getItem('tb_pwd_' + defUser.id);
+      if (!localHash) {
+        if (existing?.passwordHash) {
+          localStorage.setItem('tb_pwd_' + defUser.id, existing.passwordHash);
+        } else {
+          const pwd = defUser.role === 'admin' ? 'admin123' : `${defUser.username}123`;
+          localStorage.setItem('tb_pwd_' + defUser.id, hashPassword(pwd));
+        }
+      } else if (!existing?.passwordHash) {
+        existing = { ...existing, passwordHash: localHash } as User;
+        users = users.map(u => u.id === defUser.id ? existing! : u);
+        modified = true;
       }
     });
 
@@ -2155,21 +2169,29 @@ export const storageService = {
 
   getUserPasswordHash(userId: string): string | null {
     const local = localStorage.getItem('tb_pwd_' + userId);
-    if (local) return local;
     const user = this.getUsers().find(u => u.id === userId);
-    if ((user as any)?.passwordHash) return (user as any).passwordHash;
+    if (local) return local;
+    if (user?.passwordHash) return user.passwordHash;
     const defaultPlain = user?.role === 'admin' ? 'admin123' : `${user?.username || 'prof'}123`;
     return hashPassword(defaultPlain);
   },
 
   setUserPassword(userId: string, newPlainPassword: string): void {
     const hashed = hashPassword(newPlainPassword);
+    const now = new Date().toISOString();
     safeSetItem('tb_pwd_' + userId, hashed);
     idbStorage.setItem('tb_pwd_' + userId, hashed);
-    const users = this.getUsers().map(u => u.id === userId ? { ...u, passwordHash: hashed, passwordUpdatedAt: new Date().toISOString() } : u);
+    const users = this.getUsers().map(u => u.id === userId ? { 
+      ...u, 
+      passwordHash: hashed, 
+      passwordUpdatedAt: now,
+      updatedAt: now,
+      forcePasswordChange: false 
+    } : u);
     safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(users));
     idbStorage.setItem(STORAGE_KEYS.USERS, users);
     syncCollectionToFirestore('users', users);
+    notifyDataChanged();
   },
 
   getClients(): Client[] {
