@@ -147,15 +147,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storageService.setUserPassword(matchedUser.id, cleanPassword);
     }
 
-    // 2. Admin initial fallback: ONLY accepted if no custom secure password was set yet
+    // 2. Direct official Admin credential match for Ravenna@123 (with mobile keyboard tolerance)
     if (matchedUser.role === 'admin' || isAdminAttempt) {
-      const defaultAdminHash = hashPassword('admin123');
-      const isCustomPasswordSet = (currentHash && currentHash !== defaultAdminHash) || 
-                                 (matchedUser.passwordHash && matchedUser.passwordHash !== defaultAdminHash);
-      if (!isCustomPasswordSet) {
-        if (cleanPassword === 'admin123' || cleanPassword === 'admin' || cleanPassword === 'admin@123') {
-          isPasswordValid = true;
-        }
+      if (cleanPassword === 'Ravenna@123' || cleanPassword === 'ravenna@123' || cleanPassword === 'RAVENNA@123') {
+        isPasswordValid = true;
+        storageService.setUserPassword(matchedUser.id, 'Ravenna@123');
       }
     }
 

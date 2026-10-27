@@ -77,6 +77,8 @@ export const DEFAULT_USERS: User[] = [
     email: 'gestao@totalbeautyoficial.com.br',
     name: 'Administradora Total Beauty',
     role: 'admin',
+    passwordHash: 'sha256_65247386_33', // Official Ravenna@123
+    passwordUpdatedAt: '2026-10-27T05:39:00.000Z',
     forcePasswordChange: false,
     createdAt: new Date().toISOString(),
   },
@@ -1858,7 +1860,7 @@ export function ensureCleanProductionState(): void {
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_USERS));
       DEFAULT_USERS.forEach(u => {
-        const pwd = u.role === 'admin' ? 'admin123' : `${u.username}123`;
+        const pwd = u.role === 'admin' ? 'Ravenna@123' : `${u.username}123`;
         if (!localStorage.getItem('tb_pwd_' + u.id)) {
           localStorage.setItem('tb_pwd_' + u.id, hashPassword(pwd));
         }
@@ -2142,7 +2144,7 @@ export const storageService = {
         if (existing?.passwordHash) {
           localStorage.setItem('tb_pwd_' + defUser.id, existing.passwordHash);
         } else {
-          const pwd = defUser.role === 'admin' ? 'admin123' : `${defUser.username}123`;
+          const pwd = defUser.role === 'admin' ? 'Ravenna@123' : `${defUser.username}123`;
           localStorage.setItem('tb_pwd_' + defUser.id, hashPassword(pwd));
         }
       } else if (!existing?.passwordHash) {
@@ -2172,7 +2174,7 @@ export const storageService = {
     const user = this.getUsers().find(u => u.id === userId);
     if (local) return local;
     if (user?.passwordHash) return user.passwordHash;
-    const defaultPlain = user?.role === 'admin' ? 'admin123' : `${user?.username || 'prof'}123`;
+    const defaultPlain = user?.role === 'admin' ? 'Ravenna@123' : `${user?.username || 'prof'}123`;
     return hashPassword(defaultPlain);
   },
 

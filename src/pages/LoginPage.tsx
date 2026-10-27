@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Lock, User, AlertCircle, ShieldCheck, Sparkles, KeyRound, RefreshCw, X, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { cloudSyncService } from '../services/cloudSync';
 
 export const LoginPage: React.FC = () => {
   const { login, resetAdminPassword, isLockedOut, lockoutRemainingSeconds, resetLockout } = useAuth();
@@ -71,6 +72,19 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  const handleForceRefresh = async () => {
+    setIsLoading(true);
+    try {
+      localStorage.removeItem('tb_session_v1');
+      localStorage.removeItem('tb_session_v2');
+      sessionStorage.clear();
+      await cloudSyncService.pullFromCloud();
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-tb-ivory flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background orbs with Total Beauty colors */}
@@ -79,7 +93,18 @@ export const LoginPage: React.FC = () => {
 
       <div className="w-full max-w-md relative z-10">
         {/* Main Card */}
-        <div className="bg-tb-white rounded-3xl shadow-premium border border-tb-rose-light/50 overflow-hidden">
+        <div className="bg-tb-white rounded-3xl shadow-premium border border-tb-rose-light/50 overflow-hidden relative">
+          {/* Top Refresh Button for Mobile / Home Screen PWA */}
+          <button
+            type="button"
+            onClick={handleForceRefresh}
+            title="Atualizar conexão e sincronizar"
+            className="absolute top-4 right-4 p-2 text-tb-rose-primary/70 hover:text-tb-rose-primary hover:bg-tb-rose-blush/40 rounded-xl transition-all z-20 flex items-center gap-1 text-[11px] font-medium"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar</span>
+          </button>
+
           {/* Top Brand Hero */}
           <div className="px-8 pt-10 pb-6 text-center bg-gradient-to-b from-tb-rose-blush/30 to-tb-white border-b border-tb-rose-light/30">
             <div className="w-20 h-20 mx-auto rounded-2xl p-1 bg-tb-white shadow-soft border border-tb-rose-light/60 flex items-center justify-center mb-4">
