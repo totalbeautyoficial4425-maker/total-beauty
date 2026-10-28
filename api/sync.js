@@ -1,7 +1,23 @@
-import { put } from '@vercel/blob';
+import { neon } from '@neondatabase/serverless';
 
-const BLOB_FILE_NAME = 'total_beauty_db.json';
-const BLOB_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
+function getSql() {
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!dbUrl) {
+    throw new Error('Database connection URL (DATABASE_URL) is missing');
+  }
+  return neon(dbUrl);
+}
+
+async function ensureTable(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS total_beauty_cloud_sync (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      version TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+}
 
 function mergeArrayById(existingList, incomingList, deletedIds = new Set()) {
   if (!Array.isArray(existingList) && !Array.isArray(incomingList)) return [];
@@ -102,27 +118,20 @@ export default async function handler(req, res) {
   }
 
   try {
+    const sql = getSql();
+    await ensureTable(sql);
+
     if (req.method === 'GET') {
-      const ts = Date.now();
-      const response = await fetch(`${BLOB_PUBLIC_URL}?t=${ts}`, {
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
-      });
-
-      if (!response.ok) {
+      const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
+      if (rows.length === 0 || !rows[0].data) {
         return res.status(200).json({ success: true, empty: true, data: null });
       }
 
-      let data = null;
-      try {
-        data = await response.json();
-      } catch (e) {
-        return res.status(200).json({ success: true, empty: true, data: null });
-      }
-
+      const row = rows[0];
       return res.status(200).json({
         success: true,
-        version: data?.version || data?.exportedAt || null,
-        data,
+        version: row.version || row.data?.version || null,
+        data: row.data,
       });
     }
 
@@ -140,31 +149,19 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Empty body' });
       }
 
-      // Fetch existing data from blob with retry to perform safe server-side merge
-      let existingData = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const existingRes = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
-            headers: { 'Cache-Control': 'no-cache, no-store' }
-          });
-          if (existingRes.ok) {
-            existingData = await existingRes.json();
-            break;
-          }
-        } catch (err) {
-          console.warn(`Attempt ${attempt} to fetch existing data failed:`, err);
-        }
-      }
-
-      // If existing data cannot be loaded, do NOT overwrite with incoming data to prevent catastrophic loss!
-      if (!existingData) {
-        return res.status(503).json({ success: false, error: 'Cannot verify cloud state. Aborting push to prevent data loss.' });
-      }
+      // Fetch existing data from Neon Postgres
+      const rows = await sql`SELECT data FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
+      let existingData = rows.length > 0 && rows[0].data ? rows[0].data : null;
 
       const now = new Date().toISOString();
       const version = Date.now().toString();
 
-      // FAST ATOMIC ACTION: Change or Reset Password directly in Cloud Blob
+      // If existing data cannot be loaded yet, initialize with body safely
+      if (!existingData) {
+        existingData = body;
+      }
+
+      // FAST ATOMIC ACTION: Change or Reset Password directly in Cloud Database
       if (body.action === 'change_password') {
         const { userId, passwordHash, passwordUpdatedAt } = body;
         if (!userId || !passwordHash) {
@@ -204,13 +201,14 @@ export default async function handler(req, res) {
         existingData.updatedAt = now;
         existingData.version = version;
 
-        await put(BLOB_FILE_NAME, JSON.stringify(existingData), {
-          access: 'public',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json',
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-        });
+        await sql`
+          INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
+          VALUES ('main', ${JSON.stringify(existingData)}, ${version}, NOW())
+          ON CONFLICT (id) DO UPDATE
+          SET data = EXCLUDED.data,
+              version = EXCLUDED.version,
+              updated_at = NOW();
+        `;
 
         return res.status(200).json({ success: true, message: 'Senha atualizada na nuvem com sucesso.', version });
       }
@@ -274,13 +272,14 @@ export default async function handler(req, res) {
         existingData.updatedAt = now;
         existingData.version = version;
 
-        await put(BLOB_FILE_NAME, JSON.stringify(existingData), {
-          access: 'public',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json',
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-        });
+        await sql`
+          INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
+          VALUES ('main', ${JSON.stringify(existingData)}, ${version}, NOW())
+          ON CONFLICT (id) DO UPDATE
+          SET data = EXCLUDED.data,
+              version = EXCLUDED.version,
+              updated_at = NOW();
+        `;
 
         return res.status(200).json({ success: true, message: 'Senha do administrador redefinida com sucesso na nuvem.', version });
       }
@@ -340,31 +339,18 @@ export default async function handler(req, res) {
         settings: { ...(existingData.settings || {}), ...(body.settings || {}) },
       };
 
-      const result = await put(BLOB_FILE_NAME, JSON.stringify(mergedPayload), {
-        access: 'public',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType: 'application/json',
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-
-      // Keep redundant backup file on blob storage
-      try {
-        await put('total_beauty_db_backup.json', JSON.stringify(mergedPayload), {
-          access: 'public',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json',
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-        });
-      } catch (backupErr) {
-        console.warn('Backup put failed (non-fatal):', backupErr);
-      }
+      await sql`
+        INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
+        VALUES ('main', ${JSON.stringify(mergedPayload)}, ${version}, NOW())
+        ON CONFLICT (id) DO UPDATE
+        SET data = EXCLUDED.data,
+            version = EXCLUDED.version,
+            updated_at = NOW();
+      `;
 
       return res.status(200).json({
         success: true,
         version,
-        url: result.url,
       });
     }
 

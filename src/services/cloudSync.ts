@@ -18,7 +18,6 @@ import {
 } from '../types';
 
 const SYNC_API_ENDPOINT = '/api/sync';
-const CDN_FALLBACK_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
 const LAST_CLOUD_VERSION_KEY = 'tb_last_cloud_version';
 
 let lastKnownVersion = '';
@@ -101,20 +100,9 @@ export const cloudSyncService = {
     isPulling = true;
 
     try {
-      // 1. Try serverless endpoint first, fallback to direct CDN url
-      let response: Response;
-      try {
-        response = await fetch(`${SYNC_API_ENDPOINT}?t=${Date.now()}`, {
-          headers: { 'Cache-Control': 'no-cache' }
-        });
-        if (!response.ok && response.status === 404) {
-          throw new Error('API route not ready, using CDN fallback');
-        }
-      } catch {
-        response = await fetch(`${CDN_FALLBACK_URL}?t=${Date.now()}`, {
-          headers: { 'Cache-Control': 'no-cache' }
-        });
-      }
+      const response = await fetch(`${SYNC_API_ENDPOINT}?t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache, no-store' }
+      });
 
       if (!response.ok) {
         return { success: false, hasChanges: false };
@@ -534,7 +522,7 @@ export const cloudSyncService = {
     }
     pendingPushTimeout = setTimeout(() => {
       this.pushToCloud();
-    }, 400);
+    }, 250);
   },
 
   /**
@@ -548,7 +536,7 @@ export const cloudSyncService = {
       }
     });
 
-    // 2. Periodic sync heartbeat every 25 seconds (reliable cross-device sync without exhausting blob limits)
+    // 2. High-speed real-time sync heartbeat every 3.5 seconds across phones and computers
     const interval = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Pause while app is in background to save battery
@@ -557,7 +545,7 @@ export const cloudSyncService = {
       if (res.hasChanges) {
         onRemoteUpdate();
       }
-    }, 25000);
+    }, 3500);
 
     // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
     const handleBroadcast = (ev: MessageEvent) => {
