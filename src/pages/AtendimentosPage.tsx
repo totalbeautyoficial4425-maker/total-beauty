@@ -469,32 +469,45 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">Cliente *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-tb-brown-dark">Cliente *</label>
+                {selectedClientId && (
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+                    ✓ Selecionada
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
-                placeholder="Filtrar cliente por nome..."
+                placeholder="Filtrar cliente por nome ou celular..."
                 value={clientSearch}
-                onChange={e => {
-                  const val = e.target.value;
-                  setClientSearch(val);
-                  const q = val.trim().toLowerCase();
-                  if (q) {
-                    const firstMatch = clients.find(c => !c.isArchived && c.name.toLowerCase().includes(q));
-                    if (firstMatch) setSelectedClientId(firstMatch.id);
-                  }
-                }}
-                className="w-full text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light bg-tb-white mb-1"
+                onChange={e => setClientSearch(e.target.value)}
+                className="w-full text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light bg-tb-white mb-1.5"
               />
               <select
                 value={selectedClientId}
                 onChange={e => setSelectedClientId(e.target.value)}
                 required
-                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark"
+                className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark font-medium"
               >
                 <option value="">Selecione a cliente...</option>
-                {clients.filter(c => !c.isArchived).map(c => (
-                  <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
-                ))}
+                {(() => {
+                  const q = clientSearch.trim().toLowerCase();
+                  const active = clients.filter(c => !c.isArchived);
+                  const filtered = q
+                    ? active.filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
+                    : active;
+                  const sliced = filtered.slice(0, 100);
+                  const selObj = active.find(c => c.id === selectedClientId);
+                  if (selObj && !sliced.some(c => c.id === selObj.id)) {
+                    sliced.unshift(selObj);
+                  }
+                  return sliced.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `— ${c.phone}` : ''}
+                    </option>
+                  ));
+                })()}
               </select>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   X, 
   CheckCircle2, 
@@ -170,8 +170,23 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   // Modal to register product consumption directly
   const [activeAttendanceForConsumption, setActiveAttendanceForConsumption] = useState<Attendance | null>(null);
 
+  // Session guard to prevent background sync from wiping entered payments or discounts
+  const sessionKeyRef = useRef<string | null>(null);
+
   // Initialize service items when modal opens
   useEffect(() => {
+    if (!isOpen) {
+      sessionKeyRef.current = null;
+      return;
+    }
+
+    const currentKey = `${targetClientId}_${targetDate}_${attendance?.id || ''}_${existingComanda?.id || ''}`;
+    if (sessionKeyRef.current === currentKey) {
+      // Session already initialized; preserve active user entries on background sync
+      return;
+    }
+    sessionKeyRef.current = currentKey;
+
     if (isOpen && relatedAttendances.length > 0) {
       const items: ServiceItemState[] = relatedAttendances.map(atd => {
         const srv = services.find(s => s.id === atd.serviceId);

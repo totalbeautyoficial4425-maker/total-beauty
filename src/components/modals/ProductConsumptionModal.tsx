@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Scale, Package, Plus, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Scale, Package, Plus, Trash2, AlertCircle, CheckCircle2, Search, Check } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Attendance } from '../../types';
 
@@ -22,32 +22,71 @@ export const ProductConsumptionModal: React.FC<ProductConsumptionModalProps> = (
   } = useData();
 
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [isChangingProduct, setIsChangingProduct] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('todas');
   const [quantity, setQuantity] = useState<number>(30);
   const [unit, setUnit] = useState<'g' | 'ml' | 'un'>('g');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const currentConsumptions = attendance ? getConsumptionsByAttendance(attendance.id) : [];
+  const selectedProduct = useMemo(() => {
+    return inventory.find(i => i.id === selectedProductId);
+  }, [inventory, selectedProductId]);
+
+  // Unique categories from inventory
+  const productCategories = useMemo(() => {
+    const set = new Set<string>();
+    inventory.forEach(i => {
+      if (i.category) set.add(i.category);
+    });
+    return Array.from(set).sort();
+  }, [inventory]);
+
+  // Filtered products list
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.trim().toLowerCase();
+    return inventory.filter(item => {
+      if (categoryFilter !== 'todas' && item.category !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.brand.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q)
+      );
+    });
+  }, [inventory, productSearch, categoryFilter]);
+
   if (!isOpen || !attendance) return null;
 
-  const currentConsumptions = getConsumptionsByAttendance(attendance.id);
-  const selectedProduct = inventory.find(i => i.id === selectedProductId);
+  const handleSelectProduct = (prodId: string) => {
+    setSelectedProductId(prodId);
+    setIsChangingProduct(false);
+    setProductSearch('');
+    const p = inventory.find(i => i.id === prodId);
+    if (p?.unit.toLowerCase().includes('litro') || p?.unit.toLowerCase().includes('ml')) {
+      setUnit('ml');
+    } else if (p?.unit.toLowerCase().includes('un')) {
+      setUnit('un');
+    } else {
+      setUnit('g');
+    }
+  };
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
 
-    if (!selectedProductId) {
-      setError('Selecione um produto do estoque.');
+    if (!selectedProductId || !selectedProduct) {
+      setError('Por favor, pesquise e marque um produto do estoque.');
       return;
     }
     if (quantity <= 0 || isNaN(quantity)) {
       setError('Informe uma quantidade consumida válida maior que zero.');
-      return;
-    }
-
-    if (!selectedProduct) {
-      setError('Produto não encontrado.');
       return;
     }
 
@@ -72,8 +111,9 @@ export const ProductConsumptionModal: React.FC<ProductConsumptionModalProps> = (
     } else {
       setSuccessMsg(`Consumo de ${quantity}${unit} de ${selectedProduct.name} registrado com sucesso!`);
       setSelectedProductId('');
+      setIsChangingProduct(false);
       setQuantity(30);
-      setTimeout(() => setSuccessMsg(null), 3000);
+      setTimeout(() => setSuccessMsg(null), 3500);
     }
   };
 
@@ -132,34 +172,158 @@ export const ProductConsumptionModal: React.FC<ProductConsumptionModalProps> = (
               Lançar Produto Utilizado
             </h4>
 
-            <div>
-              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
-                Produto do Estoque *
-              </label>
-              <select
-                value={selectedProductId}
-                onChange={e => {
-                  setSelectedProductId(e.target.value);
-                  const p = inventory.find(i => i.id === e.target.value);
-                  if (p?.unit.toLowerCase().includes('litro') || p?.unit.toLowerCase().includes('ml')) {
-                    setUnit('ml');
-                  } else {
-                    setUnit('g');
-                  }
-                }}
-                required
-                className="w-full text-xs px-3 py-2.5 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark"
-              >
-                <option value="">Selecione o produto utilizado...</option>
-                {inventory.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} — {item.brand} (Estoque: {item.currentStock} {item.unit})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Confirmed Product or Search Box */}
+            {selectedProduct && !isChangingProduct ? (
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Check className="w-4 h-4 font-bold" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-tb-brown-dark flex items-center gap-1.5 flex-wrap">
+                      <span className="truncate">{selectedProduct.name}</span>
+                      <span className="text-[10px] bg-tb-rose-blush text-tb-rose-primary px-2 py-0.5 rounded-full font-bold shrink-0">
+                        {selectedProduct.brand}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-tb-gray-neutral mt-0.5">
+                      Estoque disponível: <strong className="text-emerald-800">{selectedProduct.currentStock} {selectedProduct.unit}</strong> • {selectedProduct.category}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangingProduct(true);
+                    setProductSearch('');
+                  }}
+                  className="text-xs font-semibold text-tb-rose-primary hover:text-tb-rose-dark px-3 py-1.5 rounded-xl border border-tb-rose-light hover:bg-tb-white transition-colors shrink-0"
+                >
+                  Trocar Produto
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-tb-brown-dark">
+                    Buscar e Marcar Produto do Estoque *
+                  </label>
+                  <span className="text-[10px] text-tb-gray-neutral">
+                    {filteredProducts.length} disponíveis
+                  </span>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
+                {/* Search input with clear button */}
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-tb-gray-neutral pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nome ou marca (ex: Lowell, Wella, Braé, Pó, Tinta)..."
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    className="w-full text-xs pl-9 pr-8 py-2.5 rounded-xl border border-tb-rose-light bg-tb-white text-tb-brown-dark font-medium focus:ring-2 focus:ring-tb-rose-primary/20"
+                    autoFocus={isChangingProduct}
+                  />
+                  {productSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setProductSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-tb-gray-neutral hover:text-tb-brown-dark"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Filter Pills */}
+                {productCategories.length > 1 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryFilter('todas')}
+                      className={`px-2.5 py-1 rounded-lg shrink-0 font-medium transition-colors ${
+                        categoryFilter === 'todas'
+                          ? 'bg-tb-rose-primary text-white font-bold'
+                          : 'bg-tb-white text-tb-gray-neutral hover:bg-tb-beige-light border border-tb-rose-light/50'
+                      }`}
+                    >
+                      Todas ({inventory.length})
+                    </button>
+                    {productCategories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCategoryFilter(cat)}
+                        className={`px-2.5 py-1 rounded-lg shrink-0 capitalize font-medium transition-colors ${
+                          categoryFilter === cat
+                            ? 'bg-tb-rose-primary text-white font-bold'
+                            : 'bg-tb-white text-tb-gray-neutral hover:bg-tb-beige-light border border-tb-rose-light/50'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Clickable filtered list of products */}
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-tb-rose-light/60 bg-tb-white divide-y divide-tb-rose-light/30 shadow-xs">
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-3 text-xs text-center text-tb-gray-neutral">
+                      Nenhum produto encontrado com "{productSearch}".
+                    </div>
+                  ) : (
+                    filteredProducts.slice(0, 40).map(p => {
+                      const isCurrent = p.id === selectedProductId;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleSelectProduct(p.id)}
+                          className={`w-full text-left px-3.5 py-2.5 flex items-center justify-between hover:bg-tb-ivory transition-colors ${
+                            isCurrent ? 'bg-emerald-50/70 font-semibold' : ''
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="text-xs font-bold text-tb-brown-dark flex items-center gap-1.5">
+                              <span className="truncate">{p.name}</span>
+                              <span className="text-[10px] text-tb-gray-neutral font-normal shrink-0">({p.brand})</span>
+                            </div>
+                            <div className="text-[11px] text-tb-gray-neutral">
+                              Estoque: <strong className="text-tb-brown-dark">{p.currentStock} {p.unit}</strong> • {p.category}
+                            </div>
+                          </div>
+                          {isCurrent ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                              <Check className="w-3 h-3" /> Marcado
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-tb-rose-primary hover:underline font-semibold shrink-0">
+                              Marcar
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {selectedProduct && isChangingProduct && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsChangingProduct(false);
+                      setProductSearch('');
+                    }}
+                    className="text-xs text-tb-gray-neutral hover:text-tb-brown-dark underline"
+                  >
+                    Cancelar troca e manter {selectedProduct.name}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
                   Quantidade Consumida *
@@ -189,7 +353,8 @@ export const ProductConsumptionModal: React.FC<ProductConsumptionModalProps> = (
               <div className="flex flex-col justify-end">
                 <button
                   type="submit"
-                  className="w-full py-2 px-4 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] text-white text-xs font-semibold shadow-soft transition-all flex items-center justify-center gap-1.5"
+                  disabled={!selectedProductId}
+                  className="w-full py-2 px-4 rounded-xl bg-tb-rose-primary hover:bg-[#b57f8c] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-soft transition-all flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
                   Salvar Consumo
