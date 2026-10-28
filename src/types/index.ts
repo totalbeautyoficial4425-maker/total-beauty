@@ -176,6 +176,7 @@ export interface Attendance {
   packageId?: string; // Se o atendimento foi pago/coberto por crédito de pacote
   isPackageCovered?: boolean; // Se a sessão foi abonada pelo pacote
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ProductConsumption {
@@ -297,6 +298,7 @@ export interface PaymentTransaction {
   date: string; // YYYY-MM-DD
   type: 'receita';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type ExpenseCategory = 

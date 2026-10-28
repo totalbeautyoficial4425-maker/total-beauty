@@ -102,12 +102,15 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   // All attendances for this client on this date
   const relatedAttendances = useMemo(() => {
     if (!targetClientId) return attendance ? [attendance] : [];
-    const list = attendances.filter(a => a.clientId === targetClientId && a.date === targetDate);
+    const list = attendances.filter(a => 
+      (a.clientId === targetClientId && (a.date === targetDate || a.createdAt?.startsWith(targetDate))) ||
+      (existingComanda && existingComanda.attendanceIds?.includes(a.id))
+    );
     if (attendance && !list.some(a => a.id === attendance.id)) {
       list.push(attendance);
     }
     return list;
-  }, [attendances, targetClientId, targetDate, attendance]);
+  }, [attendances, targetClientId, targetDate, attendance, existingComanda]);
 
   // Guard: Check if comanda is already closed and fully paid (disabled if user explicitly reopens for correction)
   const isAlreadyFullyPaid = useMemo(() => {

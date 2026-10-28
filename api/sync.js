@@ -25,8 +25,15 @@ function mergeArrayById(existingList, incomingList, deletedIds = new Set()) {
       } else {
         const oldTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
         const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
-        if (newTime >= oldTime) {
+        if (newTime > oldTime) {
           map.set(item.id, item);
+        } else if (newTime === oldTime) {
+          // Preserve paid or finished state
+          const incomingIsPaid = item.paymentStatus === 'pago' || item.status === 'pago' || !!item.finishedAt;
+          const existingIsPaid = existing.paymentStatus === 'pago' || existing.status === 'pago' || !!existing.finishedAt;
+          if (incomingIsPaid && !existingIsPaid) {
+            map.set(item.id, item);
+          }
         }
       }
     }
@@ -105,7 +112,13 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, empty: true, data: null });
       }
 
-      const data = await response.json();
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (e) {
+        return res.status(200).json({ success: true, empty: true, data: null });
+      }
+
       return res.status(200).json({
         success: true,
         version: data?.version || data?.exportedAt || null,

@@ -68,8 +68,21 @@ function mergeById<T extends { id: string; updatedAt?: string; createdAt?: strin
       // If remote has a newer timestamp, take remote
       const localTime = new Date(localItem.updatedAt || localItem.createdAt || 0).getTime();
       const remoteTime = new Date(remoteItem.updatedAt || remoteItem.createdAt || 0).getTime();
-      if (remoteTime >= localTime) {
+      if (remoteTime > localTime) {
         map.set(remoteItem.id, remoteItem);
+      } else if (remoteTime === localTime) {
+        // Tie-breaker: Never downgrade a paid or finished item to pending!
+        const localAny = localItem as any;
+        const remoteAny = remoteItem as any;
+        const localIsPaidOrFinished = localAny.paymentStatus === 'pago' || localAny.status === 'pago' || !!localAny.finishedAt;
+        const remoteIsPaidOrFinished = remoteAny.paymentStatus === 'pago' || remoteAny.status === 'pago' || !!remoteAny.finishedAt;
+        
+        if (remoteIsPaidOrFinished && !localIsPaidOrFinished) {
+          map.set(remoteItem.id, remoteItem);
+        } else if (!localIsPaidOrFinished && !remoteIsPaidOrFinished) {
+          map.set(remoteItem.id, remoteItem);
+        }
+        // If local is paid/finished, strictly keep local item!
       }
     }
   });
@@ -107,7 +120,13 @@ export const cloudSyncService = {
         return { success: false, hasChanges: false };
       }
 
-      const resJson = await response.json();
+      let resJson: any;
+      try {
+        resJson = await response.json();
+      } catch {
+        return { success: false, hasChanges: false };
+      }
+
       const cloudData = resJson.data || resJson;
 
       if (!cloudData || typeof cloudData !== 'object' || resJson.empty) {
@@ -529,7 +548,7 @@ export const cloudSyncService = {
       }
     });
 
-    // 2. Periodic sync heartbeat every 4 seconds (fast cross-device sync)
+    // 2. Periodic sync heartbeat every 25 seconds (reliable cross-device sync without exhausting blob limits)
     const interval = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Pause while app is in background to save battery
@@ -538,7 +557,7 @@ export const cloudSyncService = {
       if (res.hasChanges) {
         onRemoteUpdate();
       }
-    }, 4000);
+    }, 25000);
 
     // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
     const handleBroadcast = (ev: MessageEvent) => {

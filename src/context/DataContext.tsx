@@ -1348,6 +1348,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paymentStatus: 'pendente',
       paidAmount: 0,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     const nextAttendances = [newAttendance, ...attendances];
@@ -1594,6 +1595,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paymentStatus: options.paymentStatus,
       paidAmount: options.paidAmount,
       notes: options.notes,
+      updatedAt: new Date().toISOString(),
     };
 
     const nextAttendances = attendances.map(a => (a.id === attendanceId ? updatedAttendance : a));
@@ -1651,6 +1653,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         date: atd.date,
         type: 'receita',
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       nextPayments = [newPayment, ...payments];
     }
@@ -1753,6 +1756,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           packageId: update.packageId || atd.packageId,
           isPackageCovered: update.isPackageCovered || atd.isPackageCovered,
           notes: data.notes || atd.notes,
+          updatedAt: new Date().toISOString(),
         };
         finishedAttendances.push(updatedAtd);
         return updatedAtd;
@@ -1779,6 +1783,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           comandaId,
           paymentStatus: atd.isPackageCovered ? 'pago' : status,
           paidAmount: atdPaidAmount,
+          updatedAt: new Date().toISOString(),
         };
       }
       return atd;
@@ -1903,6 +1908,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         date: data.date,
         type: 'receita',
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
     });
 
