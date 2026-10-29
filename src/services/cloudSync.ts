@@ -100,8 +100,16 @@ export const cloudSyncService = {
     isPulling = true;
 
     try {
-      const response = await fetch(`${SYNC_API_ENDPOINT}?t=${Date.now()}`, {
-        headers: { 'Cache-Control': 'no-cache, no-store' }
+      const storedVersion = localStorage.getItem(LAST_CLOUD_VERSION_KEY) || lastKnownVersion;
+      const url = storedVersion 
+        ? `${SYNC_API_ENDPOINT}?current_version=${encodeURIComponent(storedVersion)}&t=${Date.now()}`
+        : `${SYNC_API_ENDPOINT}?t=${Date.now()}`;
+
+      const response = await fetch(url, {
+        headers: { 
+          'Cache-Control': 'no-cache, no-store',
+          ...(storedVersion ? { 'X-Sync-Version': storedVersion } : {})
+        }
       });
 
       if (!response.ok) {
@@ -115,6 +123,16 @@ export const cloudSyncService = {
         return { success: false, hasChanges: false };
       }
 
+      // Fast path: server verified version is unchanged
+      if (resJson.notModified) {
+        const localApts = storageService.getAppointments();
+        const localClients = storageService.getClients();
+        // If local device already has data, no-op in 5ms
+        if (localApts.length > 0 && localClients.length > 0) {
+          return { success: true, hasChanges: false };
+        }
+      }
+
       const cloudData = resJson.data || resJson;
 
       if (!cloudData || typeof cloudData !== 'object' || resJson.empty) {
@@ -124,7 +142,6 @@ export const cloudSyncService = {
       }
 
       const cloudVersion = cloudData.version || cloudData.updatedAt || resJson.version;
-      const storedVersion = localStorage.getItem(LAST_CLOUD_VERSION_KEY) || lastKnownVersion;
 
       // Check if local storage is missing any critical collections that remote has
       const localAtds = storageService.getAttendances();
@@ -249,7 +266,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.clients) && cloudData.clients.length > 0) {
         const local = storageService.getClients();
         const merged = mergeCollections(local, cloudData.clients);
-        if (merged.length !== local.length) {
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CLIENTS, merged);
           hasAnyChange = true;
@@ -260,7 +277,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
         const local = storageService.getServices();
         const merged = mergeCollections(local, cloudData.services);
-        if (merged.length !== local.length) {
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.SERVICES, merged);
           hasAnyChange = true;
@@ -271,7 +288,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.professionals) && cloudData.professionals.length > 0) {
         const local = storageService.getProfessionals();
         const merged = mergeCollections(local, cloudData.professionals);
-        if (merged.length !== local.length) {
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, merged);
           hasAnyChange = true;
@@ -536,7 +553,7 @@ export const cloudSyncService = {
       }
     });
 
-    // 2. High-speed real-time sync heartbeat every 3.5 seconds across phones and computers
+    // 2. Real-time sync heartbeat every 15 seconds across phones and computers
     const interval = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Pause while app is in background to save battery
@@ -545,7 +562,7 @@ export const cloudSyncService = {
       if (res.hasChanges) {
         onRemoteUpdate();
       }
-    }, 3500);
+    }, 15000);
 
     // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
     const handleBroadcast = (ev: MessageEvent) => {

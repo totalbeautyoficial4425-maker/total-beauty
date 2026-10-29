@@ -122,6 +122,32 @@ export default async function handler(req, res) {
     await ensureTable(sql);
 
     if (req.method === 'GET') {
+      const clientVersion = req.headers['x-sync-version'] || req.query?.current_version;
+      const isVersionOnly = req.query?.version_only === 'true';
+
+      if (clientVersion || isVersionOnly) {
+        const rowsVer = await sql`SELECT version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
+        if (rowsVer.length === 0) {
+          return res.status(200).json({ success: true, empty: true, version: null });
+        }
+        const currentVer = rowsVer[0].version;
+        if (clientVersion && currentVer === clientVersion) {
+          return res.status(200).json({
+            success: true,
+            notModified: true,
+            version: currentVer,
+            updatedAt: rowsVer[0].updated_at
+          });
+        }
+        if (isVersionOnly) {
+          return res.status(200).json({
+            success: true,
+            version: currentVer,
+            updatedAt: rowsVer[0].updated_at
+          });
+        }
+      }
+
       const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
       if (rows.length === 0 || !rows[0].data) {
         return res.status(200).json({ success: true, empty: true, data: null });
