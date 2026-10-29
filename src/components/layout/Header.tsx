@@ -12,11 +12,13 @@ import {
   Calendar,
   X,
   Cake,
-  Package
+  Package,
+  Cloud
 } from 'lucide-react';
 import { NavigationPage } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { cloudSyncService } from '../../services/cloudSync';
 import { isClientBirthdayToday } from '../../utils/formatters';
 
 interface HeaderProps {
@@ -55,6 +57,22 @@ export const Header: React.FC<HeaderProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    setIsManualSyncing(true);
+    try {
+      await cloudSyncService.pullFromCloud();
+      setSyncFeedback('Sincronizado!');
+      setTimeout(() => setSyncFeedback(null), 2500);
+    } catch {
+      setSyncFeedback('Erro');
+      setTimeout(() => setSyncFeedback(null), 2500);
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
 
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -302,6 +320,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* Cloud Sync Status Pill */}
+        <button
+          type="button"
+          onClick={handleManualSync}
+          title="Sincronização em Nuvem (Celular & Computador) - Toque para sincronizar"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/70 transition-all shadow-2xs"
+        >
+          <Cloud className={`w-3.5 h-3.5 text-emerald-600 ${isManualSyncing ? 'animate-bounce' : ''}`} />
+          <span className="hidden sm:inline text-[11px] font-semibold text-emerald-900">
+            {syncFeedback || (isManualSyncing ? 'Sincronizando...' : 'Nuvem Conectada')}
+          </span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        </button>
 
         {/* User Account Menu */}
         <div ref={menuRef} className="relative">
