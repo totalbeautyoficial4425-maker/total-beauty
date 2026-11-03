@@ -62,7 +62,9 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
     deleteAppointment,
     checkConflict, 
     checkMultiConflict,
-    addClient 
+    addClient,
+    clientPackages,
+    getClientActivePackages 
   } = useData();
 
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -104,6 +106,11 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const selectedClient = useMemo(() => {
     return clients.find(c => c.id === clientId);
   }, [clients, clientId]);
+
+  // Active packages with remaining sessions for this client
+  const clientActivePackages = useMemo(() => {
+    return selectedClient ? getClientActivePackages(selectedClient.id) : [];
+  }, [selectedClient, getClientActivePackages, clientPackages]);
 
   // Filtered clients for search list
   const filteredClients = useMemo(() => {
@@ -627,6 +634,22 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                             <span>Sem telefone cadastrado</span>
                           )}
                         </div>
+
+                        {clientActivePackages.length > 0 && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {clientActivePackages.map(pkg => (
+                              <div 
+                                key={pkg.id} 
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-850 border border-emerald-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <span>🎁 {pkg.name || pkg.packageName}:</span>
+                                <span className="text-emerald-700">
+                                  {pkg.items.map(it => `${it.remainingQty} ${it.serviceName}`).join(' • ')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button

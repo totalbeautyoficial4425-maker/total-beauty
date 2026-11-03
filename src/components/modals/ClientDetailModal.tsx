@@ -17,11 +17,14 @@ import {
   CheckCircle2,
   CalendarCheck,
   Cake,
-  Sparkles
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
-import { Client } from '../../types';
+import { Client, ClientPackage } from '../../types';
 import { formatBRL, formatDateBR, maskPhoneBR, isClientBirthdayToday } from '../../utils/formatters';
+import { PackageSaleModal } from './PackageSaleModal';
+import { PackageDetailModal } from './PackageDetailModal';
 
 interface ClientDetailModalProps {
   isOpen: boolean;
@@ -42,6 +45,8 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
 }) => {
   const { appointments, attendances, payments, clientPackages, archiveClient } = useData();
   const [activeTab, setActiveTab] = useState<'dados' | 'pacotes' | 'atendimentos' | 'agenda' | 'financeiro' | 'observacoes'>('dados');
+  const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
+  const [selectedPkgForDetail, setSelectedPkgForDetail] = useState<ClientPackage | null>(null);
 
   if (!isOpen || !client) return null;
 
@@ -255,18 +260,27 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
           {/* TAB: Pacotes & Créditos */}
           {activeTab === 'pacotes' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-tb-rose-primary" />
-                  Controle e Acompanhamento de Pacotes da Cliente
-                </span>
-                <span className="text-[11px] text-tb-gray-neutral">
-                  Sessões restantes e histórico de utilização
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-tb-rose-primary" />
+                    Controle e Acompanhamento de Pacotes da Cliente
+                  </span>
+                  <span className="text-[11px] text-tb-gray-neutral">
+                    Sessões restantes, extrato e histórico de utilização
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSaleModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-2xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Vender Novo Pacote
+                </button>
               </div>
 
               {clientPackagesList.length === 0 ? (
-                <div className="p-8 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/40 space-y-2">
+                <div className="p-8 text-center bg-tb-ivory rounded-2xl border border-tb-rose-light/40 space-y-3">
                   <span className="text-2xl block">🎁</span>
                   <p className="text-xs font-bold text-tb-brown-dark">
                     Nenhum pacote contratado no momento.
@@ -274,6 +288,13 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                   <p className="text-[11px] text-tb-gray-neutral max-w-sm mx-auto">
                     Ao contratar o <strong>Pacote de Unha</strong> (4 manicures + 2 pedicures por R$ 205,00) ou o <strong>Pacote de Cabelo</strong> (4 escovas com 10% OFF), o crédito aparecerá automaticamente aqui com acompanhamento das sessões.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsSaleModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-2xs hover:bg-emerald-700 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Vender Pacote para Esta Cliente
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -378,6 +399,18 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                             </div>
                           </div>
                         )}
+
+                        {/* Action: Ver Extrato Completo */}
+                        <div className="mt-3 pt-2.5 border-t border-tb-rose-light/40 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPkgForDetail(pkg)}
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-tb-rose-blush border border-tb-rose-light text-tb-rose-primary text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Ver Extrato & Movimentações
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -522,6 +555,20 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Sale Modal */}
+      <PackageSaleModal
+        isOpen={isSaleModalOpen}
+        onClose={() => setIsSaleModalOpen(false)}
+        initialClientId={client.id}
+      />
+
+      {/* Detail / Statement Modal */}
+      <PackageDetailModal
+        isOpen={!!selectedPkgForDetail}
+        onClose={() => setSelectedPkgForDetail(null)}
+        packageItem={selectedPkgForDetail}
+      />
     </div>
   );
 };

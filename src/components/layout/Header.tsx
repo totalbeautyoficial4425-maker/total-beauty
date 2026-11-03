@@ -33,6 +33,7 @@ const PAGE_TITLES: Record<NavigationPage, string> = {
   dashboard: 'Dashboard Geral',
   agenda: 'Agenda Inteligente',
   clientes: 'Gestão de Clientes',
+  pacotes: 'Pacotes & Créditos',
   aniversariantes: 'Aniversariantes do Salão',
   servicos: 'Catálogo de Serviços',
   profissionais: 'Gestão da Equipe & Comissões',

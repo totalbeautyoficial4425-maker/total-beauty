@@ -317,7 +317,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
           isPackageCovered: true,
           packageId,
           netValue: 0,
-          commissionAmount: (item.grossValue * item.commissionPercentage) / 100,
+          commissionAmount: 0,
         };
       } else {
         const calculatedDiscount = item.discountType === 'percentage' 
@@ -491,13 +491,13 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
       const paidRatio = netTotal > 0 ? (totalPaid / netTotal) : 1;
       const atdPaid = paymentStatus === 'pago' ? item.netValue : Math.min(item.netValue, item.netValue * paidRatio);
-      // If covered by package, commission is calculated based on gross value
+      // If covered by package, zero new commission on this attendance (calculated at package sale)
       const atdComm = item.isPackageCovered
-        ? (item.grossValue * item.commissionPercentage) / 100
+        ? 0
         : (atdPaid * item.commissionPercentage) / 100;
 
       existing.grossTotal += item.grossValue;
-      existing.netTotal += item.isPackageCovered ? item.grossValue : item.netValue;
+      existing.netTotal += item.isPackageCovered ? 0 : item.netValue;
       existing.commissionTotal += atdComm;
       existing.servicesCount += 1;
 
@@ -783,8 +783,14 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
-                                Repasse: {item.commissionPercentage}% ({formatBRL(item.commissionAmount)})
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${
+                                item.isPackageCovered
+                                  ? 'bg-blue-50 text-blue-750 border-blue-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {item.isPackageCovered 
+                                  ? 'Comissão: Já quitada na venda do pacote (R$ 0,00 nesta comanda)' 
+                                  : `Repasse: ${item.commissionPercentage}% (${formatBRL(item.commissionAmount)})`}
                               </span>
                               <button
                                 type="button"
@@ -900,26 +906,32 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, !item.isPackageCovered)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                              item.isPackageCovered
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
-                            }`}
-                          >
-                            {item.isPackageCovered ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Usando Crédito (Cliente R$ 0,00)
-                              </>
-                            ) : (
-                              <>
-                                <span>Usar 1 Crédito do Pacote</span>
-                              </>
-                            )}
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, true)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                                item.isPackageCovered
+                                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                                  : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
+                              }`}
+                            >
+                              <CheckCircle2 className={`w-3.5 h-3.5 ${item.isPackageCovered ? 'text-white' : 'text-emerald-600'}`} />
+                              <span>Utilizar crédito do pacote</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, false)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                                !item.isPackageCovered
+                                  ? 'bg-tb-brown-dark text-white ring-2 ring-tb-brown-soft'
+                                  : 'bg-white text-tb-brown-dark border border-tb-rose-light hover:bg-tb-ivory'
+                              }`}
+                            >
+                              <span>Cobrar serviço avulso</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

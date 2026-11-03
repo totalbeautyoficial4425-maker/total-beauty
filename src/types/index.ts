@@ -235,12 +235,36 @@ export type PaymentMethod =
   | 'pacote_credito'
   | 'outros';
 
+export type PackageStatus = 'ativo' | 'em_andamento' | 'concluido' | 'esgotado' | 'expirado' | 'vencido' | 'cancelado';
+
 export interface PackageItemBalance {
   serviceType: string;
   serviceName: string;
   totalQty: number;
   usedQty: number;
   remainingQty: number;
+  referencePrice?: number; // Preço de tabela individual de referência (ex: R$ 30,00 para mão, R$ 35,00 para pé)
+  unitPackagePrice?: number; // Valor proporcional unitário no pacote (ex: R$ 32,37 para mão, R$ 37,63 para pé)
+  totalItemValue?: number; // Valor proporcional total atribuído ao item (ex: 4 x 32,37 = 129,48)
+  consumedItemValue?: number; // Valor já consumido deste item
+}
+
+export interface PackageMovementLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  timestamp: string; // ISO
+  type: 'venda' | 'baixa' | 'estorno' | 'repasse_pago' | 'cancelamento' | 'ajuste' | 'renovacao';
+  serviceType?: string;
+  serviceName?: string;
+  quantity?: number; // Ex: -1 para baixa, +1 para estorno, etc.
+  attendanceId?: string;
+  professionalId?: string;
+  professionalName?: string;
+  financialAmount?: number;
+  abatedFinancialAmount?: number; // Valor proporcional abatido do saldo financeiro
+  remainingFinancialBalance?: number; // Saldo financeiro restante do pacote
+  reason?: string;
+  userName?: string;
 }
 
 export interface PackageUsageLog {
@@ -251,23 +275,52 @@ export interface PackageUsageLog {
   attendanceId?: string;
   professionalId?: string;
   professionalName?: string;
+  abatedAmount?: number; // Valor proporcional abatido nesta utilização
   notes?: string;
   usedAt: string;
 }
 
 export interface ClientPackage {
   id: string;
+  name?: string;
+  packageName?: string; // Mantido para compatibilidade
   clientId: string;
   clientName: string;
-  packageServiceId: string;
-  packageName: string;
-  packageType: 'unha' | 'cabelo' | 'outro';
-  totalPricePaid: number;
+  clientPhone?: string;
+  professionalId?: string; // Profissional vinculada ao pacote / repasse
+  professionalName?: string;
+  packageServiceId?: string; // Opcional
+  packageType?: 'unha' | 'cabelo' | 'estetica' | 'outro';
+  totalPricePaid: number; // Ex: 205.00
+  consumedValue?: number; // Valor financeiro total já consumido (ex: 64,74)
+  financialBalance?: number; // Saldo financeiro restante (ex: 140,26)
+  paymentMethod?: PaymentMethod;
+  paymentDate?: string;
   purchaseDate: string; // YYYY-MM-DD
-  expiryDate: string; // YYYY-MM-DD
-  status: 'ativo' | 'esgotado' | 'expirado';
+  expiryDate?: string; // YYYY-MM-DD
+  lastUsageDate?: string; // Data da última utilização
+  status: PackageStatus;
   items: PackageItemBalance[];
+  totalCredits?: number;
+  usedCredits?: number;
+  remainingCredits?: number;
+  // Comissão e Repasse da profissional (calculada na venda sobre o valor integral do pacote)
+  commissionPercentage?: number; // Ex: 40%
+  commissionAmount?: number; // Ex: R$ 82,00 (no pacote de R$ 205,00)
+  salonMargin?: number; // Ex: R$ 123,00 (valor que fica com o estabelecimento)
+  repassType?: 'percentual' | 'fixo';
+  repassValue?: number; // Ex: 40 (%) ou 82.00
+  repassTotal?: number; // Ex: 82.00
+  repassStatus?: 'pendente' | 'parcial' | 'pago';
+  repassPaidAmount?: number;
+  repassPaidDate?: string;
+  repassPaymentMethod?: PaymentMethod;
+  repassNotes?: string;
+  // Histórico de auditoria e movimentações
+  movements?: PackageMovementLog[];
   usageHistory: PackageUsageLog[];
+  completedAt?: string;
+  notes?: string;
   attendanceId?: string;
   comandaId?: string;
   createdAt: string;
@@ -363,6 +416,7 @@ export type NavigationPage =
   | 'dashboard' 
   | 'agenda' 
   | 'clientes' 
+  | 'pacotes'
   | 'servicos' 
   | 'profissionais' 
   | 'atendimentos' 

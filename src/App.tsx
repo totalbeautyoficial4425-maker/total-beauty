@@ -18,6 +18,7 @@ import { MinhaProducaoPage } from './pages/MinhaProducaoPage';
 import { ProfissionaisPage } from './pages/ProfissionaisPage';
 import { EstoquePage } from './pages/EstoquePage';
 import { AniversariantesPage } from './pages/AniversariantesPage';
+import { PacotesPage } from './pages/PacotesPage';
 
 // Modals
 import { AppointmentModal } from './components/modals/AppointmentModal';
@@ -203,6 +204,10 @@ export const AppContent: React.FC = () => {
               onOpenWhatsApp={handleOpenWhatsApp}
               onNewAppointmentForClient={(clientId) => handleOpenNewAppointment(undefined, undefined, clientId)}
             />
+          )}
+
+          {currentPage === 'pacotes' && (
+            <PacotesPage />
           )}
 
           {currentPage === 'aniversariantes' && (

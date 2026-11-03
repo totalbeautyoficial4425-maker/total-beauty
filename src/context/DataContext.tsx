@@ -18,6 +18,8 @@ import {
   AppointmentDeletionLog,
   ClientPackage,
   PackageUsageLog,
+  PackageItemBalance,
+  PackageMovementLog,
   ScheduleBlock
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
@@ -29,6 +31,7 @@ import {
   generateId,
   normalizePhoneForWhatsApp
 } from '../utils/formatters';
+import { calculateProportionalPackagePrices, calculateCreditAbatement } from '../utils/packageCalculations';
 
 interface ConflictResult {
   hasConflict: boolean;
@@ -167,6 +170,24 @@ interface DataContextType {
   // Client Packages & Prepaid Credits
   getClientActivePackages: (clientId: string) => ClientPackage[];
   addClientPackage: (pkg: Omit<ClientPackage, 'id' | 'createdAt' | 'updatedAt'>) => { success: boolean; package?: ClientPackage; error?: string };
+  sellPackage: (data: {
+    packageName: string;
+    clientId: string;
+    professionalId?: string;
+    totalPricePaid: number;
+    paymentMethod: PaymentMethod;
+    saleDate?: string;
+    expiryDate?: string;
+    items: Array<{ serviceType: string; serviceName: string; totalQty: number; referencePrice?: number }>;
+    commissionPercentage?: number;
+    repassType?: 'percentual' | 'fixo';
+    repassValue?: number;
+    notes?: string;
+  }) => { success: boolean; package?: ClientPackage; error?: string };
+  deductPackageCredit: (packageId: string, serviceType: string, attendanceId?: string, professionalId?: string, professionalName?: string, notes?: string) => { success: boolean; error?: string };
+  revertPackageCredit: (packageId: string, serviceType: string, reason: string, attendanceId?: string) => { success: boolean; error?: string };
+  payProfessionalRepass: (packageId: string, data: { paidAmount: number; paymentMethod: PaymentMethod; paymentDate: string; notes?: string }) => { success: boolean; error?: string };
+  cancelPackage: (packageId: string, reason: string) => { success: boolean; error?: string };
   deductPackageSession: (packageId: string, serviceType: string, attendanceId: string, professionalId?: string, professionalName?: string, notes?: string) => { success: boolean; error?: string };
 
   // Product Consumption Tracking (Gramatura)
@@ -279,9 +300,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? loadedServices.find(s => s.id === atd.serviceId) 
         : (p.serviceName ? loadedServices.find(s => s.name.toLowerCase() === (p.serviceName || '').toLowerCase()) : undefined);
       const expectedCommPercent = srv?.commissionPercentage ?? atd?.commissionPercentage ?? p.commissionPercentage ?? 50;
-      const isPkgCovered = atd?.isPackageCovered || p.description?.includes('CRÉDITO DE PACOTE') || false;
-      const baseForComm = isPkgCovered ? (p.grossValue || p.netValue) : (p.paidAmount || p.netValue);
-      const expectedCommAmount = (baseForComm * expectedCommPercent) / 100;
+      const isPkgCovered = atd?.isPackageCovered || p.description?.includes('CRÉDITO DE PACOTE') || p.paymentMethod === 'pacote_credito' || false;
+      const baseForComm = isPkgCovered ? 0 : (p.paidAmount || p.netValue);
+      const expectedCommAmount = isPkgCovered ? 0 : ((baseForComm * expectedCommPercent) / 100);
 
       let changed = false;
       const updated = { ...p };
@@ -316,8 +337,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const srv = atd.serviceId ? loadedServices.find(s => s.id === atd.serviceId) : undefined;
         const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         const atdPaidAmount = atd.paidAmount || atd.netValue;
-        const baseForComm = atd.isPackageCovered ? atd.grossValue : atdPaidAmount;
-        const commAmount = atd.commissionAmount || ((baseForComm * commPercent) / 100);
+        const baseForComm = atd.isPackageCovered ? 0 : atdPaidAmount;
+        const commAmount = atd.isPackageCovered ? 0 : (atd.commissionAmount || ((baseForComm * commPercent) / 100));
         missingPayments.push({
           id: generateId('pay'),
           attendanceId: atd.id,
@@ -721,7 +742,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (a.professionalId === id && !a.finishedAt) {
           const disc = a.discountValue || 0;
           const net = Math.max(0, a.grossValue - disc);
-          const base = a.isPackageCovered ? a.grossValue : net;
+          const base = a.isPackageCovered ? 0 : net;
           return {
             ...a,
             commissionPercentage: newPerc,
@@ -735,8 +756,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const nextPayments = payments.map(p => {
         if (p.professionalId === id) {
-          const isPkg = p.description?.includes('CRÉDITO DE PACOTE') || false;
-          const base = isPkg ? (p.grossValue || p.netValue) : (p.paidAmount || p.netValue);
+          const isPkg = p.description?.includes('CRÉDITO DE PACOTE') || p.paymentMethod === 'pacote_credito' || false;
+          const base = isPkg ? 0 : (p.paidAmount || p.netValue);
           return {
             ...p,
             commissionPercentage: newPerc,
@@ -1736,9 +1757,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const srv = services.find(s => s.id === atd.serviceId);
         const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         
-        // Fair commission calculation: if session is covered by prepaid package, commission is based on gross value
-        const commBase = update.isPackageCovered ? update.grossValue : update.netValue;
-        const commAmount = (commBase * commPercent) / 100;
+        // Zero commission for package-covered sessions (repass is managed at package level to avoid duplication)
+        const commBase = update.isPackageCovered ? 0 : update.netValue;
+        const commAmount = update.isPackageCovered ? 0 : ((commBase * commPercent) / 100);
 
         subtotal += update.grossValue;
         discountTotal += update.discountValue;
@@ -1873,7 +1894,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const atdPendingAmount = atd.isPackageCovered ? 0 : Math.max(0, atd.netValue - atdPaidAmount);
       
       const atdCommission = atd.isPackageCovered
-        ? (atd.grossValue * (atd.commissionPercentage || 50)) / 100
+        ? 0
         : (atdPaidAmount * (atd.commissionPercentage || 50)) / 100;
 
       const discPct = atd.grossValue > 0 && atd.discountValue > 0 
@@ -2001,11 +2022,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (itemIndex >= 0) {
               const updatedItems = [...pkg.items];
               const matchedItem = updatedItems[itemIndex];
+
+              const totalRemainingBefore = pkg.items.reduce((acc, i) => acc + (i.remainingQty || 0), 0);
+              const currentBalance = pkg.financialBalance !== undefined ? pkg.financialBalance : Math.max(0, pkg.totalPricePaid - (pkg.consumedValue || 0));
+
+              const { abatedAmount, nextFinancialBalance } = calculateCreditAbatement(
+                totalRemainingBefore,
+                currentBalance,
+                matchedItem.unitPackagePrice
+              );
+
+              const nextConsumedValue = Math.round(((pkg.consumedValue || 0) + abatedAmount) * 100) / 100;
+
               updatedItems[itemIndex] = {
                 ...matchedItem,
                 usedQty: matchedItem.usedQty + 1,
                 remainingQty: Math.max(0, matchedItem.remainingQty - 1),
+                consumedItemValue: Math.round(((matchedItem.consumedItemValue || 0) + abatedAmount) * 100) / 100,
               };
+
+              const totalUsed = updatedItems.reduce((acc, i) => acc + (i.usedQty || 0), 0);
+              const totalRemaining = updatedItems.reduce((acc, i) => acc + (i.remainingQty || 0), 0);
+              const isCompleted = totalRemaining === 0;
 
               const newLog: PackageUsageLog = {
                 id: generateId('pul'),
@@ -2015,17 +2053,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 attendanceId: atd.id,
                 professionalId: atd.professionalId,
                 professionalName: atd.professionalName,
-                notes: `Utilizado na Comanda ${comandaId.slice(-4).toUpperCase()}`,
+                abatedAmount,
+                notes: `Utilizado na Comanda ${comandaId.slice(-4).toUpperCase()} (Abatimento: R$ ${abatedAmount.toFixed(2)})`,
                 usedAt: new Date().toISOString(),
               };
 
-              const totalRemaining = updatedItems.reduce((acc, i) => acc + i.remainingQty, 0);
+              const newMovement: PackageMovementLog = {
+                id: generateId('mov'),
+                date: data.date,
+                timestamp: new Date().toISOString(),
+                type: 'baixa',
+                serviceType: matchedItem.serviceType,
+                serviceName: atd.serviceName,
+                quantity: -1,
+                attendanceId: atd.id,
+                professionalId: atd.professionalId,
+                professionalName: atd.professionalName,
+                financialAmount: abatedAmount,
+                abatedFinancialAmount: abatedAmount,
+                remainingFinancialBalance: nextFinancialBalance,
+                reason: `Baixa de 1x ${matchedItem.serviceName} na Comanda ${comandaId.slice(-4).toUpperCase()} (Abatimento proporcional: R$ ${abatedAmount.toFixed(2)})`,
+                userName: 'Sistema Total Beauty',
+              };
 
               currentClientPackages[targetPkgIdx] = {
                 ...pkg,
                 items: updatedItems,
+                usedCredits: totalUsed,
+                remainingCredits: totalRemaining,
+                consumedValue: nextConsumedValue,
+                financialBalance: nextFinancialBalance,
+                lastUsageDate: data.date,
                 usageHistory: [newLog, ...pkg.usageHistory],
-                status: totalRemaining === 0 ? 'esgotado' : 'ativo',
+                movements: [newMovement, ...(pkg.movements || [])],
+                status: isCompleted ? 'concluido' : 'em_andamento',
+                completedAt: isCompleted ? new Date().toISOString() : pkg.completedAt,
                 updatedAt: new Date().toISOString(),
               };
               packagesChanged = true;
@@ -2118,12 +2180,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               return it;
             });
+            const targetMovement = pkg.movements?.find(m => m.attendanceId === a.id && m.type === 'baixa');
+            const targetUsage = pkg.usageHistory.find(u => u.attendanceId === a.id);
+            const abatedToRestore = targetMovement?.abatedFinancialAmount ?? targetUsage?.abatedAmount ?? 0;
+            const restoredBalance = Math.min(pkg.totalPricePaid, Math.round(((pkg.financialBalance || 0) + abatedToRestore) * 100) / 100);
+            const restoredConsumed = Math.max(0, Math.round(((pkg.consumedValue || 0) - abatedToRestore) * 100) / 100);
+
+            const restoredMovement: PackageMovementLog = {
+              id: generateId('mov'),
+              date: getTodayDate(),
+              timestamp: new Date().toISOString(),
+              type: 'estorno',
+              serviceName: a.serviceName,
+              quantity: 1,
+              attendanceId: a.id,
+              financialAmount: abatedToRestore,
+              abatedFinancialAmount: -abatedToRestore,
+              remainingFinancialBalance: restoredBalance,
+              reason: `Estorno automático por reabertura da Comanda ${comandaId.slice(-4).toUpperCase()} (+R$ ${abatedToRestore.toFixed(2)})`,
+              userName: 'Sistema Total Beauty',
+            };
+            const totalUsed = updatedItems.reduce((acc, it) => acc + (it.usedQty || 0), 0);
+            const totalRemaining = updatedItems.reduce((acc, it) => acc + (it.remainingQty || 0), 0);
             const updatedUsage = pkg.usageHistory.filter(u => u.attendanceId !== a.id);
             updatedPackages[pkgIdx] = {
               ...pkg,
-              status: 'ativo',
+              status: totalRemaining > 0 ? (totalUsed > 0 ? 'em_andamento' : 'ativo') : 'concluido',
               items: updatedItems,
+              usedCredits: totalUsed,
+              remainingCredits: totalRemaining,
+              consumedValue: restoredConsumed,
+              financialBalance: restoredBalance,
               usageHistory: updatedUsage,
+              movements: [restoredMovement, ...(pkg.movements || [])],
               updatedAt: new Date().toISOString()
             };
             packagesChanged = true;
@@ -2268,15 +2357,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getClientActivePackages = (clientId: string): ClientPackage[] => {
     return clientPackages.filter(p => 
       p.clientId === clientId && 
-      p.status === 'ativo' && 
+      (p.status === 'ativo' || p.status === 'em_andamento') && 
       p.items.some(i => i.remainingQty > 0)
     );
   };
 
   const addClientPackage = (pkgData: Omit<ClientPackage, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const totalCredits = pkgData.items.reduce((acc, i) => acc + (i.totalQty || 0), 0);
+    const usedCredits = pkgData.items.reduce((acc, i) => acc + (i.usedQty || 0), 0);
+    const remainingCredits = pkgData.items.reduce((acc, i) => acc + (i.remainingQty || 0), 0);
     const newPkg: ClientPackage = {
       ...pkgData,
       id: generateId('cpkg'),
+      totalCredits: pkgData.totalCredits ?? totalCredits,
+      usedCredits: pkgData.usedCredits ?? usedCredits,
+      remainingCredits: pkgData.remainingCredits ?? remainingCredits,
+      movements: pkgData.movements || [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -2286,6 +2382,460 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, package: newPkg };
   };
 
+  const sellPackage = (data: {
+    packageName: string;
+    clientId: string;
+    professionalId?: string;
+    totalPricePaid: number;
+    paymentMethod: PaymentMethod;
+    saleDate?: string;
+    expiryDate?: string;
+    items: Array<{ serviceType: string; serviceName: string; totalQty: number; referencePrice?: number }>;
+    commissionPercentage?: number;
+    repassType?: 'percentual' | 'fixo';
+    repassValue?: number;
+    notes?: string;
+  }): { success: boolean; package?: ClientPackage; error?: string } => {
+    const client = clients.find(c => c.id === data.clientId);
+    if (!client) return { success: false, error: 'Cliente não encontrada.' };
+    if (!data.items || data.items.length === 0) {
+      return { success: false, error: 'O pacote deve conter pelo menos um serviço.' };
+    }
+    const totalCredits = data.items.reduce((acc, it) => acc + (it.totalQty || 0), 0);
+    if (totalCredits <= 0) {
+      return { success: false, error: 'Quantidade de créditos inválida.' };
+    }
+
+    const prof = data.professionalId ? professionals.find(p => p.id === data.professionalId) : undefined;
+    const saleDate = data.saleDate || getTodayDate();
+    
+    // Proportional calculation of items using Total Beauty services reference pricing
+    const newItems = calculateProportionalPackagePrices(
+      data.totalPricePaid,
+      data.items,
+      services
+    );
+
+    // Commission / Repasse calculation (percentual on total package price)
+    const commPercent = data.commissionPercentage !== undefined
+      ? data.commissionPercentage
+      : (data.repassValue !== undefined && data.repassType !== 'fixo' ? data.repassValue : (prof?.commissionPercentage ?? 40));
+
+    const repassType = data.repassType || 'percentual';
+    const repassTotal = repassType === 'percentual' 
+      ? Math.round(((data.totalPricePaid * commPercent) / 100) * 100) / 100
+      : (data.repassValue || 0);
+
+    const salonMargin = Math.round((data.totalPricePaid - repassTotal) * 100) / 100;
+
+    const pkgId = generateId('cpkg');
+    const pkgNameLower = data.packageName.toLowerCase();
+    const packageType = (pkgNameLower.includes('cabelo') || pkgNameLower.includes('escova'))
+      ? 'cabelo'
+      : (pkgNameLower.includes('unha') || pkgNameLower.includes('manicure') || pkgNameLower.includes('pedicure'))
+        ? 'unha'
+        : 'outro';
+
+    const initialMovement: PackageMovementLog = {
+      id: generateId('mov'),
+      date: saleDate,
+      timestamp: new Date().toISOString(),
+      type: 'venda',
+      quantity: totalCredits,
+      financialAmount: data.totalPricePaid,
+      remainingFinancialBalance: data.totalPricePaid,
+      reason: `Venda do pacote: ${data.packageName} (${totalCredits} créditos contratados por R$ ${data.totalPricePaid.toFixed(2)}) • Comissão (${commPercent}%): R$ ${repassTotal.toFixed(2)} • Salão: R$ ${salonMargin.toFixed(2)}`,
+      userName: 'Administração',
+    };
+
+    const newPkg: ClientPackage = {
+      id: pkgId,
+      name: data.packageName,
+      packageName: data.packageName,
+      clientId: client.id,
+      clientName: client.name,
+      clientPhone: client.phone,
+      professionalId: prof?.id,
+      professionalName: prof?.name,
+      packageType,
+      totalPricePaid: data.totalPricePaid,
+      consumedValue: 0,
+      financialBalance: data.totalPricePaid,
+      paymentMethod: data.paymentMethod,
+      paymentDate: saleDate,
+      purchaseDate: saleDate,
+      expiryDate: data.expiryDate,
+      status: 'ativo',
+      items: newItems,
+      totalCredits,
+      usedCredits: 0,
+      remainingCredits: totalCredits,
+      commissionPercentage: commPercent,
+      commissionAmount: repassTotal,
+      salonMargin,
+      repassType,
+      repassValue: commPercent,
+      repassTotal,
+      repassStatus: 'pendente',
+      repassPaidAmount: 0,
+      movements: [initialMovement],
+      usageHistory: [],
+      notes: data.notes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextPackages = [newPkg, ...clientPackages];
+    setClientPackages(nextPackages);
+    storageService.saveClientPackages(nextPackages);
+
+    // Register full revenue in salon cash flow / payments (e.g. R$ 205,00)
+    // Professional commission is attributed once here for the package sale
+    if (data.totalPricePaid > 0) {
+      const paymentTx: PaymentTransaction = {
+        id: generateId('pay'),
+        packageId: pkgId,
+        clientId: client.id,
+        clientName: client.name,
+        serviceName: data.packageName,
+        description: `Venda de Pacote — ${data.packageName} (${client.name})`,
+        grossValue: data.totalPricePaid,
+        discount: 0,
+        discountPercentage: 0,
+        netValue: data.totalPricePaid,
+        paidAmount: data.totalPricePaid,
+        pendingAmount: 0,
+        professionalId: prof?.id,
+        professionalName: prof?.name,
+        commissionPercentage: commPercent,
+        commissionAmount: repassTotal,
+        paymentMethod: data.paymentMethod,
+        status: 'pago',
+        date: saleDate,
+        type: 'receita',
+        createdAt: new Date().toISOString(),
+      };
+      const nextPayments = [paymentTx, ...payments];
+      setPayments(nextPayments);
+      storageService.savePayments(nextPayments);
+    }
+
+    return { success: true, package: newPkg };
+  };
+
+  const deductPackageCredit = (
+    packageId: string, 
+    serviceType: string, 
+    attendanceId?: string, 
+    professionalId?: string, 
+    professionalName?: string, 
+    notes?: string
+  ): { success: boolean; error?: string } => {
+    const pkgIdx = clientPackages.findIndex(p => p.id === packageId);
+    if (pkgIdx === -1) return { success: false, error: 'Pacote não encontrado.' };
+
+    const pkg = clientPackages[pkgIdx];
+    if (pkg.status === 'cancelado' || pkg.status === 'vencido') {
+      return { success: false, error: `Pacote se encontra com status ${pkg.status}.` };
+    }
+
+    // Match by service type or name
+    const srvTypeLower = serviceType.toLowerCase();
+    let itemIdx = pkg.items.findIndex(it => 
+      it.remainingQty > 0 && (
+        it.serviceType.toLowerCase() === srvTypeLower ||
+        it.serviceName.toLowerCase() === srvTypeLower ||
+        it.serviceType.toLowerCase().includes(srvTypeLower) ||
+        srvTypeLower.includes(it.serviceType.toLowerCase())
+      )
+    );
+
+    // Fallback: any item with remaining
+    if (itemIdx === -1) {
+      itemIdx = pkg.items.findIndex(it => it.remainingQty > 0);
+    }
+
+    if (itemIdx === -1) {
+      return { success: false, error: 'Não há créditos restantes para este serviço no pacote.' };
+    }
+
+    const updatedItems = [...pkg.items];
+    const item = updatedItems[itemIdx];
+
+    const totalRemainingBefore = pkg.items.reduce((acc, i) => acc + (i.remainingQty || 0), 0);
+    const currentBalance = pkg.financialBalance !== undefined ? pkg.financialBalance : Math.max(0, pkg.totalPricePaid - (pkg.consumedValue || 0));
+
+    const { abatedAmount, nextFinancialBalance } = calculateCreditAbatement(
+      totalRemainingBefore,
+      currentBalance,
+      item.unitPackagePrice
+    );
+
+    const nextConsumedValue = Math.round(((pkg.consumedValue || 0) + abatedAmount) * 100) / 100;
+
+    updatedItems[itemIdx] = {
+      ...item,
+      usedQty: item.usedQty + 1,
+      remainingQty: Math.max(0, item.remainingQty - 1),
+      consumedItemValue: Math.round(((item.consumedItemValue || 0) + abatedAmount) * 100) / 100,
+    };
+
+    const totalUsed = updatedItems.reduce((acc, i) => acc + i.usedQty, 0);
+    const totalRemaining = updatedItems.reduce((acc, i) => acc + i.remainingQty, 0);
+    const isCompleted = totalRemaining === 0;
+
+    const newMovement: PackageMovementLog = {
+      id: generateId('mov'),
+      date: getTodayDate(),
+      timestamp: new Date().toISOString(),
+      type: 'baixa',
+      serviceType: item.serviceType,
+      serviceName: item.serviceName,
+      quantity: -1,
+      attendanceId,
+      professionalId: professionalId || pkg.professionalId,
+      professionalName: professionalName || pkg.professionalName,
+      financialAmount: abatedAmount,
+      abatedFinancialAmount: abatedAmount,
+      remainingFinancialBalance: nextFinancialBalance,
+      reason: notes || `Baixa de crédito: 1x ${item.serviceName} (Abatimento proporcional: R$ ${abatedAmount.toFixed(2)})`,
+      userName: 'Sistema Total Beauty',
+    };
+
+    const newUsageLog: PackageUsageLog = {
+      id: generateId('pul'),
+      date: getTodayDate(),
+      serviceType: item.serviceType,
+      serviceName: item.serviceName,
+      attendanceId,
+      professionalId: professionalId || pkg.professionalId,
+      professionalName: professionalName || pkg.professionalName,
+      abatedAmount,
+      notes,
+      usedAt: new Date().toISOString(),
+    };
+
+    const updatedPkg: ClientPackage = {
+      ...pkg,
+      items: updatedItems,
+      usedCredits: totalUsed,
+      remainingCredits: totalRemaining,
+      consumedValue: nextConsumedValue,
+      financialBalance: nextFinancialBalance,
+      lastUsageDate: getTodayDate(),
+      status: isCompleted ? 'concluido' : 'em_andamento',
+      completedAt: isCompleted ? new Date().toISOString() : undefined,
+      movements: [newMovement, ...(pkg.movements || [])],
+      usageHistory: [newUsageLog, ...(pkg.usageHistory || [])],
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextPackages = clientPackages.map((p, idx) => idx === pkgIdx ? updatedPkg : p);
+    setClientPackages(nextPackages);
+    storageService.saveClientPackages(nextPackages);
+
+    return { success: true };
+  };
+
+  const revertPackageCredit = (
+    packageId: string, 
+    serviceType: string, 
+    reason: string, 
+    attendanceId?: string
+  ): { success: boolean; error?: string } => {
+    if (!reason || reason.trim().length === 0) {
+      return { success: false, error: 'É obrigatório informar o motivo do estorno.' };
+    }
+
+    const pkgIdx = clientPackages.findIndex(p => p.id === packageId);
+    if (pkgIdx === -1) return { success: false, error: 'Pacote não encontrado.' };
+
+    const pkg = clientPackages[pkgIdx];
+    const srvTypeLower = serviceType.toLowerCase();
+    let itemIdx = pkg.items.findIndex(it => 
+      it.usedQty > 0 && (
+        it.serviceType.toLowerCase() === srvTypeLower ||
+        it.serviceName.toLowerCase() === srvTypeLower ||
+        it.serviceType.toLowerCase().includes(srvTypeLower) ||
+        srvTypeLower.includes(it.serviceType.toLowerCase())
+      )
+    );
+
+    if (itemIdx === -1) {
+      itemIdx = pkg.items.findIndex(it => it.usedQty > 0);
+    }
+
+    if (itemIdx === -1) {
+      return { success: false, error: 'Nenhum crédito utilizado encontrado para estorno neste pacote.' };
+    }
+
+    const targetMovement = attendanceId 
+      ? pkg.movements?.find(m => m.attendanceId === attendanceId && m.type === 'baixa')
+      : pkg.movements?.find(m => m.type === 'baixa');
+
+    const abatedToRestore = targetMovement?.abatedFinancialAmount ?? (pkg.items[itemIdx].unitPackagePrice || 0);
+
+    const updatedItems = [...pkg.items];
+    const item = updatedItems[itemIdx];
+    updatedItems[itemIdx] = {
+      ...item,
+      usedQty: Math.max(0, item.usedQty - 1),
+      remainingQty: item.remainingQty + 1,
+      consumedItemValue: Math.max(0, Math.round(((item.consumedItemValue || 0) - abatedToRestore) * 100) / 100),
+    };
+
+    const totalUsed = updatedItems.reduce((acc, i) => acc + i.usedQty, 0);
+    const totalRemaining = updatedItems.reduce((acc, i) => acc + i.remainingQty, 0);
+
+    const restoredBalance = Math.min(pkg.totalPricePaid, Math.round(((pkg.financialBalance || 0) + abatedToRestore) * 100) / 100);
+    const restoredConsumed = Math.max(0, Math.round(((pkg.consumedValue || 0) - abatedToRestore) * 100) / 100);
+
+    const newMovement: PackageMovementLog = {
+      id: generateId('mov'),
+      date: getTodayDate(),
+      timestamp: new Date().toISOString(),
+      type: 'estorno',
+      serviceType: item.serviceType,
+      serviceName: item.serviceName,
+      quantity: 1,
+      attendanceId,
+      financialAmount: abatedToRestore,
+      abatedFinancialAmount: -abatedToRestore,
+      remainingFinancialBalance: restoredBalance,
+      reason: `Estorno autorizado: ${reason} (Saldo restaurado: +R$ ${abatedToRestore.toFixed(2)})`,
+      userName: 'Administração',
+    };
+
+    const updatedUsage = attendanceId 
+      ? (pkg.usageHistory || []).filter(u => u.attendanceId !== attendanceId)
+      : (pkg.usageHistory || []).slice(1);
+
+    const updatedPkg: ClientPackage = {
+      ...pkg,
+      items: updatedItems,
+      usedCredits: totalUsed,
+      remainingCredits: totalRemaining,
+      consumedValue: restoredConsumed,
+      financialBalance: restoredBalance,
+      status: totalRemaining > 0 ? (totalUsed > 0 ? 'em_andamento' : 'ativo') : 'concluido',
+      completedAt: totalRemaining > 0 ? undefined : pkg.completedAt,
+      movements: [newMovement, ...(pkg.movements || [])],
+      usageHistory: updatedUsage,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextPackages = clientPackages.map((p, idx) => idx === pkgIdx ? updatedPkg : p);
+    setClientPackages(nextPackages);
+    storageService.saveClientPackages(nextPackages);
+
+    return { success: true };
+  };
+
+  const payProfessionalRepass = (
+    packageId: string, 
+    data: { 
+      paidAmount: number; 
+      paymentMethod: PaymentMethod; 
+      paymentDate: string; 
+      notes?: string; 
+    }
+  ): { success: boolean; error?: string } => {
+    const pkgIdx = clientPackages.findIndex(p => p.id === packageId);
+    if (pkgIdx === -1) return { success: false, error: 'Pacote não encontrado.' };
+
+    const pkg = clientPackages[pkgIdx];
+    const currentPaid = pkg.repassPaidAmount || 0;
+    const totalRepass = pkg.repassTotal || 0;
+
+    if (currentPaid >= totalRepass && pkg.repassStatus === 'pago') {
+      return { success: false, error: 'O repasse deste pacote já foi quitado integralmente.' };
+    }
+
+    if (data.paidAmount <= 0) {
+      return { success: false, error: 'O valor do repasse deve ser maior que zero.' };
+    }
+
+    const nextPaid = currentPaid + data.paidAmount;
+    const isFullyPaid = nextPaid >= (totalRepass - 0.01);
+    const newStatus: 'pago' | 'parcial' = isFullyPaid ? 'pago' : 'parcial';
+
+    const newMovement: PackageMovementLog = {
+      id: generateId('mov'),
+      date: data.paymentDate || getTodayDate(),
+      timestamp: new Date().toISOString(),
+      type: 'repasse_pago',
+      financialAmount: data.paidAmount,
+      professionalId: pkg.professionalId,
+      professionalName: pkg.professionalName,
+      reason: data.notes || `Repasse à profissional ${pkg.professionalName || ''} (${newStatus === 'pago' ? 'Quitado' : 'Parcial'})`,
+      userName: 'Administração',
+    };
+
+    const updatedPkg: ClientPackage = {
+      ...pkg,
+      repassStatus: newStatus,
+      repassPaidAmount: nextPaid,
+      repassPaidDate: data.paymentDate || getTodayDate(),
+      repassPaymentMethod: data.paymentMethod,
+      repassNotes: data.notes,
+      movements: [newMovement, ...(pkg.movements || [])],
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextPackages = clientPackages.map((p, idx) => idx === pkgIdx ? updatedPkg : p);
+    setClientPackages(nextPackages);
+    storageService.saveClientPackages(nextPackages);
+
+    // Register single expense for salon financial control
+    const repassExpense: Expense = {
+      id: generateId('exp'),
+      description: `Repasse Profissional — Pacote ${pkg.name || pkg.packageName} (${pkg.professionalName || 'Profissional'})`,
+      category: 'comissoes',
+      amount: data.paidAmount,
+      competenceDate: data.paymentDate || getTodayDate(),
+      dueDate: data.paymentDate || getTodayDate(),
+      paymentDate: data.paymentDate || getTodayDate(),
+      status: 'pago',
+      paymentMethod: data.paymentMethod,
+      notes: data.notes || `Repasse do pacote ${pkg.id}`,
+      createdAt: new Date().toISOString(),
+    };
+    const nextExpenses = [repassExpense, ...expenses];
+    setExpenses(nextExpenses);
+    storageService.saveExpenses(nextExpenses);
+
+    return { success: true };
+  };
+
+  const cancelPackage = (packageId: string, reason: string): { success: boolean; error?: string } => {
+    const pkgIdx = clientPackages.findIndex(p => p.id === packageId);
+    if (pkgIdx === -1) return { success: false, error: 'Pacote não encontrado.' };
+
+    const pkg = clientPackages[pkgIdx];
+    const newMovement: PackageMovementLog = {
+      id: generateId('mov'),
+      date: getTodayDate(),
+      timestamp: new Date().toISOString(),
+      type: 'cancelamento',
+      reason: reason || 'Cancelamento do pacote',
+      userName: 'Administração',
+    };
+
+    const updatedPkg: ClientPackage = {
+      ...pkg,
+      status: 'cancelado',
+      movements: [newMovement, ...(pkg.movements || [])],
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextPackages = clientPackages.map((p, idx) => idx === pkgIdx ? updatedPkg : p);
+    setClientPackages(nextPackages);
+    storageService.saveClientPackages(nextPackages);
+
+    return { success: true };
+  };
+
+  // Keep deductPackageSession delegating to deductPackageCredit for compatibility
   const deductPackageSession = (
     packageId: string, 
     serviceType: string, 
@@ -2294,52 +2844,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     professionalName?: string, 
     notes?: string
   ) => {
-    const pkgIdx = clientPackages.findIndex(p => p.id === packageId);
-    if (pkgIdx === -1) return { success: false, error: 'Pacote não encontrado.' };
-    
-    const pkg = clientPackages[pkgIdx];
-    const itemIdx = pkg.items.findIndex(i => 
-      (i.serviceType.toLowerCase() === serviceType.toLowerCase() || 
-       i.serviceName.toLowerCase().includes(serviceType.toLowerCase())) && 
-      i.remainingQty > 0
-    );
-    if (itemIdx === -1) return { success: false, error: 'Sessões deste serviço esgotadas no pacote.' };
-
-    const updatedItems = [...pkg.items];
-    const item = updatedItems[itemIdx];
-    updatedItems[itemIdx] = {
-      ...item,
-      usedQty: item.usedQty + 1,
-      remainingQty: Math.max(0, item.remainingQty - 1),
-    };
-
-    const newLog: PackageUsageLog = {
-      id: generateId('pul'),
-      date: getTodayDate(),
-      serviceType: item.serviceType,
-      serviceName: item.serviceName,
-      attendanceId,
-      professionalId,
-      professionalName,
-      notes,
-      usedAt: new Date().toISOString(),
-    };
-
-    const totalRemaining = updatedItems.reduce((acc, i) => acc + i.remainingQty, 0);
-
-    const updatedPkg: ClientPackage = {
-      ...pkg,
-      items: updatedItems,
-      usageHistory: [newLog, ...pkg.usageHistory],
-      status: totalRemaining === 0 ? 'esgotado' : 'ativo',
-      updatedAt: new Date().toISOString(),
-    };
-
-    const next = clientPackages.map((p, idx) => idx === pkgIdx ? updatedPkg : p);
-    setClientPackages(next);
-    storageService.saveClientPackages(next);
-
-    return { success: true };
+    return deductPackageCredit(packageId, serviceType, attendanceId, professionalId, professionalName, notes);
   };
 
   // PRODUCT CONSUMPTION TRACKING (GRAMATURA)
@@ -2754,6 +3259,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateAttendanceProfessional,
         getClientActivePackages,
         addClientPackage,
+        sellPackage,
+        deductPackageCredit,
+        revertPackageCredit,
+        payProfessionalRepass,
+        cancelPackage,
         deductPackageSession,
         addConsumption,
         deleteConsumption,
