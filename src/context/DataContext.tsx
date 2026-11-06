@@ -1197,6 +1197,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextBlocks = scheduleBlocks.filter(b => b.id !== id);
     setScheduleBlocks(nextBlocks);
     storageService.saveScheduleBlocks(nextBlocks);
+    storageService.deleteFromCloud('scheduleBlocks', id);
     deleteDocumentFromFirestore('scheduleBlocks', id);
     return { success: true };
   };

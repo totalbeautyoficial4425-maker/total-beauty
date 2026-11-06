@@ -8,7 +8,8 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   AlertCircle,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -48,7 +49,7 @@ export const ScheduleBlockModal: React.FC<ScheduleBlockModalProps> = ({
   initialProfessionalId,
 }) => {
   const { currentUser } = useAuth();
-  const { professionals, appointments, addScheduleBlock } = useData();
+  const { professionals, appointments, scheduleBlocks, addScheduleBlock, deleteScheduleBlock } = useData();
 
   const isProfessional = currentUser?.role === 'profissional';
   const myProf = professionals.find(p => 
@@ -100,6 +101,12 @@ export const ScheduleBlockModal: React.FC<ScheduleBlockModalProps> = ({
       isTimeOverlapping(startTime, endTime, apt.startTime, apt.endTime)
     );
   }, [appointments, date, startTime, endTime, professionalId]);
+
+  // Existing blocks for the selected date
+  const dateExistingBlocks = useMemo(() => {
+    if (!date) return [];
+    return scheduleBlocks.filter(b => b.date === date);
+  }, [scheduleBlocks, date]);
 
   if (!isOpen) return null;
 
@@ -382,6 +389,40 @@ export const ScheduleBlockModal: React.FC<ScheduleBlockModalProps> = ({
               <p className="text-[10px] text-amber-700 font-semibold pl-6 pt-1">
                 Ao confirmar, o bloqueio será salvo, mas lembre-se de avisar ou reagendar os atendimentos das clientes envolvidas.
               </p>
+            </div>
+          )}
+
+          {/* Existing blocks on this date */}
+          {dateExistingBlocks.length > 0 && (
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
+              <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-amber-700" />
+                Bloqueios já ativos nesta data ({dateExistingBlocks.length}):
+              </span>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {dateExistingBlocks.map(b => (
+                  <div key={b.id} className="p-2.5 bg-white rounded-xl border border-amber-100 flex items-center justify-between text-xs shadow-2xs">
+                    <div>
+                      <span className="font-bold text-amber-800">{b.startTime} às {b.endTime}</span>
+                      <span className="font-semibold text-tb-brown-dark ml-1.5">• {b.professionalName}</span>
+                      <span className="text-tb-gray-neutral ml-1">({b.reason})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Deseja excluir o bloqueio "${b.reason}" de ${b.professionalName} (${b.startTime} às ${b.endTime})?`)) {
+                          deleteScheduleBlock(b.id);
+                        }
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                      title="Excluir este bloqueio"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Excluir</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

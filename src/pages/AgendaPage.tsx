@@ -145,6 +145,39 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     professionalId?: string;
   }>({});
   const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null);
+  const [isManageBlocksModalOpen, setIsManageBlocksModalOpen] = useState(false);
+  const [manageBlocksSearch, setManageBlocksSearch] = useState('');
+  const [manageBlocksProfFilter, setManageBlocksProfFilter] = useState('todos');
+  const [manageBlocksTab, setManageBlocksTab] = useState<'todos' | 'futuros'>('futuros');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const filteredManageBlocks = useMemo(() => {
+    const today = getTodayDate();
+    const q = manageBlocksSearch.trim().toLowerCase();
+
+    return scheduleBlocks
+      .filter(b => {
+        if (manageBlocksTab === 'futuros' && b.date < today) return false;
+        if (manageBlocksProfFilter !== 'todos' && b.professionalId !== manageBlocksProfFilter) return false;
+        if (q) {
+          const matchReason = b.reason.toLowerCase().includes(q);
+          const matchProf = b.professionalName.toLowerCase().includes(q);
+          const matchNotes = b.notes ? b.notes.toLowerCase().includes(q) : false;
+          return matchReason || matchProf || matchNotes;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const cmpDate = a.date.localeCompare(b.date);
+        if (cmpDate !== 0) return cmpDate;
+        return a.startTime.localeCompare(b.startTime);
+      });
+  }, [scheduleBlocks, manageBlocksSearch, manageBlocksProfFilter, manageBlocksTab]);
 
   // Open Comandas Count
   const openComandasCount = useMemo(() => {
@@ -379,6 +412,20 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
           >
             <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
             Bloquear Horário
+          </button>
+
+          <button
+            onClick={() => setIsManageBlocksModalOpen(true)}
+            className="px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0"
+            title="Ver e excluir bloqueios de horário cadastrados"
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-700" />
+            <span>Bloqueios</span>
+            {scheduleBlocks.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-200 text-amber-950 font-extrabold">
+                {scheduleBlocks.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -633,9 +680,25 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                               <Lock className="w-3 h-3 stroke-[2.5] text-amber-400 shrink-0" />
                               {block.startTime} - {block.endTime}
                             </span>
-                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-400 text-amber-950 uppercase tracking-tighter">
-                              BLOQUEIO
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-400 text-amber-950 uppercase tracking-tighter">
+                                BLOQUEIO
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Deseja realmente excluir o bloqueio "${block.reason}" de ${block.professionalName} (${block.startTime} às ${block.endTime})? O horário será liberado imediatamente.`)) {
+                                    deleteScheduleBlock(block.id);
+                                    showToast('Bloqueio de horário excluído.');
+                                  }
+                                }}
+                                className="p-1 rounded bg-rose-950/80 hover:bg-rose-600 text-white transition-colors"
+                                title="Excluir este bloqueio"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-200" />
+                              </button>
+                            </div>
                           </div>
 
                           <p className="text-[11px] font-bold text-white truncate mt-1">
@@ -1094,6 +1157,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   if (window.confirm(`Deseja realmente desbloquear o horário de ${selectedBlock.professionalName} (${selectedBlock.startTime} às ${selectedBlock.endTime})?`)) {
                     deleteScheduleBlock(selectedBlock.id);
                     setSelectedBlock(null);
+                    showToast('Bloqueio excluído e horário liberado!');
                   }
                 }}
                 className="px-4 py-2.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition-all flex items-center gap-1.5"
@@ -1112,6 +1176,223 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal: Gerenciador de Bloqueios */}
+      {isManageBlocksModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-tb-white rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-premium border border-tb-rose-light/50 space-y-4 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-tb-rose-light/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-800">
+                  <Lock className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-tb-brown-dark">
+                    Gerenciador de Bloqueios da Agenda
+                  </h3>
+                  <p className="text-xs text-tb-brown-soft">
+                    Visualize, pesquise e exclua bloqueios para liberar horários
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsManageBlocksModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-tb-ivory text-tb-brown-soft transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter controls */}
+            <div className="space-y-2.5 bg-tb-ivory p-3 rounded-2xl border border-tb-rose-light/40">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-tb-gray-neutral absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={manageBlocksSearch}
+                    onChange={(e) => setManageBlocksSearch(e.target.value)}
+                    placeholder="Pesquisar por motivo, profissional, obs..."
+                    className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-tb-rose-light bg-white text-tb-brown-dark font-medium placeholder:text-tb-gray-neutral"
+                  />
+                </div>
+
+                <select
+                  value={manageBlocksProfFilter}
+                  onChange={(e) => setManageBlocksProfFilter(e.target.value)}
+                  className="text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-white text-tb-brown-dark font-semibold"
+                >
+                  <option value="todos">Todas as profissionais</option>
+                  {activeProfessionals.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tabs: Futuros vs Todos */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-tb-rose-light/60">
+                  <button
+                    type="button"
+                    onClick={() => setManageBlocksTab('futuros')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                      manageBlocksTab === 'futuros'
+                        ? 'bg-amber-500 text-white shadow-2xs'
+                        : 'text-tb-brown-soft hover:text-tb-brown-dark'
+                    }`}
+                  >
+                    A partir de hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManageBlocksTab('todos')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                      manageBlocksTab === 'todos'
+                        ? 'bg-amber-500 text-white shadow-2xs'
+                        : 'text-tb-brown-soft hover:text-tb-brown-dark'
+                    }`}
+                  >
+                    Histórico completo
+                  </button>
+                </div>
+
+                <span className="text-[11px] font-semibold text-tb-brown-soft">
+                  {filteredManageBlocks.length} {filteredManageBlocks.length === 1 ? 'bloqueio' : 'bloqueios'}
+                </span>
+              </div>
+            </div>
+
+            {/* Blocks List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px] max-h-[420px]">
+              {filteredManageBlocks.length === 0 ? (
+                <div className="text-center py-12 px-4 bg-tb-ivory/50 rounded-2xl border border-dashed border-tb-rose-light flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 mb-2">
+                    <Lock className="w-5 h-5 opacity-60" />
+                  </div>
+                  <p className="text-xs font-bold text-tb-brown-dark">
+                    Nenhum bloqueio encontrado
+                  </p>
+                  <p className="text-[11px] text-tb-brown-soft mt-0.5">
+                    {manageBlocksSearch || manageBlocksProfFilter !== 'todos'
+                      ? 'Nenhum bloqueio corresponde aos filtros aplicados.'
+                      : 'Não há horários bloqueados cadastrados no momento.'}
+                  </p>
+                  {(manageBlocksSearch || manageBlocksProfFilter !== 'todos') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManageBlocksSearch('');
+                        setManageBlocksProfFilter('todos');
+                      }}
+                      className="mt-3 px-3 py-1 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredManageBlocks.map(block => (
+                  <div
+                    key={block.id}
+                    className="p-3.5 bg-white rounded-2xl border border-tb-rose-light/50 hover:border-amber-300 shadow-2xs hover:shadow-soft transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-extrabold text-[11px]">
+                          {formatDateBR(block.date)}
+                        </span>
+                        <span className="font-bold text-amber-800 text-xs">
+                          {block.startTime} às {block.endTime} ({block.durationMinutes} min)
+                        </span>
+                        <span className="text-xs font-extrabold text-tb-brown-dark">
+                          • {block.professionalName}
+                        </span>
+                      </div>
+
+                      <div className="text-xs">
+                        <span className="font-bold text-tb-brown-dark">Motivo: </span>
+                        <span className="text-tb-brown-soft font-medium">{block.reason}</span>
+                      </div>
+
+                      {block.notes && (
+                        <p className="text-[11px] text-tb-gray-neutral italic">
+                          Obs: {block.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDate(block.date);
+                          setIsManageBlocksModalOpen(false);
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-tb-brown-soft hover:text-tb-brown-dark bg-tb-ivory hover:bg-tb-beige-light rounded-xl transition-colors"
+                        title="Ir para a data deste bloqueio na agenda"
+                      >
+                        Ver na Agenda
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Deseja realmente excluir o bloqueio de ${block.professionalName} no dia ${formatDateBR(block.date)} (${block.startTime} às ${block.endTime})? O horário será liberado imediatamente.`)) {
+                            deleteScheduleBlock(block.id);
+                            showToast('Bloqueio excluído com sucesso!');
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all flex items-center gap-1.5"
+                        title="Excluir este bloqueio"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Excluir</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-tb-rose-light/30">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManageBlocksModalOpen(false);
+                  setBlockModalInitial({
+                    date: selectedDate,
+                    professionalId: selectedProfessional !== 'todos' ? selectedProfessional : (myProfId || '')
+                  });
+                  setIsBlockModalOpen(true);
+                }}
+                className="px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                Novo Bloqueio
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsManageBlocksModalOpen(false)}
+                className="px-5 py-2 text-xs font-bold bg-tb-brown-dark hover:bg-black text-white rounded-xl shadow-soft transition-all"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-tb-brown-dark text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-premium border border-tb-rose-light/20 flex items-center gap-2.5 animate-bounce-subtle">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>
