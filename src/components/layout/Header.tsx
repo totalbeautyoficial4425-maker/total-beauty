@@ -64,8 +64,9 @@ export const Header: React.FC<HeaderProps> = ({
   const handleManualSync = async () => {
     setIsManualSyncing(true);
     try {
-      await cloudSyncService.pullFromCloud();
-      setSyncFeedback('Sincronizado!');
+      await cloudSyncService.pushToCloud();
+      const res = await cloudSyncService.pullFromCloud();
+      setSyncFeedback(res.hasChanges ? 'Atualizado!' : 'Sincronizado!');
       setTimeout(() => setSyncFeedback(null), 2500);
     } catch {
       setSyncFeedback('Erro');

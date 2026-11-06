@@ -18,7 +18,9 @@ import {
   CalendarCheck,
   Cake,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Client, ClientPackage } from '../../types';
@@ -43,10 +45,11 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
   onOpenWhatsApp,
   onNewAppointmentForClient,
 }) => {
-  const { appointments, attendances, payments, clientPackages, archiveClient } = useData();
+  const { appointments, attendances, payments, clientPackages, archiveClient, deleteClient } = useData();
   const [activeTab, setActiveTab] = useState<'dados' | 'pacotes' | 'atendimentos' | 'agenda' | 'financeiro' | 'observacoes'>('dados');
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
   const [selectedPkgForDetail, setSelectedPkgForDetail] = useState<ClientPackage | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!isOpen || !client) return null;
 
@@ -537,14 +540,28 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-tb-ivory border-t border-tb-rose-light/40 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleToggleArchive}
-            className="text-xs text-tb-gray-neutral hover:text-rose-700 flex items-center gap-1.5 transition-colors"
-          >
-            <Archive className="w-3.5 h-3.5" />
-            {client.isArchived ? 'Reativar Cliente' : 'Arquivar Cadastro'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleArchive}
+              className="text-xs text-tb-gray-neutral hover:text-tb-brown-dark flex items-center gap-1.5 transition-colors"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {client.isArchived ? 'Reativar Cliente' : 'Arquivar Cadastro'}
+            </button>
+
+            <span className="text-tb-rose-light">|</span>
+
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1.5 transition-colors font-medium hover:underline"
+              title="Excluir cadastro permanentemente"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Excluir Cliente
+            </button>
+          </div>
 
           <button
             type="button"
@@ -555,6 +572,79 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal for Client Deletion */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-tb-brown-dark/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-tb-white rounded-3xl shadow-premium border border-tb-rose-light/50 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
+                  Excluir Cliente?
+                </h3>
+                <p className="text-xs text-tb-gray-neutral">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-tb-ivory border border-tb-rose-light/40 space-y-2 text-xs text-tb-brown-dark">
+              <div className="flex justify-between">
+                <span className="text-tb-gray-neutral">Nome:</span>
+                <span className="font-bold text-tb-brown-dark">{client.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-tb-gray-neutral">Telefone:</span>
+                <span className="font-medium text-tb-brown-dark">{maskPhoneBR(client.phone) || 'Sem telefone'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-tb-gray-neutral">Total de Visitas:</span>
+                <span className="font-semibold text-tb-brown-dark">{client.totalVisits}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-tb-gray-neutral">Total Gasto:</span>
+                <span className="font-bold text-tb-rose-primary">{formatBRL(client.totalSpent)}</span>
+              </div>
+            </div>
+
+            {(clientAppointments.length > 0 || clientAttendances.length > 0) && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <p>
+                  Atenção: Esta cliente possui <strong>{clientAppointments.length} agendamento(s)</strong> e <strong>{clientAttendances.length} atendimento(s)</strong> vinculados no histórico.
+                </p>
+              </div>
+            )}
+
+            <p className="text-xs text-tb-gray-neutral">
+              Tem certeza que deseja excluir definitivamente o cadastro de <strong>{client.name}</strong>?
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-xs font-semibold text-tb-brown-soft hover:bg-tb-beige-light rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteClient(client.id);
+                  setShowDeleteConfirm(false);
+                  onClose();
+                }}
+                className="px-5 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-soft transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Sim, Excluir Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sale Modal */}
       <PackageSaleModal

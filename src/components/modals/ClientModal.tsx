@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Phone, Mail, MapPin, Calendar, HeartHandshake, AlertCircle } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Calendar, HeartHandshake, AlertCircle, Trash2 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { Client } from '../../types';
 import { maskPhoneBR } from '../../utils/formatters';
@@ -15,7 +15,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   onClose,
   clientToEdit,
 }) => {
-  const { addClient, updateClient, checkDuplicateClient } = useData();
+  const { addClient, updateClient, deleteClient, checkDuplicateClient } = useData();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -348,20 +348,39 @@ export const ClientModal: React.FC<ClientModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft hover:shadow-premium transition-all"
-            >
-              {clientToEdit ? 'Salvar Alterações' : 'Cadastrar Cliente'}
-            </button>
+          <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-between gap-3">
+            {clientToEdit ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Tem certeza que deseja excluir permanentemente o cadastro de "${clientToEdit.name}"?`)) {
+                    deleteClient(clientToEdit.id);
+                    onClose();
+                  }
+                }}
+                className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1.5 transition-colors font-medium px-2 py-1 rounded-lg hover:bg-rose-50"
+                title="Excluir cliente permanentemente"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir</span>
+              </button>
+            ) : <div />}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft hover:shadow-premium transition-all"
+              >
+                {clientToEdit ? 'Salvar Alterações' : 'Cadastrar Cliente'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

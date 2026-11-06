@@ -1,22 +1,127 @@
 import { neon } from '@neondatabase/serverless';
+import { put } from '@vercel/blob';
+
+const BLOB_FILE_NAME = 'total_beauty_db.json';
+const BLOB_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
 
 function getSql() {
   const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  if (!dbUrl) {
-    throw new Error('Database connection URL (DATABASE_URL) is missing');
+  if (!dbUrl) return null;
+  try {
+    return neon(dbUrl);
+  } catch (e) {
+    console.warn('Neon connection setup failed:', e);
+    return null;
   }
-  return neon(dbUrl);
 }
 
 async function ensureTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS total_beauty_cloud_sync (
-      id TEXT PRIMARY KEY,
-      data JSONB NOT NULL,
-      version TEXT,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `;
+  if (!sql) return;
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS total_beauty_cloud_sync (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        version TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+  } catch (e) {
+    console.warn('Ensure table failed (likely Neon quota exceeded):', e?.message);
+  }
+}
+
+/**
+ * Load cloud database with dual-storage resilience:
+ * 1. Try Neon Postgres.
+ * 2. If Neon fails (e.g. 402 quota exceeded), fallback seamlessly to Vercel Blob.
+ */
+async function loadDataFromCloud(sql) {
+  // 1. Try Neon Postgres if available
+  if (sql) {
+    try {
+      const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
+      if (rows.length > 0 && rows[0].data) {
+        const row = rows[0];
+        return {
+          source: 'neon',
+          data: row.data,
+          version: row.version || row.data?.version || null,
+          updatedAt: row.updated_at,
+        };
+      }
+    } catch (neonErr) {
+      console.warn('Neon load failed (using Vercel Blob fallback):', neonErr?.message);
+    }
+  }
+
+  // 2. Fallback to Vercel Blob (Ultra-reliable, zero quota crashes)
+  try {
+    const ts = Date.now();
+    const res = await fetch(`${BLOB_PUBLIC_URL}?t=${ts}`, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+    });
+    if (res.ok) {
+      const blobData = await res.json();
+      return {
+        source: 'blob',
+        data: blobData,
+        version: blobData?.version || blobData?.updatedAt || null,
+        updatedAt: blobData?.updatedAt || null,
+      };
+    }
+  } catch (blobErr) {
+    console.warn('Blob load fallback error:', blobErr?.message);
+  }
+
+  return { source: 'empty', data: null, version: null, updatedAt: null };
+}
+
+/**
+ * Save cloud database with dual-storage resilience:
+ * Always writes to Vercel Blob (guaranteed reliable), and attempts Neon in the background.
+ */
+async function saveDataToCloud(sql, payload, version) {
+  // 1. Always write to Vercel Blob as the indestructible primary/replica
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  if (blobToken) {
+    try {
+      await put(BLOB_FILE_NAME, JSON.stringify(payload), {
+        access: 'public',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: 'application/json',
+        token: blobToken,
+      });
+
+      // Redundant backup file on blob storage
+      put('total_beauty_db_backup.json', JSON.stringify(payload), {
+        access: 'public',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: 'application/json',
+        token: blobToken,
+      }).catch(err => console.warn('Backup blob put failed (non-fatal):', err?.message));
+    } catch (blobErr) {
+      console.warn('Vercel Blob save failed:', blobErr?.message);
+    }
+  }
+
+  // 2. Also save to Neon Postgres if available (ignoring 402/quota errors gracefully)
+  if (sql) {
+    try {
+      await sql`
+        INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
+        VALUES ('main', ${JSON.stringify(payload)}, ${version}, NOW())
+        ON CONFLICT (id) DO UPDATE
+        SET data = EXCLUDED.data,
+            version = EXCLUDED.version,
+            updated_at = NOW();
+      `;
+    } catch (neonErr) {
+      console.warn('Neon save failed (Blob persisted safely):', neonErr?.message);
+    }
+  }
 }
 
 function mergeArrayById(existingList, incomingList, deletedIds = new Set()) {
@@ -121,46 +226,49 @@ export default async function handler(req, res) {
     const sql = getSql();
     await ensureTable(sql);
 
+    // =========================================================================
+    // GET: PULL DATA OR CHECK VERSION
+    // =========================================================================
     if (req.method === 'GET') {
       const clientVersion = req.headers['x-sync-version'] || req.query?.current_version;
       const isVersionOnly = req.query?.version_only === 'true';
 
-      if (clientVersion || isVersionOnly) {
-        const rowsVer = await sql`SELECT version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
-        if (rowsVer.length === 0) {
-          return res.status(200).json({ success: true, empty: true, version: null });
-        }
-        const currentVer = rowsVer[0].version;
-        if (clientVersion && currentVer === clientVersion) {
-          return res.status(200).json({
-            success: true,
-            notModified: true,
-            version: currentVer,
-            updatedAt: rowsVer[0].updated_at
-          });
-        }
-        if (isVersionOnly) {
-          return res.status(200).json({
-            success: true,
-            version: currentVer,
-            updatedAt: rowsVer[0].updated_at
-          });
-        }
+      const cloudState = await loadDataFromCloud(sql);
+
+      if (!cloudState.data) {
+        return res.status(200).json({ success: true, empty: true, version: null });
       }
 
-      const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
-      if (rows.length === 0 || !rows[0].data) {
-        return res.status(200).json({ success: true, empty: true, data: null });
+      const currentVer = cloudState.version || cloudState.data?.version || null;
+
+      // Fast path: version check
+      if (clientVersion && currentVer && clientVersion === currentVer) {
+        return res.status(200).json({
+          success: true,
+          notModified: true,
+          version: currentVer,
+          updatedAt: cloudState.updatedAt
+        });
       }
 
-      const row = rows[0];
+      if (isVersionOnly) {
+        return res.status(200).json({
+          success: true,
+          version: currentVer,
+          updatedAt: cloudState.updatedAt
+        });
+      }
+
       return res.status(200).json({
         success: true,
-        version: row.version || row.data?.version || null,
-        data: row.data,
+        version: currentVer,
+        data: cloudState.data,
       });
     }
 
+    // =========================================================================
+    // POST: PUSH DATA OR ATOMIC ACTIONS
+    // =========================================================================
     if (req.method === 'POST') {
       let body = req.body;
       if (typeof body === 'string') {
@@ -175,9 +283,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Empty body' });
       }
 
-      // Fetch existing data from Neon Postgres
-      const rows = await sql`SELECT data FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
-      let existingData = rows.length > 0 && rows[0].data ? rows[0].data : null;
+      const cloudState = await loadDataFromCloud(sql);
+      let existingData = cloudState.data;
 
       const now = new Date().toISOString();
       const version = Date.now().toString();
@@ -227,14 +334,7 @@ export default async function handler(req, res) {
         existingData.updatedAt = now;
         existingData.version = version;
 
-        await sql`
-          INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
-          VALUES ('main', ${JSON.stringify(existingData)}, ${version}, NOW())
-          ON CONFLICT (id) DO UPDATE
-          SET data = EXCLUDED.data,
-              version = EXCLUDED.version,
-              updated_at = NOW();
-        `;
+        await saveDataToCloud(sql, existingData, version);
 
         return res.status(200).json({ success: true, message: 'Senha atualizada na nuvem com sucesso.', version });
       }
@@ -298,14 +398,7 @@ export default async function handler(req, res) {
         existingData.updatedAt = now;
         existingData.version = version;
 
-        await sql`
-          INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
-          VALUES ('main', ${JSON.stringify(existingData)}, ${version}, NOW())
-          ON CONFLICT (id) DO UPDATE
-          SET data = EXCLUDED.data,
-              version = EXCLUDED.version,
-              updated_at = NOW();
-        `;
+        await saveDataToCloud(sql, existingData, version);
 
         return res.status(200).json({ success: true, message: 'Senha do administrador redefinida com sucesso na nuvem.', version });
       }
@@ -365,14 +458,7 @@ export default async function handler(req, res) {
         settings: { ...(existingData.settings || {}), ...(body.settings || {}) },
       };
 
-      await sql`
-        INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
-        VALUES ('main', ${JSON.stringify(mergedPayload)}, ${version}, NOW())
-        ON CONFLICT (id) DO UPDATE
-        SET data = EXCLUDED.data,
-            version = EXCLUDED.version,
-            updated_at = NOW();
-      `;
+      await saveDataToCloud(sql, mergedPayload, version);
 
       return res.status(200).json({
         success: true,

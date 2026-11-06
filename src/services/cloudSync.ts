@@ -17,7 +17,13 @@ import {
   CompanySettings
 } from '../types';
 
-const SYNC_API_ENDPOINT = '/api/sync';
+export const CLOUD_PUBLIC_SITE_URL = 'https://total-beauty-black.vercel.app';
+
+const SYNC_API_ENDPOINT = 
+  typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? `${CLOUD_PUBLIC_SITE_URL}/api/sync`
+    : '/api/sync';
+
 const LAST_CLOUD_VERSION_KEY = 'tb_last_cloud_version';
 
 let lastKnownVersion = '';
@@ -243,7 +249,7 @@ export const cloudSyncService = {
       // 8. Client Packages
       if (Array.isArray(cloudData.clientPackages)) {
         const local = storageService.getClientPackages();
-        const merged = mergeCollections(local, cloudData.clientPackages);
+        const merged = mergeCollections(local, cloudData.clientPackages, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, merged);
@@ -265,7 +271,7 @@ export const cloudSyncService = {
       // 10. Clients
       if (Array.isArray(cloudData.clients) && cloudData.clients.length > 0) {
         const local = storageService.getClients();
-        const merged = mergeCollections(local, cloudData.clients);
+        const merged = mergeCollections(local, cloudData.clients, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CLIENTS, merged);
@@ -276,7 +282,7 @@ export const cloudSyncService = {
       // 11. Services
       if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
         const local = storageService.getServices();
-        const merged = mergeCollections(local, cloudData.services);
+        const merged = mergeCollections(local, cloudData.services, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.SERVICES, merged);
@@ -287,7 +293,7 @@ export const cloudSyncService = {
       // 12. Professionals
       if (Array.isArray(cloudData.professionals) && cloudData.professionals.length > 0) {
         const local = storageService.getProfessionals();
-        const merged = mergeCollections(local, cloudData.professionals);
+        const merged = mergeCollections(local, cloudData.professionals, deletedIdsSet);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, merged);
@@ -543,76 +549,102 @@ export const cloudSyncService = {
   },
 
   /**
-   * Starts real-time heartbeat synchronization across all devices.
+   * Starts real-time heartbeat synchronization across all devices (phones & computers).
    */
   startAutoSync(onRemoteUpdate: () => void): () => void {
-    // 1. Initial pull on startup
-    this.pullFromCloud().then(res => {
-      if (res.hasChanges) {
-        onRemoteUpdate();
-      }
-    });
+    let lastUserSyncTime = Date.now();
 
-    // 2. Real-time sync heartbeat every 15 seconds across phones and computers
-    const interval = setInterval(async () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return; // Pause while app is in background to save battery
-      }
+    const triggerPullIfChanges = async () => {
+      lastUserSyncTime = Date.now();
       const res = await this.pullFromCloud();
       if (res.hasChanges) {
         onRemoteUpdate();
       }
-    }, 15000);
+    };
+
+    // 1. Initial pull on startup
+    triggerPullIfChanges();
+
+    // 2. Real-time sync heartbeat every 5 seconds across phones and computers
+    const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return; // Pause while app is completely in background to save phone battery
+      }
+      await triggerPullIfChanges();
+    }, 5000);
 
     // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
     const handleBroadcast = (ev: MessageEvent) => {
       if (ev.data?.type === 'sync_update') {
-        this.pullFromCloud().then(res => {
-          if (res.hasChanges) {
-            onRemoteUpdate();
-          }
-        });
+        triggerPullIfChanges();
       }
     };
     broadcastChannel?.addEventListener('message', handleBroadcast);
 
     // 4. Immediate pull on focus (user switches back to tab or unlocks phone)
-    const handleFocus = async () => {
-      const res = await this.pullFromCloud();
-      if (res.hasChanges) {
-        onRemoteUpdate();
-      }
+    const handleFocus = () => {
+      triggerPullIfChanges();
     };
 
     // 5. Immediate pull on visibilitychange (e.g. iPhone / Android home screen resume)
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        const res = await this.pullFromCloud();
-        if (res.hasChanges) {
-          onRemoteUpdate();
+        triggerPullIfChanges();
+      } else {
+        // App moving to background: flush any pending push immediately!
+        if (pendingPushTimeout) {
+          clearTimeout(pendingPushTimeout);
+          pendingPushTimeout = null;
+          this.pushToCloud();
         }
       }
     };
 
-    // 6. Online event
+    // 6. Immediate pull on pageshow (iOS Safari back-forward cache resume)
+    const handlePageShow = () => {
+      triggerPullIfChanges();
+    };
+
+    // 7. Active touch on phones (resumes sync if phone was idle)
+    const handleTouchInteraction = () => {
+      if (Date.now() - lastUserSyncTime > 4000) {
+        triggerPullIfChanges();
+      }
+    };
+
+    // 8. Online event: device reconnected to Wi-Fi or 4G/5G
     const handleOnline = async () => {
       await this.pushToCloud();
-      const res = await this.pullFromCloud();
-      if (res.hasChanges) {
-        onRemoteUpdate();
+      await triggerPullIfChanges();
+    };
+
+    // 9. Pagehide / Beforeunload: save immediately before closing tab
+    const handleBeforeUnload = () => {
+      if (pendingPushTimeout) {
+        clearTimeout(pendingPushTimeout);
+        pendingPushTimeout = null;
+        this.pushToCloud();
       }
     };
 
     window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('touchstart', handleTouchInteraction, { passive: true });
     window.addEventListener('online', handleOnline);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
       broadcastChannel?.removeEventListener('message', handleBroadcast);
       window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('touchstart', handleTouchInteraction);
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }
 };

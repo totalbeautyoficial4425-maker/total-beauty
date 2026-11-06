@@ -7,5 +7,12 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    proxy: {
+      '/api': {
+        target: 'https://total-beauty-black.vercel.app',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

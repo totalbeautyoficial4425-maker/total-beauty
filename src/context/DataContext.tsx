@@ -75,6 +75,8 @@ interface DataContextType {
   addClient: (clientData: Omit<Client, 'id' | 'createdAt' | 'totalVisits' | 'totalSpent' | 'isArchived'>) => { success: boolean; client?: Client; error?: string };
   updateClient: (id: string, clientData: Partial<Client>) => { success: boolean; error?: string };
   archiveClient: (id: string, isArchived: boolean) => void;
+  deleteClient: (id: string) => { success: boolean; error?: string };
+  deleteMultipleClients: (ids: string[]) => { success: boolean; count: number; error?: string };
   checkDuplicateClient: (phone: string, email?: string, excludeId?: string) => { isDuplicate: boolean; field?: string; clientName?: string };
   
   // Services
@@ -597,6 +599,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextClients = clients.map(c => (c.id === id ? { ...c, isArchived } : c));
     setClients(nextClients);
     storageService.saveClients(nextClients);
+  };
+
+  const deleteClient = (id: string) => {
+    const client = clients.find(c => c.id === id);
+    if (!client) {
+      return { success: false, error: 'Cliente não encontrada.' };
+    }
+
+    const nextClients = clients.filter(c => c.id !== id);
+    setClients(nextClients);
+    storageService.saveClients(nextClients);
+    storageService.deleteFromCloud('clients', id);
+    return { success: true };
+  };
+
+  const deleteMultipleClients = (ids: string[]) => {
+    if (!ids || ids.length === 0) {
+      return { success: false, count: 0, error: 'Nenhuma cliente selecionada.' };
+    }
+
+    const idsSet = new Set(ids);
+    const nextClients = clients.filter(c => !idsSet.has(c.id));
+    const deletedCount = clients.length - nextClients.length;
+
+    setClients(nextClients);
+    storageService.saveClients(nextClients);
+    ids.forEach(id => {
+      storageService.deleteFromCloud('clients', id);
+    });
+
+    return { success: true, count: deletedCount };
   };
 
   // SERVICES
@@ -3229,6 +3262,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addClient,
         updateClient,
         archiveClient,
+        deleteClient,
+        deleteMultipleClients,
         checkDuplicateClient,
         addService,
         updateService,
