@@ -42,7 +42,10 @@ async function seed() {
     );
   `;
 
-  const dataPath = path.join(__dirname, '../src/data/total_beauty_db_backup_pre_reset_20261022.json');
+  let dataPath = path.join(__dirname, '../data/backups/total_beauty_db_backup_pre_reset_20261022.json');
+  if (!fs.existsSync(dataPath)) {
+    dataPath = path.join(__dirname, '../src/data/total_beauty_db_backup_pre_reset_20261022.json');
+  }
   const backup = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
   // Ensure all users have correct passwordHash

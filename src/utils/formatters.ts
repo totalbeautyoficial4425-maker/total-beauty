@@ -147,19 +147,41 @@ export function getTodayDateString(): string {
 export function parseBirthMonthDay(birthDate?: string): { month: number; day: number } | null {
   if (!birthDate) return null;
   const clean = birthDate.trim();
-  if (clean.includes('-')) {
-    const parts = clean.split('-');
-    if (parts.length === 3) {
+  const separator = clean.includes('-') ? '-' : clean.includes('/') ? '/' : null;
+  if (!separator) return null;
+
+  const parts = clean.split(separator).map(p => p.trim());
+  if (parts.length === 3) {
+    // If first part is 4 digits (e.g. 1995-10-25 or 1995/10/25) -> YYYY-MM-DD
+    if (parts[0].length === 4) {
       const m = parseInt(parts[1], 10);
       const d = parseInt(parts[2], 10);
-      if (!isNaN(m) && !isNaN(d)) return { month: m, day: d };
+      if (!isNaN(m) && !isNaN(d) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return { month: m, day: d };
+      }
     }
-  } else if (clean.includes('/')) {
-    const parts = clean.split('/');
-    if (parts.length >= 2) {
+    // If third part is 4 digits (e.g. 25-10-1995 or 25/10/1995) -> DD-MM-YYYY
+    if (parts[2].length === 4) {
       const d = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10);
-      if (!isNaN(m) && !isNaN(d)) return { month: m, day: d };
+      if (!isNaN(m) && !isNaN(d) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return { month: m, day: d };
+      }
+    }
+    // Fallback for 2-digit years
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10);
+    if (!isNaN(p0) && !isNaN(p1)) {
+      if (p1 >= 1 && p1 <= 12 && p0 >= 1 && p0 <= 31) {
+        return { month: p1, day: p0 };
+      }
+    }
+  } else if (parts.length === 2) {
+    // Day and Month format (e.g. 25/10 or 25-10)
+    const d = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!isNaN(m) && !isNaN(d) && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return { month: m, day: d };
     }
   }
   return null;

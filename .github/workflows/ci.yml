@@ -1,0 +1,30 @@
+name: CI - Integridade e Compilação Total Beauty
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar Dependências
+        run: npm ci
+
+      - name: Validação Estrita de Tipagem (TypeScript)
+        run: npm run typecheck
+
+      - name: Compilação de Produção (Vite Build)
+        run: npm run build

@@ -58,7 +58,10 @@ async function run() {
   const db = getFirestore(app);
 
   // Load backup data
-  const dataPath = path.join(__dirname, '../src/data/total_beauty_db_backup_pre_reset_20261022.json');
+  let dataPath = path.join(__dirname, '../data/backups/total_beauty_db_backup_pre_reset_20261022.json');
+  if (!fs.existsSync(dataPath)) {
+    dataPath = path.join(__dirname, '../src/data/total_beauty_db_backup_pre_reset_20261022.json');
+  }
   if (!fs.existsSync(dataPath)) {
     console.error('Arquivo de dados não encontrado:', dataPath);
     process.exit(1);

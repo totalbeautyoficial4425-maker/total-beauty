@@ -555,10 +555,15 @@ export const cloudSyncService = {
     let lastUserSyncTime = Date.now();
 
     const triggerPullIfChanges = async () => {
-      lastUserSyncTime = Date.now();
-      const res = await this.pullFromCloud();
-      if (res.hasChanges) {
-        onRemoteUpdate();
+      try {
+        lastUserSyncTime = Date.now();
+        const res = await this.pullFromCloud();
+        if (res && res.hasChanges) {
+          onRemoteUpdate();
+        }
+      } catch (syncErr) {
+        // Silently tolerate intermittent connection loss on phones
+        console.warn('Sincronização em nuvem aguardando restabelecimento de rede:', syncErr);
       }
     };
 
