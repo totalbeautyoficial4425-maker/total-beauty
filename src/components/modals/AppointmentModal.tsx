@@ -16,12 +16,15 @@ import {
   Cake,
   Search,
   Check,
-  Phone
+  Phone,
+  UserCheck,
+  History,
+  Edit3
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Appointment } from '../../types';
-import { addMinutesToTime, formatBRL, isClientBirthdayToday } from '../../utils/formatters';
+import { addMinutesToTime, formatBRL, isClientBirthdayToday, formatDateTimeBR } from '../../utils/formatters';
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -101,6 +104,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   // Validation & Conflict
   const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showAuditHistory, setShowAuditHistory] = useState(false);
 
   // Active client object
   const selectedClient = useMemo(() => {
@@ -387,6 +391,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
       return;
     }
 
+    const authorName = currentUser?.name || currentUser?.username || 'Administração';
+
     if (appointmentToEdit) {
       // Update single
       const entry = serviceEntries[0];
@@ -410,8 +416,9 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         notes: generalNotes,
         isFitIn,
         fitInReason,
-        fitInAuthorizedBy: isFitIn ? (currentUser?.name || 'Administração') : undefined,
-      });
+        fitInAuthorizedBy: isFitIn ? authorName : undefined,
+        updatedBy: authorName,
+      }, authorName);
 
       if (!res.success) {
         setFormError(res.error || 'Erro ao atualizar o agendamento.');
@@ -434,6 +441,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
         isFitIn,
         fitInReason,
         notes: generalNotes,
+        createdBy: authorName,
       });
 
       if (!res.success) {
@@ -479,6 +487,61 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{formError}</span>
+            </div>
+          )}
+
+          {/* Audit Trail: Quem agendou e quem alterou */}
+          {appointmentToEdit && (
+            <div className="p-3.5 bg-tb-ivory/80 border border-tb-rose-light/70 rounded-2xl text-xs space-y-2">
+              <div className="flex items-center justify-between text-tb-brown-dark font-medium">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <UserCheck className="w-4 h-4 text-tb-rose-primary shrink-0" />
+                  <span>Agendado por: <strong className="text-tb-brown-dark">{appointmentToEdit.createdBy || 'Sistema'}</strong></span>
+                  {appointmentToEdit.createdAt && (
+                    <span className="text-[11px] text-tb-gray-neutral">({formatDateTimeBR(appointmentToEdit.createdAt)})</span>
+                  )}
+                </div>
+                {appointmentToEdit.changeHistory && appointmentToEdit.changeHistory.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditHistory(!showAuditHistory)}
+                    className="text-[11px] text-tb-rose-primary hover:underline flex items-center gap-1 font-semibold ml-2 shrink-0"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    {showAuditHistory ? 'Ocultar Histórico' : `Histórico (${appointmentToEdit.changeHistory.length})`}
+                  </button>
+                )}
+              </div>
+
+              {appointmentToEdit.updatedBy && appointmentToEdit.updatedBy !== appointmentToEdit.createdBy && (
+                <div className="flex items-center gap-1.5 text-amber-900 text-[11px] pt-1.5 border-t border-tb-rose-light/40 flex-wrap">
+                  <Edit3 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Última alteração por: <strong>{appointmentToEdit.updatedBy}</strong></span>
+                  {appointmentToEdit.updatedAt && (
+                    <span className="text-tb-gray-neutral">({formatDateTimeBR(appointmentToEdit.updatedAt)})</span>
+                  )}
+                </div>
+              )}
+
+              {/* Histórico completo expandido */}
+              {showAuditHistory && appointmentToEdit.changeHistory && (
+                <div className="mt-2 pt-2 border-t border-tb-rose-light/50 space-y-1.5 max-h-40 overflow-y-auto">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-tb-brown-soft block">
+                    Registro de Auditoria de Alterações:
+                  </span>
+                  {appointmentToEdit.changeHistory.map((item, idx) => (
+                    <div key={idx} className="p-2 bg-white rounded-xl border border-tb-rose-light/40 text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between font-semibold text-tb-brown-dark">
+                        <span>{item.action} — {item.user}</span>
+                        <span className="text-[10px] text-tb-gray-neutral font-normal">{formatDateTimeBR(item.date)}</span>
+                      </div>
+                      {item.details && (
+                        <p className="text-[10px] text-tb-gray-neutral">{item.details}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -24,12 +24,14 @@ import {
   Trash2,
   X,
   Lock,
-  RotateCcw
+  RotateCcw,
+  UserCheck,
+  Edit3
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Appointment, AppointmentStatus, Professional, ScheduleBlock } from '../types';
-import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday } from '../utils/formatters';
+import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday, formatDateTimeBR } from '../utils/formatters';
 import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
 import { getTodayDate } from '../services/storage';
 
@@ -276,7 +278,8 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
 
   const handleConfirmCancel = () => {
     if (cancelingAppointmentId) {
-      cancelAppointment(cancelingAppointmentId, cancelReason.trim() || 'Cancelado');
+      const authorName = currentUser?.name || currentUser?.username || 'Administração';
+      cancelAppointment(cancelingAppointmentId, cancelReason.trim() || 'Cancelado', authorName);
       setCancelingAppointmentId(null);
       setCancelReason('');
       setPopoverAppointment(null);
@@ -614,6 +617,14 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                           <p className="text-[10px] font-medium text-white/80 truncate mt-0.5">
                             {apt.serviceName}
                           </p>
+
+                          {/* Creator / Auditor line */}
+                          {apt.createdBy && (
+                            <p className="text-[9px] text-white/70 truncate flex items-center gap-1 mt-0.5">
+                              <span className="opacity-75">por:</span>
+                              <span className="font-semibold text-white/90 truncate">{apt.createdBy}</span>
+                            </p>
+                          )}
                         </div>
 
                         {/* Card Bottom / Badges */}
@@ -784,6 +795,33 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                 Obs: {popoverAppointment.notes}
               </p>
             )}
+
+            {/* Auditoria & Rastreamento */}
+            <div className="pt-2 border-t border-tb-rose-light/40 space-y-1.5 text-[11px] bg-tb-ivory/80 p-2.5 rounded-xl border border-tb-rose-light/50">
+              <div className="flex items-center gap-1.5 text-tb-brown-dark font-medium flex-wrap">
+                <UserCheck className="w-3.5 h-3.5 text-tb-rose-primary shrink-0" />
+                <span>Agendado por: <strong className="text-tb-brown-dark">{popoverAppointment.createdBy || 'Sistema'}</strong></span>
+              </div>
+              {popoverAppointment.createdAt && (
+                <div className="text-[10px] text-tb-gray-neutral pl-5">
+                  em {formatDateTimeBR(popoverAppointment.createdAt)}
+                </div>
+              )}
+
+              {popoverAppointment.updatedBy && popoverAppointment.updatedBy !== popoverAppointment.createdBy && (
+                <div className="pt-1.5 mt-1 border-t border-tb-rose-light/30">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-medium flex-wrap">
+                    <Edit3 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Última alteração: <strong>{popoverAppointment.updatedBy}</strong></span>
+                  </div>
+                  {popoverAppointment.updatedAt && (
+                    <div className="text-[10px] text-tb-gray-neutral pl-5">
+                      em {formatDateTimeBR(popoverAppointment.updatedAt)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Actions inside Popover */}

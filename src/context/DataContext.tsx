@@ -29,8 +29,12 @@ import {
   addMinutesToTime, 
   isTimeOverlapping, 
   generateId,
-  normalizePhoneForWhatsApp
+  normalizePhoneForWhatsApp,
+  formatDateBR,
+  formatBRL,
+  formatDateTimeBR
 } from '../utils/formatters';
+import { useAuth } from './AuthContext';
 import { calculateProportionalPackagePrices, calculateCreditAbatement } from '../utils/packageCalculations';
 
 interface ConflictResult {
@@ -110,11 +114,12 @@ interface DataContextType {
     services: Array<{ serviceId: string; professionalId: string; durationMinutes: number; price: number; notes?: string }>; 
     isFitIn?: boolean; 
     fitInReason?: string; 
-    notes?: string 
+    notes?: string;
+    createdBy?: string;
   }) => { success: boolean; appointments?: Appointment[]; error?: string; conflicts?: string[] };
-  updateAppointment: (id: string, appointmentData: Partial<Appointment>) => { success: boolean; error?: string };
-  updateAppointmentStatus: (id: string, status: AppointmentStatus, cancellationReason?: string) => { success: boolean; error?: string };
-  cancelAppointment: (id: string, reason: string) => { success: boolean; error?: string };
+  updateAppointment: (id: string, appointmentData: Partial<Appointment>, modifiedByUser?: string) => { success: boolean; error?: string };
+  updateAppointmentStatus: (id: string, status: AppointmentStatus, cancellationReason?: string, user?: string) => { success: boolean; error?: string };
+  cancelAppointment: (id: string, reason: string, user?: string) => { success: boolean; error?: string };
   deleteAppointment: (id: string, reason: string) => { success: boolean; error?: string };
   cleanupDeborahAttendances: () => { success: boolean; message: string };
   clearExampleInventory: () => { success: boolean; message: string };
@@ -249,6 +254,22 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
+
+  const getCurrentUserName = useCallback((): string => {
+    if (currentUser?.name && currentUser.name.trim()) return currentUser.name.trim();
+    if (currentUser?.username && currentUser.username.trim()) return currentUser.username.trim();
+    try {
+      const raw = localStorage.getItem('tb_session_v2') || sessionStorage.getItem('tb_session_v2');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u?.name && u.name.trim()) return u.name.trim();
+        if (u?.username && u.username.trim()) return u.username.trim();
+      }
+    } catch {}
+    return 'Administração';
+  }, [currentUser]);
+
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -946,12 +967,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const nowIso = new Date().toISOString();
+    const userName = appointmentData.createdBy || getCurrentUserName();
+
     const newAppointment: Appointment = {
       ...appointmentData,
       id: generateId('apt'),
       endTime: calculatedEndTime,
       createdAt: nowIso,
+      createdBy: userName,
       updatedAt: nowIso,
+      updatedBy: userName,
+      changeHistory: [
+        {
+          date: nowIso,
+          user: userName,
+          action: 'Agendamento Criado',
+          details: `${appointmentData.serviceName} com ${appointmentData.professionalName} em ${formatDateBR(appointmentData.date)} às ${appointmentData.startTime}`,
+        }
+      ]
     };
 
     const nextAppointments = [...appointments, newAppointment];
@@ -970,7 +1003,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, appointment: newAppointment };
   };
 
-  const updateAppointment = (id: string, appointmentData: Partial<Appointment>) => {
+  const updateAppointment = (id: string, appointmentData: Partial<Appointment>, modifiedByUser?: string) => {
     const existing = appointments.find(a => a.id === id);
     if (!existing) return { success: false, error: 'Agendamento não encontrado.' };
 
@@ -988,13 +1021,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    const userName = modifiedByUser || appointmentData.updatedBy || getCurrentUserName();
+    const nowIso = new Date().toISOString();
+
+    // Collect detail of changes for auditing
+    const changes: string[] = [];
+    if (appointmentData.date && appointmentData.date !== existing.date) {
+      changes.push(`Data: ${formatDateBR(existing.date)} ➔ ${formatDateBR(appointmentData.date)}`);
+    }
+    if (appointmentData.startTime && appointmentData.startTime !== existing.startTime) {
+      changes.push(`Horário: ${existing.startTime} ➔ ${appointmentData.startTime}`);
+    }
+    if (appointmentData.serviceName && appointmentData.serviceName !== existing.serviceName) {
+      changes.push(`Serviço: ${existing.serviceName} ➔ ${appointmentData.serviceName}`);
+    } else if (appointmentData.serviceId && appointmentData.serviceId !== existing.serviceId) {
+      const newSrv = services.find(s => s.id === appointmentData.serviceId);
+      changes.push(`Serviço: ${existing.serviceName} ➔ ${newSrv?.name || 'Novo serviço'}`);
+    }
+    if (appointmentData.professionalName && appointmentData.professionalName !== existing.professionalName) {
+      changes.push(`Profissional: ${existing.professionalName} ➔ ${appointmentData.professionalName}`);
+    } else if (appointmentData.professionalId && appointmentData.professionalId !== existing.professionalId) {
+      const newProf = professionals.find(p => p.id === appointmentData.professionalId);
+      changes.push(`Profissional: ${existing.professionalName} ➔ ${newProf?.name || 'Novo profissional'}`);
+    }
+    if (appointmentData.price !== undefined && appointmentData.price !== existing.price) {
+      changes.push(`Valor: ${formatBRL(existing.price)} ➔ ${formatBRL(appointmentData.price)}`);
+    }
+    if (appointmentData.durationMinutes !== undefined && appointmentData.durationMinutes !== existing.durationMinutes) {
+      changes.push(`Duração: ${existing.durationMinutes}m ➔ ${appointmentData.durationMinutes}m`);
+    }
+    if (appointmentData.isFitIn !== undefined && appointmentData.isFitIn !== existing.isFitIn) {
+      changes.push(appointmentData.isFitIn ? 'Marcado como Encaixe' : 'Encaixe removido');
+    }
+    if (appointmentData.notes !== undefined && appointmentData.notes !== existing.notes) {
+      changes.push('Observações atualizadas');
+    }
+
+    const changeDetailText = changes.length > 0 ? changes.join(' | ') : 'Dados do agendamento alterados';
+
     const nextAppointments = appointments.map(a => {
       if (a.id === id) {
+        const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
+        const originalCreator = a.createdBy || existing.createdBy || 'Sistema';
+
         return {
           ...a,
           ...appointmentData,
           endTime: targetEnd,
-          updatedAt: new Date().toISOString()
+          createdBy: originalCreator,
+          updatedAt: nowIso,
+          updatedBy: userName,
+          changeHistory: [
+            ...existingHistory,
+            {
+              date: nowIso,
+              user: userName,
+              action: 'Agendamento Alterado',
+              details: changeDetailText,
+            }
+          ]
         };
       }
       return a;
@@ -1030,15 +1115,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus, cancellationReason?: string) => {
+  const updateAppointmentStatus = (id: string, status: AppointmentStatus, cancellationReason?: string, user?: string) => {
+    const userName = user || getCurrentUserName();
+    const nowIso = new Date().toISOString();
+
+    const statusLabels: Record<string, string> = {
+      agendado: 'Agendado',
+      confirmado: 'Confirmado',
+      em_atendimento: 'Em Atendimento',
+      concluido: 'Concluído',
+      cancelado: 'Cancelado',
+      nao_compareceu: 'Não Compareceu',
+    };
+
     setAppointments(prev => {
       const nextAppointments = prev.map(a => {
         if (a.id === id) {
+          const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
           return {
             ...a,
             status,
             cancellationReason: cancellationReason || a.cancellationReason,
-            updatedAt: new Date().toISOString()
+            updatedAt: nowIso,
+            updatedBy: userName,
+            changeHistory: [
+              ...existingHistory,
+              {
+                date: nowIso,
+                user: userName,
+                action: status === 'cancelado' ? 'Agendamento Cancelado' : `Status alterado para ${statusLabels[status] || status}`,
+                details: cancellationReason ? `Motivo: ${cancellationReason}` : undefined,
+              }
+            ]
           };
         }
         return a;
@@ -1055,8 +1163,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const cancelAppointment = (id: string, reason: string) => {
-    const res = updateAppointmentStatus(id, 'cancelado', reason);
+  const cancelAppointment = (id: string, reason: string, user?: string) => {
+    const res = updateAppointmentStatus(id, 'cancelado', reason, user);
     removeUnfinishedAttendancesForAppointment(id);
     return res;
   };
@@ -1266,6 +1374,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isFitIn?: boolean;
     fitInReason?: string;
     notes?: string;
+    createdBy?: string;
   }) => {
     if (!data.clientId) return { success: false, error: 'Selecione uma cliente.' };
     if (!data.services || data.services.length === 0) return { success: false, error: 'Adicione pelo menos um serviço.' };
@@ -1288,6 +1397,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const sessionId = generateId('ses');
     const nowIso = new Date().toISOString();
+    const userName = data.createdBy || getCurrentUserName();
     const createdAppointments: Appointment[] = [];
     let currentStart = data.startTime;
 
@@ -1327,9 +1437,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'agendado',
         isFitIn: data.isFitIn || false,
         fitInReason: data.fitInReason,
-        fitInAuthorizedBy: data.isFitIn ? 'Administração / Usuário Autorizado' : undefined,
+        fitInAuthorizedBy: data.isFitIn ? userName : undefined,
         createdAt: nowIso,
+        createdBy: userName,
         updatedAt: nowIso,
+        updatedBy: userName,
+        changeHistory: [
+          {
+            date: nowIso,
+            user: userName,
+            action: 'Agendamento Criado',
+            details: `${srv?.name || 'Serviço'} com ${prof?.name || 'Profissional'} em ${formatDateBR(data.date)} às ${sStart}`,
+          }
+        ]
       };
 
       createdAppointments.push(newApt);

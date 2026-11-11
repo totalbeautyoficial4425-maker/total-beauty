@@ -114,7 +114,15 @@ export interface Appointment {
   deletedBy?: string;
   deletionReason?: string;
   createdAt: string;
+  createdBy?: string;
   updatedAt: string;
+  updatedBy?: string;
+  changeHistory?: Array<{
+    date: string;
+    user: string;
+    action: string;
+    details?: string;
+  }>;
 }
 
 export interface AppointmentDeletionLog {

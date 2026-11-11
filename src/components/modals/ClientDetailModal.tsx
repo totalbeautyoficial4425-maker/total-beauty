@@ -477,8 +477,10 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                             {apt.status}
                           </span>
                         </div>
-                        <p className="text-tb-gray-neutral mt-0.5">
-                          {formatDateBR(apt.date)} ({apt.startTime} - {apt.endTime}) • com {apt.professionalName}
+                        <p className="text-tb-gray-neutral mt-0.5 flex items-center flex-wrap gap-1">
+                          <span>{formatDateBR(apt.date)} ({apt.startTime} - {apt.endTime}) • com {apt.professionalName}</span>
+                          {apt.createdBy && <span className="text-[11px] font-medium text-tb-brown-soft">• Agendado por: {apt.createdBy}</span>}
+                          {apt.updatedBy && apt.updatedBy !== apt.createdBy && <span className="text-[11px] font-medium text-amber-700">• Alterado por: {apt.updatedBy}</span>}
                         </p>
                       </div>
                       <span className="font-bold text-tb-brown-dark">{formatBRL(apt.price)}</span>
