@@ -88,6 +88,77 @@ export type AppointmentStatus =
   | 'cancelado' 
   | 'nao_compareceu';
 
+export interface AppointmentHistoryChange {
+  field: string;
+  oldValue: string;
+  newValue: string;
+}
+
+export interface AppointmentHistoryEvent {
+  id?: string;
+  date: string; // ISO timestamp
+  user: string; // User display name
+  userId?: string;
+  userRole?: string;
+  userProfileLabel?: string;
+  action: string;
+  details?: string;
+  changes?: AppointmentHistoryChange[];
+}
+
+export type AppointmentAuditAction = 
+  | 'criado' 
+  | 'editado' 
+  | 'status_alterado' 
+  | 'cancelado' 
+  | 'excluido';
+
+export interface AppointmentAuditLog {
+  id: string;
+  appointmentId: string;
+  sessionId?: string;
+  action: AppointmentAuditAction;
+  actionLabel: string;
+  timestamp: string; // ISO
+  formattedDate?: string;
+  formattedTime?: string;
+  
+  // Performer info
+  userId: string;
+  userName: string;
+  userRole: string;
+  userProfileLabel: string;
+  
+  // Appointment snapshot
+  clientId: string;
+  clientName: string;
+  clientPhone?: string;
+  serviceId: string;
+  serviceName: string;
+  professionalId: string;
+  professionalName: string;
+  appointmentDate: string; // YYYY-MM-DD
+  appointmentStartTime: string;
+  appointmentEndTime: string;
+  durationMinutes: number;
+  price: number;
+  status: AppointmentStatus;
+  
+  // Change specifics
+  changes?: AppointmentHistoryChange[];
+  details?: string;
+  reason?: string;
+  
+  // Creator info for filtering
+  createdBy?: string;
+  createdByRole?: string;
+  createdByUserId?: string;
+  createdAt?: string;
+  
+  isAppointmentDeleted?: boolean;
+  deletionReason?: string;
+}
+
 export interface Appointment {
   id: string;
   clientId: string;
@@ -112,17 +183,18 @@ export interface Appointment {
   executionMode?: 'sequencial' | 'simultaneo';
   deletedAt?: string;
   deletedBy?: string;
+  deletedByUserId?: string;
+  deletedByRole?: string;
   deletionReason?: string;
   createdAt: string;
   createdBy?: string;
+  createdByUserId?: string;
+  createdByRole?: string;
   updatedAt: string;
   updatedBy?: string;
-  changeHistory?: Array<{
-    date: string;
-    user: string;
-    action: string;
-    details?: string;
-  }>;
+  updatedByUserId?: string;
+  updatedByRole?: string;
+  changeHistory?: AppointmentHistoryEvent[];
 }
 
 export interface AppointmentDeletionLog {

@@ -26,13 +26,17 @@ import {
   Lock,
   RotateCcw,
   UserCheck,
-  Edit3
+  Edit3,
+  History,
+  ShieldCheck
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Appointment, AppointmentStatus, Professional, ScheduleBlock } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday, formatDateTimeBR } from '../utils/formatters';
 import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
+import { AppointmentHistoryModal } from '../components/modals/AppointmentHistoryModal';
+import { AppointmentAuditPanelModal } from '../components/modals/AppointmentAuditPanelModal';
 import { getTodayDate } from '../services/storage';
 
 interface AgendaPageProps {
@@ -95,6 +99,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     clients,
     attendances,
     scheduleBlocks,
+    appointmentAuditLogs,
     updateAppointmentStatus, 
     cancelAppointment, 
     deleteAppointment,
@@ -151,6 +156,8 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   const [manageBlocksSearch, setManageBlocksSearch] = useState('');
   const [manageBlocksProfFilter, setManageBlocksProfFilter] = useState('todos');
   const [manageBlocksTab, setManageBlocksTab] = useState<'todos' | 'futuros'>('futuros');
+  const [isAuditPanelOpen, setIsAuditPanelOpen] = useState(false);
+  const [historyModalAppointment, setHistoryModalAppointment] = useState<Appointment | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -292,12 +299,14 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
       setDeleteError('Por favor, informe a justificativa da exclusão do agendamento.');
       return;
     }
-    const res = deleteAppointment(deletingAppointment.id, deleteReason.trim());
+    const authorName = currentUser?.name || currentUser?.username || 'Administração';
+    const res = deleteAppointment(deletingAppointment.id, deleteReason.trim(), authorName);
     if (res.success) {
       setDeletingAppointment(null);
       setDeleteReason('');
       setDeleteError(null);
       setPopoverAppointment(null);
+      showToast('Agendamento excluído e registrado na auditoria.');
     } else {
       setDeleteError(res.error || 'Erro ao excluir agendamento.');
     }
@@ -430,6 +439,22 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
               </span>
             )}
           </button>
+
+          {(!isProfessional || currentUser?.role === 'admin' || currentUser?.role === 'gerente') && (
+            <button
+              onClick={() => setIsAuditPanelOpen(true)}
+              className="px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-2xs"
+              title="Acessar painel de auditoria e rastreabilidade geral de agendamentos"
+            >
+              <History className="w-3.5 h-3.5 text-tb-rose-primary" />
+              <span>Auditoria</span>
+              {appointmentAuditLogs.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-tb-rose-blush text-tb-brown-dark font-extrabold">
+                  {appointmentAuditLogs.length}
+                </span>
+              )}
+            </button>
+          )}
 
           <button
             onClick={() => onOpenNewAppointment(selectedDate)}
@@ -821,6 +846,21 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   )}
                 </div>
               )}
+
+              {/* Botão para abrir Histórico de Alterações */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHistoryModalAppointment(popoverAppointment);
+                  setPopoverAppointment(null);
+                }}
+                className="w-full mt-2 py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-950 border border-amber-300/80 font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                title="Visualizar a linha do tempo completa e histórico de alterações"
+              >
+                <History className="w-3.5 h-3.5 text-amber-700" />
+                <span>Histórico de Alterações</span>
+              </button>
             </div>
           </div>
 
@@ -1432,6 +1472,23 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
+      )}
+
+      {/* Modal: Histórico de Alterações de Agendamento */}
+      {historyModalAppointment && (
+        <AppointmentHistoryModal
+          isOpen={true}
+          onClose={() => setHistoryModalAppointment(null)}
+          appointment={historyModalAppointment}
+        />
+      )}
+
+      {/* Modal: Painel de Auditoria Geral da Agenda (Admin) */}
+      {isAuditPanelOpen && (
+        <AppointmentAuditPanelModal
+          isOpen={true}
+          onClose={() => setIsAuditPanelOpen(false)}
+        />
       )}
     </div>
   );

@@ -13,7 +13,8 @@ import {
   Comanda,
   AppointmentDeletionLog,
   ClientPackage,
-  ScheduleBlock
+  ScheduleBlock,
+  AppointmentAuditLog
 } from '../types';
 import { 
   getFirebaseInstance, 
@@ -54,7 +55,8 @@ export const STORAGE_KEYS = {
   DELETED_APPOINTMENTS: 'tb_deleted_appointments_v1',
   CLIENT_PACKAGES: 'tb_client_packages_v1',
   SCHEDULE_BLOCKS: 'tb_schedule_blocks_v1',
-  DELETED_IDS: 'tb_deleted_ids_v1'
+  DELETED_IDS: 'tb_deleted_ids_v1',
+  APPOINTMENT_AUDIT_LOGS: 'tb_appointment_audit_logs_v1'
 };
 
 // Simple secure hash simulation for browser client-side storage
@@ -2474,6 +2476,29 @@ export const storageService = {
     idbStorage.setItem(STORAGE_KEYS.DELETED_APPOINTMENTS, next);
     syncCollectionToFirestore('deletedAppointments', next);
     notifyDataChanged();
+  },
+
+  getAppointmentAuditLogs(): AppointmentAuditLog[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  },
+
+  saveAppointmentAuditLogs(logs: AppointmentAuditLog[]): void {
+    safeSetItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, JSON.stringify(logs));
+    idbStorage.setItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, logs);
+    syncCollectionToFirestore('appointmentAuditLogs', logs);
+    notifyDataChanged();
+  },
+
+  addAppointmentAuditLog(log: AppointmentAuditLog): void {
+    const existing = this.getAppointmentAuditLogs();
+    const next = [log, ...existing];
+    this.saveAppointmentAuditLogs(next);
   },
 
   cleanupDeborahExampleData(): { deletedAttendances: number; deletedPayments: number; deletedAppointments: number } {

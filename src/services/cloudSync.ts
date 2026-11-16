@@ -363,6 +363,17 @@ export const cloudSyncService = {
         idbStorage.setItem(STORAGE_KEYS.SETTINGS, cloudData.settings);
       }
 
+      // 14. Appointment Audit Logs (Traceability and audit history)
+      if (Array.isArray(cloudData.appointmentAuditLogs)) {
+        const local = storageService.getAppointmentAuditLogs();
+        const merged = mergeCollections(local, cloudData.appointmentAuditLogs, deletedIdsSet);
+        if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
+          safeSetItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, JSON.stringify(merged));
+          idbStorage.setItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, merged);
+          hasAnyChange = true;
+        }
+      }
+
       if (cloudVersion) {
         lastKnownVersion = cloudVersion;
         safeSetItem(LAST_CLOUD_VERSION_KEY, cloudVersion);
@@ -419,6 +430,7 @@ export const cloudSyncService = {
         consumptions: storageService.getConsumptions(),
         clientPackages: storageService.getClientPackages(),
         scheduleBlocks: storageService.getScheduleBlocks(),
+        appointmentAuditLogs: storageService.getAppointmentAuditLogs(),
         settings: storageService.getSettings(),
         users: usersToPush,
       };

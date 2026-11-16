@@ -20,7 +20,11 @@ import {
   PackageUsageLog,
   PackageItemBalance,
   PackageMovementLog,
-  ScheduleBlock
+  ScheduleBlock,
+  AppointmentAuditLog,
+  AppointmentHistoryEvent,
+  AppointmentHistoryChange,
+  AppointmentAuditAction
 } from '../types';
 import { storageService, getTodayDate, hashPassword } from '../services/storage';
 import { cloudSyncService } from '../services/cloudSync';
@@ -120,7 +124,10 @@ interface DataContextType {
   updateAppointment: (id: string, appointmentData: Partial<Appointment>, modifiedByUser?: string) => { success: boolean; error?: string };
   updateAppointmentStatus: (id: string, status: AppointmentStatus, cancellationReason?: string, user?: string) => { success: boolean; error?: string };
   cancelAppointment: (id: string, reason: string, user?: string) => { success: boolean; error?: string };
-  deleteAppointment: (id: string, reason: string) => { success: boolean; error?: string };
+  deleteAppointment: (id: string, reason: string, user?: string) => { success: boolean; error?: string };
+  appointmentAuditLogs: AppointmentAuditLog[];
+  getAppointmentHistory: (appointmentId: string) => AppointmentHistoryEvent[];
+  addAppointmentAuditLog: (log: AppointmentAuditLog) => void;
   cleanupDeborahAttendances: () => { success: boolean; message: string };
   clearExampleInventory: () => { success: boolean; message: string };
 
@@ -256,19 +263,36 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
 
-  const getCurrentUserName = useCallback((): string => {
-    if (currentUser?.name && currentUser.name.trim()) return currentUser.name.trim();
-    if (currentUser?.username && currentUser.username.trim()) return currentUser.username.trim();
-    try {
-      const raw = localStorage.getItem('tb_session_v2') || sessionStorage.getItem('tb_session_v2');
-      if (raw) {
-        const u = JSON.parse(raw);
-        if (u?.name && u.name.trim()) return u.name.trim();
-        if (u?.username && u.username.trim()) return u.username.trim();
-      }
-    } catch {}
-    return 'Administração';
+  const getCurrentUserAuditInfo = useCallback(() => {
+    let user = currentUser;
+    if (!user) {
+      try {
+        const raw = localStorage.getItem('tb_session_v2') || sessionStorage.getItem('tb_session_v2');
+        if (raw) user = JSON.parse(raw);
+      } catch {}
+    }
+    const name = user?.name?.trim() || user?.username?.trim() || 'Administração';
+    const role = user?.role || 'admin';
+    const id = user?.id || 'usr_admin';
+    const profileLabel = role === 'admin' 
+      ? 'Administradora' 
+      : role === 'gerente' 
+      ? 'Gerente' 
+      : role === 'profissional' 
+      ? 'Profissional' 
+      : 'Recepcionista';
+    return {
+      userId: id,
+      userName: name,
+      userRole: role,
+      userProfileLabel: profileLabel,
+      displayNameWithRole: `${name} (${profileLabel})`,
+    };
   }, [currentUser]);
+
+  const getCurrentUserName = useCallback((): string => {
+    return getCurrentUserAuditInfo().userName;
+  }, [getCurrentUserAuditInfo]);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -282,6 +306,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [comandas, setComandas] = useState<Comanda[]>([]);
   const [clientPackages, setClientPackages] = useState<ClientPackage[]>([]);
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>([]);
+  const [appointmentAuditLogs, setAppointmentAuditLogs] = useState<AppointmentAuditLog[]>([]);
   const [settings, setSettings] = useState<CompanySettings>(storageService.getSettings());
 
   const loadAllData = useCallback(() => {
@@ -297,6 +322,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadedComandas = storageService.getComandas();
     const loadedClientPackages = storageService.getClientPackages();
     const loadedScheduleBlocks = storageService.getScheduleBlocks();
+    const loadedAuditLogs = storageService.getAppointmentAuditLogs();
     const loadedSettings = storageService.getSettings();
 
     // Auto-heal / sync: ensure every finished/paid attendance has its matching PaymentTransaction with professionalId & commissionAmount
@@ -461,6 +487,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setComandas(loadedComandas);
     setClientPackages(loadedClientPackages);
     setScheduleBlocks(loadedScheduleBlocks);
+    setAppointmentAuditLogs(loadedAuditLogs);
     setSettings(loadedSettings);
   }, []);
 
@@ -967,7 +994,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const nowIso = new Date().toISOString();
-    const userName = appointmentData.createdBy || getCurrentUserName();
+    const actor = getCurrentUserAuditInfo();
+    const userName = appointmentData.createdBy || actor.userName;
+    const userRole = actor.userRole;
+    const userId = actor.userId;
+    const userProfileLabel = actor.userProfileLabel;
 
     const newAppointment: Appointment = {
       ...appointmentData,
@@ -975,14 +1006,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       endTime: calculatedEndTime,
       createdAt: nowIso,
       createdBy: userName,
+      createdByUserId: userId,
+      createdByRole: userRole,
       updatedAt: nowIso,
       updatedBy: userName,
+      updatedByUserId: userId,
+      updatedByRole: userRole,
       changeHistory: [
         {
+          id: generateId('evt'),
           date: nowIso,
           user: userName,
+          userId,
+          userRole,
+          userProfileLabel,
           action: 'Agendamento Criado',
-          details: `${appointmentData.serviceName} com ${appointmentData.professionalName} em ${formatDateBR(appointmentData.date)} às ${appointmentData.startTime}`,
+          details: `Agendado por ${userName} (${userProfileLabel}): ${appointmentData.serviceName} com ${appointmentData.professionalName} em ${formatDateBR(appointmentData.date)} às ${appointmentData.startTime}`,
         }
       ]
     };
@@ -990,6 +1029,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextAppointments = [...appointments, newAppointment];
     setAppointments(nextAppointments);
     storageService.saveAppointments(nextAppointments);
+
+    // Save audit log
+    const auditLog: AppointmentAuditLog = {
+      id: generateId('aud'),
+      appointmentId: newAppointment.id,
+      sessionId: newAppointment.sessionId,
+      action: 'criado',
+      actionLabel: 'Agendamento Criado',
+      timestamp: nowIso,
+      userId,
+      userName,
+      userRole,
+      userProfileLabel,
+      clientId: newAppointment.clientId,
+      clientName: newAppointment.clientName,
+      clientPhone: newAppointment.clientPhone,
+      serviceId: newAppointment.serviceId,
+      serviceName: newAppointment.serviceName,
+      professionalId: newAppointment.professionalId,
+      professionalName: newAppointment.professionalName,
+      appointmentDate: newAppointment.date,
+      appointmentStartTime: newAppointment.startTime,
+      appointmentEndTime: calculatedEndTime,
+      durationMinutes: newAppointment.durationMinutes,
+      price: newAppointment.price,
+      status: newAppointment.status || 'agendado',
+      details: `Agendado por ${userName} (${userProfileLabel})`,
+      createdBy: userName,
+      createdByRole: userRole,
+      createdByUserId: userId,
+      createdAt: nowIso,
+    };
+    storageService.addAppointmentAuditLog(auditLog);
+    setAppointmentAuditLogs(prev => [auditLog, ...prev]);
 
     const nextClients = clients.map(c => {
       if (c.id === appointmentData.clientId) {
@@ -1021,64 +1094,145 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const userName = modifiedByUser || appointmentData.updatedBy || getCurrentUserName();
+    const actor = getCurrentUserAuditInfo();
+    const userName = modifiedByUser || appointmentData.updatedBy || actor.userName;
+    const userRole = actor.userRole;
+    const userId = actor.userId;
+    const userProfileLabel = actor.userProfileLabel;
     const nowIso = new Date().toISOString();
 
     // Collect detail of changes for auditing
-    const changes: string[] = [];
+    const changes: AppointmentHistoryChange[] = [];
     if (appointmentData.date && appointmentData.date !== existing.date) {
-      changes.push(`Data: ${formatDateBR(existing.date)} ➔ ${formatDateBR(appointmentData.date)}`);
-    }
-    if (appointmentData.startTime && appointmentData.startTime !== existing.startTime) {
-      changes.push(`Horário: ${existing.startTime} ➔ ${appointmentData.startTime}`);
-    }
-    if (appointmentData.serviceName && appointmentData.serviceName !== existing.serviceName) {
-      changes.push(`Serviço: ${existing.serviceName} ➔ ${appointmentData.serviceName}`);
-    } else if (appointmentData.serviceId && appointmentData.serviceId !== existing.serviceId) {
-      const newSrv = services.find(s => s.id === appointmentData.serviceId);
-      changes.push(`Serviço: ${existing.serviceName} ➔ ${newSrv?.name || 'Novo serviço'}`);
-    }
-    if (appointmentData.professionalName && appointmentData.professionalName !== existing.professionalName) {
-      changes.push(`Profissional: ${existing.professionalName} ➔ ${appointmentData.professionalName}`);
-    } else if (appointmentData.professionalId && appointmentData.professionalId !== existing.professionalId) {
-      const newProf = professionals.find(p => p.id === appointmentData.professionalId);
-      changes.push(`Profissional: ${existing.professionalName} ➔ ${newProf?.name || 'Novo profissional'}`);
-    }
-    if (appointmentData.price !== undefined && appointmentData.price !== existing.price) {
-      changes.push(`Valor: ${formatBRL(existing.price)} ➔ ${formatBRL(appointmentData.price)}`);
-    }
-    if (appointmentData.durationMinutes !== undefined && appointmentData.durationMinutes !== existing.durationMinutes) {
-      changes.push(`Duração: ${existing.durationMinutes}m ➔ ${appointmentData.durationMinutes}m`);
-    }
-    if (appointmentData.isFitIn !== undefined && appointmentData.isFitIn !== existing.isFitIn) {
-      changes.push(appointmentData.isFitIn ? 'Marcado como Encaixe' : 'Encaixe removido');
-    }
-    if (appointmentData.notes !== undefined && appointmentData.notes !== existing.notes) {
-      changes.push('Observações atualizadas');
+      changes.push({
+        field: 'Data',
+        oldValue: formatDateBR(existing.date),
+        newValue: formatDateBR(appointmentData.date),
+      });
     }
 
-    const changeDetailText = changes.length > 0 ? changes.join(' | ') : 'Dados do agendamento alterados';
+    const oldTimeStr = `${existing.startTime} às ${existing.endTime}`;
+    const newStart = appointmentData.startTime || existing.startTime;
+    const newEnd = targetEnd;
+    if ((appointmentData.startTime && appointmentData.startTime !== existing.startTime) || (targetEnd && targetEnd !== existing.endTime)) {
+      changes.push({
+        field: 'Horário',
+        oldValue: oldTimeStr,
+        newValue: `${newStart} às ${newEnd}`,
+      });
+    }
+
+    const newProf = appointmentData.professionalId ? professionals.find(p => p.id === appointmentData.professionalId) : undefined;
+    const newProfName = appointmentData.professionalName || newProf?.name;
+    if (newProfName && newProfName !== existing.professionalName) {
+      changes.push({
+        field: 'Profissional',
+        oldValue: existing.professionalName,
+        newValue: newProfName,
+      });
+    }
+
+    const newSrv = appointmentData.serviceId ? services.find(s => s.id === appointmentData.serviceId) : undefined;
+    const newSrvName = appointmentData.serviceName || newSrv?.name;
+    if (newSrvName && newSrvName !== existing.serviceName) {
+      changes.push({
+        field: 'Serviço',
+        oldValue: existing.serviceName,
+        newValue: newSrvName,
+      });
+    }
+
+    if (appointmentData.clientName && appointmentData.clientName !== existing.clientName) {
+      changes.push({
+        field: 'Cliente',
+        oldValue: existing.clientName,
+        newValue: appointmentData.clientName,
+      });
+    }
+
+    if (appointmentData.price !== undefined && appointmentData.price !== existing.price) {
+      changes.push({
+        field: 'Valor',
+        oldValue: formatBRL(existing.price),
+        newValue: formatBRL(appointmentData.price),
+      });
+    }
+
+    if (appointmentData.durationMinutes !== undefined && appointmentData.durationMinutes !== existing.durationMinutes) {
+      changes.push({
+        field: 'Duração',
+        oldValue: `${existing.durationMinutes} min`,
+        newValue: `${appointmentData.durationMinutes} min`,
+      });
+    }
+
+    if (appointmentData.notes !== undefined && appointmentData.notes !== (existing.notes || '')) {
+      changes.push({
+        field: 'Observações',
+        oldValue: existing.notes ? existing.notes : '(vazio)',
+        newValue: appointmentData.notes ? appointmentData.notes : '(vazio)',
+      });
+    }
+
+    if (appointmentData.isFitIn !== undefined && appointmentData.isFitIn !== existing.isFitIn) {
+      changes.push({
+        field: 'Encaixe',
+        oldValue: existing.isFitIn ? 'Sim' : 'Não',
+        newValue: appointmentData.isFitIn ? 'Sim' : 'Não',
+      });
+    }
+
+    // Determine descriptive action label based on primary change
+    let actionLabel = 'Agendamento Alterado';
+    if (changes.some(c => c.field === 'Profissional') && changes.length === 1) {
+      actionLabel = 'Profissional Alterada';
+    } else if (changes.some(c => c.field === 'Horário') && changes.length === 1) {
+      actionLabel = 'Horário Alterado';
+    } else if (changes.some(c => c.field === 'Data') && changes.length === 1) {
+      actionLabel = 'Data Alterada';
+    } else if (changes.some(c => c.field === 'Serviço') && changes.length === 1) {
+      actionLabel = 'Serviço Alterado';
+    }
+
+    const changeDetailText = changes.length > 0 
+      ? changes.map(c => `${c.field}: ${c.oldValue} ➔ ${c.newValue}`).join(' | ') 
+      : 'Dados do agendamento atualizados';
+
+    const newHistoryEvent: AppointmentHistoryEvent = {
+      id: generateId('evt'),
+      date: nowIso,
+      user: userName,
+      userId,
+      userRole,
+      userProfileLabel,
+      action: actionLabel,
+      details: changeDetailText,
+      changes: changes.length > 0 ? changes : undefined,
+    };
 
     const nextAppointments = appointments.map(a => {
       if (a.id === id) {
         const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
         const originalCreator = a.createdBy || existing.createdBy || 'Sistema';
+        const originalCreatedAt = a.createdAt || existing.createdAt || nowIso;
+        const originalCreatedByRole = a.createdByRole || existing.createdByRole;
+        const originalCreatedByUserId = a.createdByUserId || existing.createdByUserId;
 
         return {
           ...a,
           ...appointmentData,
           endTime: targetEnd,
           createdBy: originalCreator,
+          createdAt: originalCreatedAt,
+          createdByRole: originalCreatedByRole,
+          createdByUserId: originalCreatedByUserId,
           updatedAt: nowIso,
           updatedBy: userName,
+          updatedByRole: userRole,
+          updatedByUserId: userId,
           changeHistory: [
             ...existingHistory,
-            {
-              date: nowIso,
-              user: userName,
-              action: 'Agendamento Alterado',
-              details: changeDetailText,
-            }
+            newHistoryEvent
           ]
         };
       }
@@ -1087,6 +1241,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setAppointments(nextAppointments);
     storageService.saveAppointments(nextAppointments);
+
+    // Save permanent audit log
+    const auditLog: AppointmentAuditLog = {
+      id: generateId('aud'),
+      appointmentId: id,
+      sessionId: existing.sessionId,
+      action: 'editado',
+      actionLabel,
+      timestamp: nowIso,
+      userId,
+      userName,
+      userRole,
+      userProfileLabel,
+      clientId: appointmentData.clientId || existing.clientId,
+      clientName: appointmentData.clientName || existing.clientName,
+      clientPhone: appointmentData.clientPhone || existing.clientPhone,
+      serviceId: appointmentData.serviceId || existing.serviceId,
+      serviceName: newSrvName || existing.serviceName,
+      professionalId: appointmentData.professionalId || existing.professionalId,
+      professionalName: newProfName || existing.professionalName,
+      appointmentDate: targetDate,
+      appointmentStartTime: newStart,
+      appointmentEndTime: newEnd,
+      durationMinutes: targetDuration,
+      price: appointmentData.price ?? existing.price,
+      status: (appointmentData.status || existing.status),
+      changes: changes.length > 0 ? changes : undefined,
+      details: changeDetailText,
+      createdBy: existing.createdBy || 'Sistema',
+      createdByRole: existing.createdByRole,
+      createdByUserId: existing.createdByUserId,
+      createdAt: existing.createdAt,
+    };
+    storageService.addAppointmentAuditLog(auditLog);
+    setAppointmentAuditLogs(prev => [auditLog, ...prev]);
+
     return { success: true };
   };
 
@@ -1116,7 +1306,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateAppointmentStatus = (id: string, status: AppointmentStatus, cancellationReason?: string, user?: string) => {
-    const userName = user || getCurrentUserName();
+    const actor = getCurrentUserAuditInfo();
+    const userName = user || actor.userName;
+    const userRole = actor.userRole;
+    const userId = actor.userId;
+    const userProfileLabel = actor.userProfileLabel;
     const nowIso = new Date().toISOString();
 
     const statusLabels: Record<string, string> = {
@@ -1126,6 +1320,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       concluido: 'Concluído',
       cancelado: 'Cancelado',
       nao_compareceu: 'Não Compareceu',
+    };
+
+    const targetAppointment = appointments.find(a => a.id === id);
+    if (!targetAppointment) return { success: false, error: 'Agendamento não encontrado.' };
+
+    const oldStatusLabel = statusLabels[targetAppointment.status] || targetAppointment.status;
+    const newStatusLabel = statusLabels[status] || status;
+    const actionLabel = status === 'cancelado' 
+      ? 'Agendamento Cancelado' 
+      : `Status: ${newStatusLabel}`;
+
+    const details = cancellationReason 
+      ? `Motivo: ${cancellationReason}` 
+      : `Status alterado de ${oldStatusLabel} para ${newStatusLabel}`;
+
+    const historyEvent: AppointmentHistoryEvent = {
+      id: generateId('evt'),
+      date: nowIso,
+      user: userName,
+      userId,
+      userRole,
+      userProfileLabel,
+      action: actionLabel,
+      details,
+      changes: [
+        {
+          field: 'Status',
+          oldValue: oldStatusLabel,
+          newValue: newStatusLabel,
+        }
+      ]
     };
 
     setAppointments(prev => {
@@ -1138,14 +1363,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             cancellationReason: cancellationReason || a.cancellationReason,
             updatedAt: nowIso,
             updatedBy: userName,
+            updatedByRole: userRole,
+            updatedByUserId: userId,
             changeHistory: [
               ...existingHistory,
-              {
-                date: nowIso,
-                user: userName,
-                action: status === 'cancelado' ? 'Agendamento Cancelado' : `Status alterado para ${statusLabels[status] || status}`,
-                details: cancellationReason ? `Motivo: ${cancellationReason}` : undefined,
-              }
+              historyEvent
             ]
           };
         }
@@ -1154,6 +1376,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storageService.saveAppointments(nextAppointments);
       return nextAppointments;
     });
+
+    // Save audit log
+    const auditLog: AppointmentAuditLog = {
+      id: generateId('aud'),
+      appointmentId: id,
+      sessionId: targetAppointment.sessionId,
+      action: status === 'cancelado' ? 'cancelado' : 'status_alterado',
+      actionLabel,
+      timestamp: nowIso,
+      userId,
+      userName,
+      userRole,
+      userProfileLabel,
+      clientId: targetAppointment.clientId,
+      clientName: targetAppointment.clientName,
+      clientPhone: targetAppointment.clientPhone,
+      serviceId: targetAppointment.serviceId,
+      serviceName: targetAppointment.serviceName,
+      professionalId: targetAppointment.professionalId,
+      professionalName: targetAppointment.professionalName,
+      appointmentDate: targetAppointment.date,
+      appointmentStartTime: targetAppointment.startTime,
+      appointmentEndTime: targetAppointment.endTime,
+      durationMinutes: targetAppointment.durationMinutes,
+      price: targetAppointment.price,
+      status,
+      reason: cancellationReason,
+      details,
+      changes: [
+        {
+          field: 'Status',
+          oldValue: oldStatusLabel,
+          newValue: newStatusLabel,
+        }
+      ],
+      createdBy: targetAppointment.createdBy,
+      createdByRole: targetAppointment.createdByRole,
+      createdByUserId: targetAppointment.createdByUserId,
+      createdAt: targetAppointment.createdAt,
+    };
+    storageService.addAppointmentAuditLog(auditLog);
+    setAppointmentAuditLogs(prev => [auditLog, ...prev]);
 
     // When an appointment is canceled or marked as no-show, immediately remove it from attendance queue / comandas
     if (status === 'cancelado' || status === 'nao_compareceu') {
@@ -1169,7 +1433,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
-  const deleteAppointment = (id: string, reason: string): { success: boolean; error?: string } => {
+  const deleteAppointment = (id: string, reason: string, user?: string): { success: boolean; error?: string } => {
     if (!reason || !reason.trim()) {
       return { success: false, error: 'A justificativa para a exclusão do agendamento é obrigatória.' };
     }
@@ -1179,8 +1443,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Agendamento não encontrado.' };
     }
 
-    // 1. Audit log of the deletion
+    const actor = getCurrentUserAuditInfo();
+    const userName = user || actor.userName;
+    const userRole = actor.userRole;
+    const userId = actor.userId;
+    const userProfileLabel = actor.userProfileLabel;
     const nowIso = new Date().toISOString();
+
+    // 1. Audit log of the deletion
     const deletionLog: AppointmentDeletionLog = {
       id: generateId('del_apt'),
       appointmentId: aptToDelete.id,
@@ -1195,29 +1465,84 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       durationMinutes: aptToDelete.durationMinutes,
       price: aptToDelete.price,
       reason: reason.trim(),
-      deletedBy: 'Profissional / Administração',
+      deletedBy: `${userName} (${userProfileLabel})`,
       deletedAt: nowIso,
     };
     storageService.saveAppointmentDeletionLog(deletionLog);
 
-    // 2. Mark appointment as deleted (soft delete with audit tombstone)
+    // 2. Permanent audit log in appointmentAuditLogs
+    const auditLog: AppointmentAuditLog = {
+      id: generateId('aud'),
+      appointmentId: aptToDelete.id,
+      sessionId: aptToDelete.sessionId,
+      action: 'excluido',
+      actionLabel: 'Agendamento Excluído',
+      timestamp: nowIso,
+      userId,
+      userName,
+      userRole,
+      userProfileLabel,
+      clientId: aptToDelete.clientId,
+      clientName: aptToDelete.clientName,
+      clientPhone: aptToDelete.clientPhone,
+      serviceId: aptToDelete.serviceId,
+      serviceName: aptToDelete.serviceName,
+      professionalId: aptToDelete.professionalId,
+      professionalName: aptToDelete.professionalName,
+      appointmentDate: aptToDelete.date,
+      appointmentStartTime: aptToDelete.startTime,
+      appointmentEndTime: aptToDelete.endTime,
+      durationMinutes: aptToDelete.durationMinutes,
+      price: aptToDelete.price,
+      status: 'cancelado',
+      reason: reason.trim(),
+      deletionReason: reason.trim(),
+      isAppointmentDeleted: true,
+      details: `Excluído por ${userName} (${userProfileLabel}) com justificativa: "${reason.trim()}"`,
+      createdBy: aptToDelete.createdBy,
+      createdByRole: aptToDelete.createdByRole,
+      createdByUserId: aptToDelete.createdByUserId,
+      createdAt: aptToDelete.createdAt,
+    };
+    storageService.addAppointmentAuditLog(auditLog);
+    setAppointmentAuditLogs(prev => [auditLog, ...prev]);
+
+    // 3. Mark appointment as deleted (soft delete with audit tombstone)
     const nextAppointments = appointments.map(a => {
       if (a.id === id) {
+        const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
         return {
           ...a,
           status: 'cancelado' as AppointmentStatus,
           cancellationReason: reason.trim(),
+          deletionReason: reason.trim(),
           deletedAt: nowIso,
+          deletedBy: `${userName} (${userProfileLabel})`,
+          deletedByUserId: userId,
+          deletedByRole: userRole,
           updatedAt: nowIso,
+          updatedBy: userName,
+          changeHistory: [
+            ...existingHistory,
+            {
+              id: generateId('evt'),
+              date: nowIso,
+              user: userName,
+              userId,
+              userRole,
+              userProfileLabel,
+              action: 'Agendamento Excluído',
+              details: `Justificativa: ${reason.trim()}`,
+            }
+          ]
         };
       }
       return a;
     });
     setAppointments(nextAppointments);
     storageService.saveAppointments(nextAppointments);
-    deleteDocumentFromFirestore('appointments', id);
 
-    // 3. Completely remove ALL unfinished attendances linked to this appointment from the queue
+    // 4. Remove unfinished attendances linked to this appointment from the queue
     removeUnfinishedAttendancesForAppointment(id);
 
     return { success: true };
@@ -1397,8 +1722,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const sessionId = generateId('ses');
     const nowIso = new Date().toISOString();
-    const userName = data.createdBy || getCurrentUserName();
+    const actor = getCurrentUserAuditInfo();
+    const userName = data.createdBy || actor.userName;
+    const userRole = actor.userRole;
+    const userId = actor.userId;
+    const userProfileLabel = actor.userProfileLabel;
     const createdAppointments: Appointment[] = [];
+    const createdAuditLogs: AppointmentAuditLog[] = [];
     let currentStart = data.startTime;
 
     data.services.forEach(item => {
@@ -1440,20 +1770,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fitInAuthorizedBy: data.isFitIn ? userName : undefined,
         createdAt: nowIso,
         createdBy: userName,
+        createdByUserId: userId,
+        createdByRole: userRole,
         updatedAt: nowIso,
         updatedBy: userName,
+        updatedByUserId: userId,
+        updatedByRole: userRole,
         changeHistory: [
           {
+            id: generateId('evt'),
             date: nowIso,
             user: userName,
+            userId,
+            userRole,
+            userProfileLabel,
             action: 'Agendamento Criado',
-            details: `${srv?.name || 'Serviço'} com ${prof?.name || 'Profissional'} em ${formatDateBR(data.date)} às ${sStart}`,
+            details: `Agendado por ${userName} (${userProfileLabel}): ${srv?.name || 'Serviço'} com ${prof?.name || 'Profissional'} em ${formatDateBR(data.date)} às ${sStart}`,
           }
         ]
       };
 
       createdAppointments.push(newApt);
+
+      const auditLog: AppointmentAuditLog = {
+        id: generateId('aud'),
+        appointmentId: newApt.id,
+        sessionId,
+        action: 'criado',
+        actionLabel: 'Agendamento Criado',
+        timestamp: nowIso,
+        userId,
+        userName,
+        userRole,
+        userProfileLabel,
+        clientId: client.id,
+        clientName: client.name,
+        clientPhone: client.phone,
+        serviceId: item.serviceId,
+        serviceName: srv?.name || 'Serviço',
+        professionalId: item.professionalId,
+        professionalName: prof?.name || 'Profissional',
+        appointmentDate: data.date,
+        appointmentStartTime: sStart,
+        appointmentEndTime: sEnd,
+        durationMinutes: dur,
+        price: newApt.price,
+        status: 'agendado',
+        details: `Agendado por ${userName} (${userProfileLabel}) [Sessão com múltiplos serviços]`,
+        createdBy: userName,
+        createdByRole: userRole,
+        createdByUserId: userId,
+        createdAt: nowIso,
+      };
+      createdAuditLogs.push(auditLog);
+      storageService.addAppointmentAuditLog(auditLog);
     });
+
+    if (createdAuditLogs.length > 0) {
+      setAppointmentAuditLogs(prev => [...createdAuditLogs, ...prev]);
+    }
 
     const nextAppointments = [...appointments, ...createdAppointments];
     setAppointments(nextAppointments);
@@ -1470,6 +1845,70 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return { success: true, appointments: createdAppointments };
   };
+
+  const addAppointmentAuditLog = useCallback((log: AppointmentAuditLog) => {
+    storageService.addAppointmentAuditLog(log);
+    setAppointmentAuditLogs(prev => [log, ...prev]);
+  }, []);
+
+  const getAppointmentHistory = useCallback((appointmentId: string): AppointmentHistoryEvent[] => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    const logs = appointmentAuditLogs.filter(l => l.appointmentId === appointmentId);
+
+    const eventsMap = new Map<string, AppointmentHistoryEvent>();
+
+    // 1. From persistent audit logs (preferred for complete detail)
+    logs.forEach(log => {
+      const key = `${log.timestamp}_${log.actionLabel}`;
+      eventsMap.set(key, {
+        id: log.id,
+        date: log.timestamp,
+        user: log.userName,
+        userId: log.userId,
+        userRole: log.userRole,
+        userProfileLabel: log.userProfileLabel,
+        action: log.actionLabel,
+        details: log.details || (log.reason ? `Motivo: ${log.reason}` : undefined),
+        changes: log.changes,
+      });
+    });
+
+    // 2. From appointment.changeHistory (if any additional items exist)
+    if (apt?.changeHistory && Array.isArray(apt.changeHistory)) {
+      apt.changeHistory.forEach(evt => {
+        const key = `${evt.date}_${evt.action}`;
+        if (!eventsMap.has(key)) {
+          eventsMap.set(key, { ...evt });
+        } else {
+          const existing = eventsMap.get(key)!;
+          if (!existing.changes && evt.changes) {
+            existing.changes = evt.changes;
+          }
+          if (!existing.userProfileLabel && evt.userProfileLabel) {
+            existing.userProfileLabel = evt.userProfileLabel;
+          }
+        }
+      });
+    }
+
+    // 3. Fallback for legacy appointments without explicit creation log
+    if (apt && eventsMap.size === 0) {
+      eventsMap.set(`${apt.createdAt}_Agendamento Criado`, {
+        id: 'legacy_created',
+        date: apt.createdAt,
+        user: apt.createdBy || 'Sistema',
+        userRole: apt.createdByRole || 'admin',
+        userProfileLabel: apt.createdByRole === 'profissional' ? 'Profissional' : 'Administradora',
+        action: 'Agendamento Criado',
+        details: `${apt.serviceName} com ${apt.professionalName} em ${formatDateBR(apt.date)} às ${apt.startTime}`,
+      });
+    }
+
+    // Return sorted chronologically from oldest (criação) to newest
+    return Array.from(eventsMap.values()).sort((a, b) => {
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+  }, [appointments, appointmentAuditLogs]);
 
   // ATTENDANCES
   const startAttendance = (appointmentId?: string, clientId?: string, serviceId?: string, professionalId?: string) => {
@@ -3376,6 +3815,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         comandas,
         clientPackages,
         scheduleBlocks,
+        appointmentAuditLogs,
+        getAppointmentHistory,
+        addAppointmentAuditLog,
         lowStockCount,
         outOfStockCount,
         totalInventoryValue,

@@ -25,6 +25,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Appointment } from '../../types';
 import { addMinutesToTime, formatBRL, isClientBirthdayToday, formatDateTimeBR } from '../../utils/formatters';
+import { AppointmentHistoryModal } from './AppointmentHistoryModal';
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -105,6 +106,7 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [showAuditHistory, setShowAuditHistory] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   // Active client object
   const selectedClient = useMemo(() => {
@@ -501,16 +503,26 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                     <span className="text-[11px] text-tb-gray-neutral">({formatDateTimeBR(appointmentToEdit.createdAt)})</span>
                   )}
                 </div>
-                {appointmentToEdit.changeHistory && appointmentToEdit.changeHistory.length > 1 && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAuditHistory(!showAuditHistory)}
-                    className="text-[11px] text-tb-rose-primary hover:underline flex items-center gap-1 font-semibold ml-2 shrink-0"
+                    onClick={() => setIsHistoryModalOpen(true)}
+                    className="text-[11px] text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-xl border border-amber-300 flex items-center gap-1 font-bold shrink-0 transition-all shadow-2xs"
+                    title="Abrir linha do tempo completa e alterações auditadas"
                   >
-                    <History className="w-3.5 h-3.5" />
-                    {showAuditHistory ? 'Ocultar Histórico' : `Histórico (${appointmentToEdit.changeHistory.length})`}
+                    <History className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Linha do Tempo</span>
                   </button>
-                )}
+                  {appointmentToEdit.changeHistory && appointmentToEdit.changeHistory.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAuditHistory(!showAuditHistory)}
+                      className="text-[11px] text-tb-rose-primary hover:underline flex items-center gap-1 font-semibold shrink-0"
+                    >
+                      {showAuditHistory ? 'Ocultar Resumo' : `Resumo (${appointmentToEdit.changeHistory.length})`}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {appointmentToEdit.updatedBy && appointmentToEdit.updatedBy !== appointmentToEdit.createdBy && (
@@ -1271,7 +1283,8 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
                       setDeleteError('Por favor, informe a justificativa da exclusão.');
                       return;
                     }
-                    const res = deleteAppointment(appointmentToEdit.id, deleteReason.trim());
+                    const currentUserName = currentUser?.name || currentUser?.username || 'Administração';
+                    const res = deleteAppointment(appointmentToEdit.id, deleteReason.trim(), currentUserName);
                     if (res.success) {
                       setIsConfirmingDelete(false);
                       onClose();
@@ -1289,6 +1302,15 @@ export const AppointmentModal: React.FC<AppointmentModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Histórico de Alterações */}
+      {isHistoryModalOpen && appointmentToEdit && (
+        <AppointmentHistoryModal
+          isOpen={true}
+          onClose={() => setIsHistoryModalOpen(false)}
+          appointment={appointmentToEdit}
+        />
+      )}
     </div>
   );
 };
