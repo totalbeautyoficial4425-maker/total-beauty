@@ -140,9 +140,8 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Selected appointment popover tooltip
+  // Selected appointment details modal (centralized for notebook & mobile)
   const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null);
-  const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Schedule Block Modal & Detail States
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
@@ -263,24 +262,21 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
     onOpenNewAppointment(selectedDate, time, undefined, profId);
   };
 
-  // Card click handler to toggle popover
+  // Card click handler to open appointment details modal
   const handleAppointmentClick = (e: React.MouseEvent, apt: Appointment) => {
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setPopoverPosition({
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-    });
     setPopoverAppointment(apt);
   };
 
-  // Close popover when clicking anywhere else
+  // Close modal when pressing Escape
   useEffect(() => {
-    const handleClickOutside = () => {
-      setPopoverAppointment(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPopoverAppointment(null);
+      }
     };
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleConfirmCancel = () => {
@@ -756,241 +752,251 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
         </div>
       </div>
 
-      {/* POPOVER TOOLTIP (MATCHING THE SPEECH BUBBLE IN THE REFERENCE IMAGE) */}
-      {popoverAppointment && popoverPosition && (
+      {/* MODAL DETALHES DO ATENDIMENTO - CENTRALIZADO EM TELA (NOTEBOOK E MOBILE) */}
+      {popoverAppointment && (
         <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: 'fixed',
-            left: `${Math.min(window.innerWidth - 300, Math.max(20, popoverPosition.x - 140))}px`,
-            top: `${Math.min(window.innerHeight - 340, Math.max(70, popoverPosition.y - 10))}px`,
-          }}
-          className="z-50 bg-white rounded-2xl shadow-premium border border-tb-rose-light/80 p-4 w-72 animate-fade-in space-y-3"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-tb-brown-dark/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setPopoverAppointment(null)}
         >
-          {/* Header */}
-          <div className="flex items-start justify-between border-b border-tb-rose-light/40 pb-2">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-tb-rose-primary block">
-                {isProfessional && popoverAppointment.professionalId !== myProfId
-                  ? 'Agenda Compartilhada (Leitura)'
-                  : 'Detalhes do Atendimento'}
-              </span>
-              <h4 className="font-serif-brand text-base font-bold text-tb-brown-dark leading-tight mt-0.5">
-                {popoverAppointment.clientName}
-              </h4>
-            </div>
-            <button
-              onClick={() => setPopoverAppointment(null)}
-              className="p-1 text-tb-gray-neutral hover:text-tb-brown-dark rounded-md"
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Details Content */}
-          <div className="space-y-1.5 text-xs text-tb-brown-dark">
-            <p>
-              <span className="font-bold text-tb-brown-soft">Serviço:</span> {popoverAppointment.serviceName}
-            </p>
-            <p className="flex items-center gap-1.5">
-              <span className="font-bold text-tb-brown-soft">Status:</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_CONFIG[popoverAppointment.status]?.badgeClass}`}>
-                {STATUS_CONFIG[popoverAppointment.status]?.label}
-              </span>
-            </p>
-            <p>
-              <span className="font-bold text-tb-brown-soft">Horário:</span> {popoverAppointment.startTime} às {popoverAppointment.endTime} ({popoverAppointment.durationMinutes} min)
-            </p>
-            <p>
-              <span className="font-bold text-tb-brown-soft">Profissional:</span> {popoverAppointment.professionalName}
-            </p>
-            {(!isProfessional || popoverAppointment.professionalId === myProfId) && (
-              <p>
-                <span className="font-bold text-tb-brown-soft">Valor:</span> {formatBRL(popoverAppointment.price)}
-              </p>
-            )}
-            {popoverAppointment.isFitIn && (
-              <p className="text-amber-800 font-bold bg-amber-50 p-1 rounded-md text-[11px]">
-                ★ Agendamento Forçado / Encaixe
-                {popoverAppointment.fitInReason ? `: ${popoverAppointment.fitInReason}` : ''}
-              </p>
-            )}
-            {popoverAppointment.notes && (
-              <p className="text-[11px] text-tb-gray-neutral italic bg-tb-ivory p-2 rounded-lg">
-                Obs: {popoverAppointment.notes}
-              </p>
-            )}
-
-            {/* Auditoria & Rastreamento */}
-            <div className="pt-2 border-t border-tb-rose-light/40 space-y-1.5 text-[11px] bg-tb-ivory/80 p-2.5 rounded-xl border border-tb-rose-light/50">
-              <div className="flex items-center gap-1.5 text-tb-brown-dark font-medium flex-wrap">
-                <UserCheck className="w-3.5 h-3.5 text-tb-rose-primary shrink-0" />
-                <span>Agendado por: <strong className="text-tb-brown-dark">{popoverAppointment.createdBy || 'Sistema'}</strong></span>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-premium border border-tb-rose-light/80 p-5 sm:p-6 w-full max-w-sm sm:max-w-md max-h-[92vh] overflow-y-auto space-y-4"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-tb-rose-light/40 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-tb-rose-primary block">
+                  {isProfessional && popoverAppointment.professionalId !== myProfId
+                    ? 'Agenda Compartilhada (Leitura)'
+                    : 'Detalhes do Atendimento'}
+                </span>
+                <h4 className="font-serif-brand text-lg font-bold text-tb-brown-dark leading-tight mt-0.5">
+                  {popoverAppointment.clientName}
+                </h4>
               </div>
-              {popoverAppointment.createdAt && (
-                <div className="text-[10px] text-tb-gray-neutral pl-5">
-                  em {formatDateTimeBR(popoverAppointment.createdAt)}
-                </div>
-              )}
-
-              {popoverAppointment.updatedBy && popoverAppointment.updatedBy !== popoverAppointment.createdBy && (
-                <div className="pt-1.5 mt-1 border-t border-tb-rose-light/30">
-                  <div className="flex items-center gap-1.5 text-amber-900 font-medium flex-wrap">
-                    <Edit3 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>Última alteração: <strong>{popoverAppointment.updatedBy}</strong></span>
-                  </div>
-                  {popoverAppointment.updatedAt && (
-                    <div className="text-[10px] text-tb-gray-neutral pl-5">
-                      em {formatDateTimeBR(popoverAppointment.updatedAt)}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Botão para abrir Histórico de Alterações */}
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHistoryModalAppointment(popoverAppointment);
-                  setPopoverAppointment(null);
-                }}
-                className="w-full mt-2 py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-950 border border-amber-300/80 font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-2xs"
-                title="Visualizar a linha do tempo completa e histórico de alterações"
+                onClick={() => setPopoverAppointment(null)}
+                className="p-1 text-tb-gray-neutral hover:text-tb-brown-dark hover:bg-tb-ivory rounded-xl transition-colors"
+                title="Fechar detalhes"
               >
-                <History className="w-3.5 h-3.5 text-amber-700" />
-                <span>Histórico de Alterações</span>
+                <XCircle className="w-5 h-5" />
               </button>
             </div>
-          </div>
 
-          {/* Actions inside Popover */}
-          {isProfessional && popoverAppointment.professionalId !== myProfId ? (
-            <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between text-xs">
-              <span className="text-[11px] text-tb-brown-soft flex items-center gap-1 italic">
-                <Eye className="w-3.5 h-3.5 text-tb-rose-primary" />
-                Somente leitura
-              </span>
-
-              {/* WhatsApp communication */}
-              <button
-                onClick={() => {
-                  onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
-                  setPopoverAppointment(null);
-                }}
-                className="px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center gap-1 font-semibold text-[11px]"
-                title="Conversar no WhatsApp"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                WhatsApp
-              </button>
-            </div>
-          ) : (
-            <div className="pt-2 border-t border-tb-rose-light/40 flex flex-wrap items-center gap-1.5">
-              {/* Start attendance button */}
-              {['agendado', 'confirmado'].includes(popoverAppointment.status) && (
-                <button
-                  onClick={() => {
-                    startAttendance(popoverAppointment.id);
-                    setPopoverAppointment(null);
-                  }}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
-                  title="Iniciar atendimento"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Iniciar
-                </button>
+            {/* Details Content */}
+            <div className="space-y-2 text-xs text-tb-brown-dark">
+              <p>
+                <span className="font-bold text-tb-brown-soft">Serviço:</span> {popoverAppointment.serviceName}
+              </p>
+              <p className="flex items-center gap-1.5">
+                <span className="font-bold text-tb-brown-soft">Status:</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${STATUS_CONFIG[popoverAppointment.status]?.badgeClass}`}>
+                  {STATUS_CONFIG[popoverAppointment.status]?.label}
+                </span>
+              </p>
+              <p>
+                <span className="font-bold text-tb-brown-soft">Horário:</span> {popoverAppointment.startTime} às {popoverAppointment.endTime} ({popoverAppointment.durationMinutes} min)
+              </p>
+              <p>
+                <span className="font-bold text-tb-brown-soft">Profissional:</span> {popoverAppointment.professionalName}
+              </p>
+              {(!isProfessional || popoverAppointment.professionalId === myProfId) && (
+                <p>
+                  <span className="font-bold text-tb-brown-soft">Valor:</span> {formatBRL(popoverAppointment.price)}
+                </p>
+              )}
+              {popoverAppointment.isFitIn && (
+                <p className="text-amber-800 font-bold bg-amber-50 p-2 rounded-xl text-[11px] border border-amber-200">
+                  ★ Agendamento Forçado / Encaixe
+                  {popoverAppointment.fitInReason ? `: ${popoverAppointment.fitInReason}` : ''}
+                </p>
+              )}
+              {popoverAppointment.notes && (
+                <p className="text-[11px] text-tb-gray-neutral italic bg-tb-ivory p-2.5 rounded-xl border border-tb-rose-light/40">
+                  Obs: {popoverAppointment.notes}
+                </p>
               )}
 
-              {/* Desfazer início / Reverter atendimento se iniciado por engano */}
-              {popoverAppointment.status === 'em_atendimento' && (
+              {/* Auditoria & Rastreamento */}
+              <div className="pt-2.5 border-t border-tb-rose-light/40 space-y-1.5 text-[11px] bg-tb-ivory/80 p-3 rounded-2xl border border-tb-rose-light/50">
+                <div className="flex items-center gap-1.5 text-tb-brown-dark font-medium flex-wrap">
+                  <UserCheck className="w-3.5 h-3.5 text-tb-rose-primary shrink-0" />
+                  <span>Agendado por: <strong className="text-tb-brown-dark">{popoverAppointment.createdBy || 'Sistema'}</strong></span>
+                </div>
+                {popoverAppointment.createdAt && (
+                  <div className="text-[10px] text-tb-gray-neutral pl-5">
+                    em {formatDateTimeBR(popoverAppointment.createdAt)}
+                  </div>
+                )}
+
+                {popoverAppointment.updatedBy && popoverAppointment.updatedBy !== popoverAppointment.createdBy && (
+                  <div className="pt-1.5 mt-1 border-t border-tb-rose-light/30">
+                    <div className="flex items-center gap-1.5 text-amber-900 font-medium flex-wrap">
+                      <Edit3 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Última alteração: <strong>{popoverAppointment.updatedBy}</strong></span>
+                    </div>
+                    {popoverAppointment.updatedAt && (
+                      <div className="text-[10px] text-tb-gray-neutral pl-5">
+                        em {formatDateTimeBR(popoverAppointment.updatedAt)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Botão para abrir Histórico de Alterações */}
                 <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHistoryModalAppointment(popoverAppointment);
+                    setPopoverAppointment(null);
+                  }}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-950 border border-amber-300/80 font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                  title="Visualizar a linha do tempo completa e histórico de alterações"
+                >
+                  <History className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Histórico de Alterações</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            {isProfessional && popoverAppointment.professionalId !== myProfId ? (
+              <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-between text-xs">
+                <span className="text-[11px] text-tb-brown-soft flex items-center gap-1 italic">
+                  <Eye className="w-3.5 h-3.5 text-tb-rose-primary" />
+                  Somente leitura
+                </span>
+
+                {/* WhatsApp communication */}
+                <button
+                  type="button"
                   onClick={() => {
-                    if (window.confirm(`Deseja desfazer o início do atendimento de "${popoverAppointment.clientName}" e voltar para "Agendado"? O horário e agendamento permanecerão intactos na agenda.`)) {
-                      const atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
-                      if (atd) {
-                        revertAttendance(atd.id);
-                      } else {
-                        updateAppointmentStatus(popoverAppointment.id, 'agendado');
-                      }
+                    onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
+                    setPopoverAppointment(null);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center gap-1.5 font-semibold text-xs shadow-2xs"
+                  title="Conversar no WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp
+                </button>
+              </div>
+            ) : (
+              <div className="pt-3 border-t border-tb-rose-light/40 flex items-center gap-2">
+                {/* Start attendance button */}
+                {['agendado', 'confirmado'].includes(popoverAppointment.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startAttendance(popoverAppointment.id);
                       setPopoverAppointment(null);
-                    }
-                  }}
-                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
-                  title="Desfazer início de atendimento errôneo e voltar para agendado"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Desfazer Início
-                </button>
-              )}
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    title="Iniciar atendimento"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Iniciar
+                  </button>
+                )}
 
-              {/* Confirm attendance */}
-              {popoverAppointment.status === 'agendado' && (
+                {/* Desfazer início / Reverter atendimento se iniciado por engano */}
+                {popoverAppointment.status === 'em_atendimento' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Deseja desfazer o início do atendimento de "${popoverAppointment.clientName}" e voltar para "Agendado"? O horário e agendamento permanecerão intactos na agenda.`)) {
+                        const atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
+                        if (atd) {
+                          revertAttendance(atd.id);
+                        } else {
+                          updateAppointmentStatus(popoverAppointment.id, 'agendado');
+                        }
+                        setPopoverAppointment(null);
+                      }
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs"
+                    title="Desfazer início de atendimento errôneo e voltar para agendado"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Desfazer Início
+                  </button>
+                )}
+
+                {/* Confirm attendance */}
+                {popoverAppointment.status === 'agendado' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateAppointmentStatus(popoverAppointment.id, 'confirmado');
+                      setPopoverAppointment(null);
+                    }}
+                    className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/70 transition-colors shadow-2xs"
+                    title="Confirmar presença"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* WhatsApp */}
                 <button
+                  type="button"
                   onClick={() => {
-                    updateAppointmentStatus(popoverAppointment.id, 'confirmado');
+                    onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
                     setPopoverAppointment(null);
                   }}
-                  className="p-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                  title="Confirmar presença"
+                  className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/70 transition-colors shadow-2xs"
+                  title="WhatsApp"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
+                  <MessageCircle className="w-4 h-4" />
                 </button>
-              )}
 
-              {/* WhatsApp */}
-              <button
-                onClick={() => {
-                  onOpenWhatsApp(popoverAppointment.clientName, popoverAppointment.clientPhone, popoverAppointment);
-                  setPopoverAppointment(null);
-                }}
-                className="p-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                title="WhatsApp"
-              >
-                <MessageCircle className="w-4 h-4" />
-              </button>
-
-              {/* Edit */}
-              <button
-                onClick={() => {
-                  onEditAppointment(popoverAppointment);
-                  setPopoverAppointment(null);
-                }}
-                className="p-1.5 rounded-xl bg-tb-ivory text-tb-brown-dark hover:bg-tb-beige-light transition-colors"
-                title="Editar"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-
-              {/* Cancel */}
-              {!['cancelado', 'concluido'].includes(popoverAppointment.status) && (
+                {/* Edit */}
                 <button
+                  type="button"
                   onClick={() => {
-                    setCancelingAppointmentId(popoverAppointment.id);
+                    onEditAppointment(popoverAppointment);
                     setPopoverAppointment(null);
                   }}
-                  className="p-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
-                  title="Cancelar agendamento"
+                  className="p-2 rounded-xl bg-tb-ivory text-tb-brown-dark hover:bg-tb-beige-light border border-tb-rose-light/50 transition-colors shadow-2xs"
+                  title="Editar agendamento"
                 >
-                  <XCircle className="w-4 h-4" />
+                  <Edit className="w-4 h-4" />
                 </button>
-              )}
 
-              {/* Excluir (com justificativa) */}
-              <button
-                onClick={() => {
-                  setDeletingAppointment(popoverAppointment);
-                  setDeleteReason('');
-                  setDeleteError(null);
-                  setPopoverAppointment(null);
-                }}
-                className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition-colors"
-                title="Excluir agendamento da grade (com justificativa)"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+                {/* Cancel */}
+                {!['cancelado', 'concluido'].includes(popoverAppointment.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelingAppointmentId(popoverAppointment.id);
+                      setPopoverAppointment(null);
+                    }}
+                    className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60 transition-colors shadow-2xs"
+                    title="Cancelar agendamento"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Excluir (com justificativa) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeletingAppointment(popoverAppointment);
+                    setDeleteReason('');
+                    setDeleteError(null);
+                    setPopoverAppointment(null);
+                  }}
+                  className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 border border-rose-200/60 transition-colors shadow-2xs"
+                  title="Excluir agendamento da grade (com justificativa)"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
