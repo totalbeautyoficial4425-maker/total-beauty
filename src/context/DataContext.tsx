@@ -434,6 +434,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     let sanitizedAttendances = loadedAttendances.filter(a => {
+      // Strictly purge synthetic Comanda Consolidada and proxy attendances
+      if (a.serviceName === 'Comanda Consolidada' || a.id.startsWith('cmd_') || a.professionalName === 'Salão') {
+        hasRepaired = true;
+        return false;
+      }
       if (a.appointmentId && canceledOrDeletedAptIds.has(a.appointmentId) && (!a.finishedAt || a.paymentStatus !== 'pago')) {
         hasRepaired = true;
         return false;
@@ -459,10 +464,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false; // duplicate attendance
     });
 
-    // 3. Deduplicate payments: strictly keep only one financial transaction per attendance
+    // 3. Purge payments registered for 'Comanda Consolidada' or with attendanceId starting with 'cmd_'
+    const sanitizedPayments = (hasRepaired ? loadedPayments : repairedPayments).filter(p => {
+      if (p.serviceName === 'Comanda Consolidada' || p.attendanceId?.startsWith('cmd_') || p.professionalName === 'Salão') {
+        hasRepaired = true;
+        return false;
+      }
+      return true;
+    });
+
+    // Deduplicate payments: strictly keep only one financial transaction per attendance
     const seenPaymentAttendanceIds = new Set<string>();
     const deduplicatedPayments: PaymentTransaction[] = [];
-    (hasRepaired ? loadedPayments : repairedPayments).forEach(p => {
+    sanitizedPayments.forEach(p => {
       if (p.attendanceId) {
         if (seenPaymentAttendanceIds.has(p.attendanceId)) {
           hasRepaired = true;
@@ -473,10 +487,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deduplicatedPayments.push(p);
     });
 
+    // 4. Sanitize and heal comandas: remove any synthetic cmd_ IDs and recalculate totals from real attendances
+    const sanitizedComandas = loadedComandas.map(cmd => {
+      let cmdChanged = false;
+      const cleanAttendanceIds = (cmd.attendanceIds || []).filter(id => !id.startsWith('cmd_'));
+      if (cleanAttendanceIds.length !== (cmd.attendanceIds || []).length) {
+        cmdChanged = true;
+      }
+
+      // Find real attendances for this comanda
+      const realAtds = sanitizedAttendances.filter(a => 
+        cleanAttendanceIds.includes(a.id) || (a.clientId === cmd.clientId && a.date === cmd.date)
+      );
+
+      if (realAtds.length > 0) {
+        const realSubtotal = realAtds.reduce((acc, a) => acc + (a.grossValue || 0), 0);
+        const realDiscount = realAtds.reduce((acc, a) => acc + (a.discountValue || 0), 0);
+        const realNet = Math.max(0, realSubtotal - (cmd.discountTotal || realDiscount));
+
+        if (cmd.subtotal !== realSubtotal || cmd.netTotal !== realNet || cmdChanged) {
+          cmdChanged = true;
+          cmd = {
+            ...cmd,
+            attendanceIds: realAtds.map(a => a.id),
+            subtotal: realSubtotal,
+            discountTotal: cmd.discountTotal || realDiscount,
+            netTotal: realNet,
+            payments: (cmd.payments || []).filter(p => (p as any).serviceName !== 'Comanda Consolidada' && !(p as any).attendanceId?.startsWith('cmd_'))
+          };
+        }
+      }
+
+      if (cmdChanged) {
+        hasRepaired = true;
+      }
+      return cmd;
+    });
+
     if (hasRepaired) {
       loadedPayments = deduplicatedPayments;
       storageService.savePayments(loadedPayments);
       storageService.saveAttendances(sanitizedAttendances);
+      storageService.saveComandas(sanitizedComandas);
     }
 
     setClients(loadedClients);
@@ -488,7 +540,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setExpenses(loadedExpenses);
     setInventory(loadedInventory);
     setConsumptions(loadedConsumptions);
-    setComandas(loadedComandas);
+    setComandas(sanitizedComandas);
     setClientPackages(loadedClientPackages);
     setScheduleBlocks(loadedScheduleBlocks);
     setAppointmentAuditLogs(loadedAuditLogs);
@@ -2676,10 +2728,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Nenhum serviço selecionado para fechamento da comanda.' };
     }
 
+    // Strictly filter out synthetic 'Comanda Consolidada' or cmd_ IDs from updates
+    const filteredUpdates = data.attendancesUpdates.filter(u => {
+      if (u.attendanceId.startsWith('cmd_')) return false;
+      const atd = attendances.find(a => a.id === u.attendanceId);
+      if (atd && (atd.serviceName === 'Comanda Consolidada' || atd.professionalName === 'Salão')) return false;
+      return true;
+    });
+
+    if (filteredUpdates.length === 0) {
+      return { success: false, error: 'Nenhum serviço válido de profissional selecionado para fechamento da comanda.' };
+    }
+
     const existingComanda = comandas.find(c => c.clientId === data.clientId && c.date === data.date);
     
     // Guard: Prevent saving a comanda more than once when already finalized and paid
-    const allUpdatesAlreadyPaid = data.attendancesUpdates.every(u => {
+    const allUpdatesAlreadyPaid = filteredUpdates.every(u => {
       const atd = attendances.find(a => a.id === u.attendanceId);
       return atd?.paymentStatus === 'pago' && atd?.finishedAt;
     });
@@ -2696,7 +2760,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let discountTotal = 0;
     let netTotal = 0;
 
-    const updateMap = new Map(data.attendancesUpdates.map(u => [u.attendanceId, u]));
+    const updateMap = new Map(filteredUpdates.map(u => [u.attendanceId, u]));
     const finishedAttendanceIds: string[] = [];
     const finishedAttendances: Attendance[] = [];
     const appointmentIdsToComplete = new Set<string>();

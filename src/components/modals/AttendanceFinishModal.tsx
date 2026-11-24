@@ -99,15 +99,26 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     return getClientActivePackages(targetClientId);
   }, [getClientActivePackages, targetClientId, clientPackages]);
 
-  // All attendances for this client on this date
+  // All attendances for this client on this date (Strictly excluding any synthetic 'Comanda Consolidada')
   const relatedAttendances = useMemo(() => {
-    if (!targetClientId) return attendance ? [attendance] : [];
-    const list = attendances.filter(a => 
-      (a.clientId === targetClientId && (a.date === targetDate || a.createdAt?.startsWith(targetDate))) ||
-      (existingComanda && existingComanda.attendanceIds?.includes(a.id))
-    );
-    if (attendance && !list.some(a => a.id === attendance.id)) {
-      list.push(attendance);
+    if (!targetClientId) {
+      return attendance && attendance.serviceName !== 'Comanda Consolidada' && !attendance.id.startsWith('cmd_') && attendance.professionalName !== 'Salão' 
+        ? [attendance] 
+        : [];
+    }
+    const list = attendances.filter(a => {
+      if (a.serviceName === 'Comanda Consolidada' || a.id.startsWith('cmd_') || a.professionalName === 'Salão') {
+        return false;
+      }
+      return (
+        (a.clientId === targetClientId && (a.date === targetDate || a.createdAt?.startsWith(targetDate))) ||
+        (existingComanda && existingComanda.attendanceIds?.includes(a.id))
+      );
+    });
+    if (attendance && attendance.serviceName !== 'Comanda Consolidada' && !attendance.id.startsWith('cmd_') && attendance.professionalName !== 'Salão') {
+      if (!list.some(a => a.id === attendance.id)) {
+        list.push(attendance);
+      }
     }
     return list;
   }, [attendances, targetClientId, targetDate, attendance, existingComanda]);
@@ -200,7 +211,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
     }
     sessionKeyRef.current = currentKey;
 
-    if (attendance && attendance.serviceName !== 'Comanda Consolidada') {
+    if (attendance && attendance.serviceName !== 'Comanda Consolidada' && !attendance.id.startsWith('cmd_') && attendance.professionalName !== 'Salão') {
       setModalTab('individual');
       const srv = services.find(s => s.id === attendance.serviceId);
       const gross = attendance.grossValue || srv?.price || 0;
@@ -225,8 +236,12 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       setModalTab('comanda');
     }
 
-    if (relatedAttendances.length > 0) {
-      const items: ServiceItemState[] = relatedAttendances.map(atd => {
+    const validAttendances = relatedAttendances.filter(
+      atd => atd.serviceName !== 'Comanda Consolidada' && !atd.id.startsWith('cmd_') && atd.professionalName !== 'Salão'
+    );
+
+    if (validAttendances.length > 0) {
+      const items: ServiceItemState[] = validAttendances.map(atd => {
         const srv = services.find(s => s.id === atd.serviceId);
         const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
         const gross = atd.grossValue || srv?.price || 0;
@@ -811,7 +826,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
           {/* Mode Switcher Pills (when client has multiple services) */}
           {relatedAttendances.length > 1 && (
             <div className="px-6 pt-3 bg-tb-white border-b border-tb-rose-light/30 flex gap-2">
-              {attendance && attendance.serviceName !== 'Comanda Consolidada' && (
+              {attendance && attendance.serviceName !== 'Comanda Consolidada' && !attendance.id.startsWith('cmd_') && attendance.professionalName !== 'Salão' && (
                 <button
                   type="button"
                   onClick={() => setModalTab('individual')}

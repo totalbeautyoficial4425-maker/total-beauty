@@ -188,6 +188,10 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     );
 
     return attendances.filter(a => {
+      // Strictly ignore synthetic Comanda Consolidada and proxy attendances
+      if (a.serviceName === 'Comanda Consolidada' || a.id.startsWith('cmd_') || a.professionalName === 'Salão') {
+        return false;
+      }
       // Immediately purge from queue if linked appointment was canceled or deleted
       if (a.appointmentId && canceledOrDeletedAptIds.has(a.appointmentId) && (!a.finishedAt || a.paymentStatus !== 'pago')) {
         return false;
@@ -301,8 +305,14 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
 
       const group = map.get(key)!;
       group.comanda = cmd;
-      if (cmd.netTotal > 0) {
-        group.netTotal = cmd.netTotal;
+      if (group.attendances.length > 0) {
+        const actualGross = group.attendances.reduce((acc, a) => acc + (a.grossValue || 0), 0);
+        const actualNet = group.attendances.reduce((acc, a) => acc + (a.netValue || a.grossValue || 0), 0);
+        group.subtotal = actualGross;
+        group.netTotal = cmd.discountTotal ? Math.max(0, actualGross - cmd.discountTotal) : actualNet;
+      } else {
+        if (cmd.subtotal > 0) group.subtotal = cmd.subtotal;
+        if (cmd.netTotal > 0) group.netTotal = cmd.netTotal;
       }
       if (cmd.paidTotal > 0) {
         group.paidTotal = cmd.paidTotal;
@@ -312,8 +322,19 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
     // 3. For each group, link missing attendances and compute quitada/open status accurately
     map.forEach(group => {
       if (group.comanda && group.attendances.length === 0) {
-        const cmdAtds = attendances.filter(a => group.comanda!.attendanceIds?.includes(a.id));
+        const cmdAtds = attendances.filter(a => 
+          group.comanda!.attendanceIds?.includes(a.id) &&
+          a.serviceName !== 'Comanda Consolidada' &&
+          !a.id.startsWith('cmd_') &&
+          a.professionalName !== 'Salão'
+        );
         group.attendances = cmdAtds;
+        if (cmdAtds.length > 0) {
+          const actualGross = cmdAtds.reduce((acc, a) => acc + (a.grossValue || 0), 0);
+          const actualNet = cmdAtds.reduce((acc, a) => acc + (a.netValue || a.grossValue || 0), 0);
+          group.subtotal = actualGross;
+          group.netTotal = group.comanda.discountTotal ? Math.max(0, actualGross - group.comanda.discountTotal) : actualNet;
+        }
       }
 
       // ACCURATE QUITADA COMPUTATION:
@@ -797,7 +818,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
               const isYesterday = group.date === yesterdayStr;
               const dateLabel = isToday ? 'Hoje' : isYesterday ? 'Ontem' : formatDateBR(group.date);
 
-              // Proxy attendance for full comanda closing/viewing
+              // Proxy attendance for full comanda closing/viewing (zeroed out to prevent any phantom calculations)
               const proxyComandaAttendance: Attendance = {
                 id: group.comanda?.id || `cmd_${group.clientId}_${group.date}`,
                 clientId: group.clientId,
@@ -809,14 +830,14 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                 date: group.date,
                 startedAt: '08:00',
                 finishedAt: group.isFullyPaid ? 'Concluído' : undefined,
-                grossValue: group.subtotal,
-                discountValue: group.comanda?.discountTotal || 0,
+                grossValue: 0,
+                discountValue: 0,
                 discountType: 'fixed',
-                netValue: group.netTotal,
+                netValue: 0,
                 commissionPercentage: 0,
                 commissionAmount: 0,
                 paymentStatus: group.isFullyPaid ? 'pago' : 'pendente',
-                paidAmount: group.paidTotal,
+                paidAmount: 0,
                 createdAt: group.comanda?.createdAt || new Date().toISOString(),
                 comandaId: group.comanda?.id,
               };
