@@ -162,7 +162,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
   // Form State for all services in this comanda
   const [modalTab, setModalTab] = useState<'individual' | 'comanda'>('individual');
-  const [singleGross, setSingleGross] = useState<number>(0);
+  const [singleGross, setSingleGross] = useState<number | string>(0);
   const [singleDiscountInput, setSingleDiscountInput] = useState<number>(0);
   const [singleDiscountType, setSingleDiscountType] = useState<'fixed' | 'percentage'>('fixed');
   const [singlePaymentMethod, setSinglePaymentMethod] = useState<PaymentMethod>('pix');
@@ -193,6 +193,13 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       return;
     }
 
+    const currentKey = `${targetClientId}_${targetDate}_${attendance?.id || ''}_${existingComanda?.id || ''}`;
+    if (sessionKeyRef.current === currentKey) {
+      // Session already initialized; preserve active user entries on background sync / re-renders!
+      return;
+    }
+    sessionKeyRef.current = currentKey;
+
     if (attendance && attendance.serviceName !== 'Comanda Consolidada') {
       setModalTab('individual');
       const srv = services.find(s => s.id === attendance.serviceId);
@@ -218,14 +225,7 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       setModalTab('comanda');
     }
 
-    const currentKey = `${targetClientId}_${targetDate}_${attendance?.id || ''}_${existingComanda?.id || ''}`;
-    if (sessionKeyRef.current === currentKey) {
-      // Session already initialized; preserve active user entries on background sync
-      return;
-    }
-    sessionKeyRef.current = currentKey;
-
-    if (isOpen && relatedAttendances.length > 0) {
+    if (relatedAttendances.length > 0) {
       const items: ServiceItemState[] = relatedAttendances.map(atd => {
         const srv = services.find(s => s.id === atd.serviceId);
         const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
@@ -281,29 +281,61 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       setError(null);
       setIsSubmitting(false);
     }
-  }, [isOpen, relatedAttendances, services, existingComanda]);
+  }, [isOpen, attendance, targetClientId, targetDate, existingComanda, services, relatedAttendances]);
 
-  // Single Attendance Handlers (Requisito 3)
-  const handleSingleGrossChange = (newGross: number) => {
-    const valid = Math.max(0, newGross);
-    setSingleGross(valid);
-    const disc = singleDiscountType === 'percentage' ? (valid * singleDiscountInput) / 100 : singleDiscountInput;
+  // Single Attendance Handlers (Requisito: Autonomia do valor bruto com flexibilidade e fixação)
+  const handleSingleGrossChange = (newVal: string | number) => {
+    setSingleGross(newVal);
+    const parsed = typeof newVal === 'number' ? newVal : parseFloat(String(newVal).replace(',', '.'));
+    const valid = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    const disc = singleDiscountType === 'percentage' 
+      ? (valid * singleDiscountInput) / 100 
+      : Math.min(singleDiscountInput, valid);
     const net = singleIsPackageCovered ? 0 : Math.max(0, valid - disc);
     setSinglePaidAmount(net);
+
+    // Sincroniza também no item correspondente da comanda para preservar o valor se alternar de aba
+    if (attendance?.id) {
+      setServiceItems(prev => prev.map(item => {
+        if (item.attendanceId !== attendance.id) return item;
+        const discItem = item.discountType === 'percentage'
+          ? (valid * item.discountInput) / 100
+          : Math.min(item.discountInput, valid);
+        const netItem = item.isPackageCovered ? 0 : Math.max(0, valid - discItem);
+        return {
+          ...item,
+          grossValue: valid,
+          netValue: netItem,
+          commissionAmount: ((item.isPackageCovered ? valid : netItem) * item.commissionPercentage) / 100,
+        };
+      }));
+    }
+  };
+
+  const handleSingleGrossBlur = () => {
+    const parsed = typeof singleGross === 'number' ? singleGross : parseFloat(String(singleGross).replace(',', '.'));
+    const valid = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    setSingleGross(valid);
   };
 
   const handleSingleDiscountChange = (input: number, type: 'fixed' | 'percentage') => {
     setSingleDiscountInput(input);
     setSingleDiscountType(type);
-    const disc = type === 'percentage' ? (singleGross * input) / 100 : input;
-    const net = singleIsPackageCovered ? 0 : Math.max(0, singleGross - disc);
+    const parsed = typeof singleGross === 'number' ? singleGross : parseFloat(String(singleGross).replace(',', '.'));
+    const grossNum = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    const disc = type === 'percentage' ? (grossNum * input) / 100 : Math.min(input, grossNum);
+    const net = singleIsPackageCovered ? 0 : Math.max(0, grossNum - disc);
     setSinglePaidAmount(net);
   };
 
+  const currentSingleGrossNum = typeof singleGross === 'number'
+    ? singleGross
+    : (parseFloat(String(singleGross).replace(',', '.')) || 0);
+
   const singleCalculatedDiscount = singleDiscountType === 'percentage'
-    ? (singleGross * singleDiscountInput) / 100
-    : singleDiscountInput;
-  const singleNetValue = singleIsPackageCovered ? 0 : Math.max(0, singleGross - singleCalculatedDiscount);
+    ? (currentSingleGrossNum * singleDiscountInput) / 100
+    : Math.min(singleDiscountInput, currentSingleGrossNum);
+  const singleNetValue = singleIsPackageCovered ? 0 : Math.max(0, currentSingleGrossNum - singleCalculatedDiscount);
 
   const singleService = attendance ? services.find(s => s.id === attendance.serviceId) : undefined;
   const singleCommPercent = singleService?.commissionPercentage ?? attendance?.commissionPercentage ?? 50;
@@ -342,6 +374,16 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       });
       return next;
     });
+
+    if (attendance?.id && attendanceId === attendance.id) {
+      const validGross = Math.max(0, newGross);
+      setSingleGross(validGross);
+      const disc = singleDiscountType === 'percentage' 
+        ? (validGross * singleDiscountInput) / 100 
+        : Math.min(singleDiscountInput, validGross);
+      const net = singleIsPackageCovered ? 0 : Math.max(0, validGross - disc);
+      setSinglePaidAmount(net);
+    }
   };
 
   // Handle service discount change
@@ -627,16 +669,19 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
       setIsSubmitting(true);
       try {
+        const numGross = typeof singleGross === 'number'
+          ? singleGross
+          : (parseFloat(String(singleGross).replace(',', '.')) || 0);
         const calcDisc = singleDiscountType === 'percentage'
-          ? (singleGross * singleDiscountInput) / 100
-          : singleDiscountInput;
-        const netVal = singleIsPackageCovered ? 0 : Math.max(0, singleGross - calcDisc);
+          ? (numGross * singleDiscountInput) / 100
+          : Math.min(singleDiscountInput, numGross);
+        const netVal = singleIsPackageCovered ? 0 : Math.max(0, numGross - calcDisc);
         const paidVal = singleIsPackageCovered ? 0 : singlePaidAmount;
         const pStatus: 'pago' | 'parcial' | 'pendente' = 
           singleIsPackageCovered ? 'pago' : paidVal >= netVal ? 'pago' : paidVal > 0 ? 'parcial' : 'pendente';
 
         const res = finishAttendance(attendance.id, {
-          grossValue: singleGross,
+          grossValue: numGross,
           discountValue: calcDisc,
           discountType: singleDiscountType,
           netValue: netVal,
@@ -971,12 +1016,14 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                         <span className="absolute left-2.5 top-1.5 text-xs text-tb-gray-neutral">R$</span>
                         <input
                           type="number"
-                          step="1.00"
+                          step="any"
                           min="0"
-                          value={singleGross}
-                          onChange={e => handleSingleGrossChange(parseFloat(e.target.value) || 0)}
+                          value={singleGross === '' ? '' : singleGross}
+                          placeholder="0,00"
+                          onChange={e => handleSingleGrossChange(e.target.value)}
+                          onBlur={handleSingleGrossBlur}
                           className="w-full text-xs font-bold text-tb-brown-dark pl-8 pr-2 py-1.5 rounded-xl border border-tb-rose-light bg-tb-ivory focus:ring-1 focus:ring-tb-rose-primary"
-                          title="Profissional tem autonomia para alterar o valor se houver preço diferenciado"
+                          title="Profissional tem autonomia para alterar o valor do serviço (o valor alterado é fixado e não reverte)"
                         />
                       </div>
                     </div>

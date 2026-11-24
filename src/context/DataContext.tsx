@@ -2439,6 +2439,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
           return {
             ...a,
+            price: options.grossValue,
             status: 'concluido' as const,
             updatedAt: nowIso,
             updatedBy: actor.userName,
@@ -2836,6 +2837,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             return {
               ...a,
+              price: relatedAtd ? relatedAtd.grossValue : a.price,
               status: 'concluido' as AppointmentStatus,
               updatedAt: nowIso,
               updatedBy: actor.userName,
