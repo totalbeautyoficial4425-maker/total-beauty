@@ -34,6 +34,7 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Appointment, AppointmentStatus, Professional, ScheduleBlock, Attendance } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday, formatDateTimeBR } from '../utils/formatters';
+import { computeOverlappingLayout } from '../utils/calendarLayout';
 import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
 import { AppointmentHistoryModal } from '../components/modals/AppointmentHistoryModal';
 import { AppointmentAuditPanelModal } from '../components/modals/AppointmentAuditPanelModal';
@@ -600,91 +601,119 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
               // Schedule blocks for this professional
               const profBlocks = scheduleBlocks.filter(b => b.date === selectedDate && b.professionalId === prof.id);
 
+              type ColumnItem = 
+                | { kind: 'appointment'; id: string; startTime: string; endTime?: string; durationMinutes: number; appointment: Appointment }
+                | { kind: 'block'; id: string; startTime: string; endTime?: string; durationMinutes: number; block: ScheduleBlock };
+
+              const columnItems: ColumnItem[] = [
+                ...profAppointments.map(apt => ({
+                  kind: 'appointment' as const,
+                  id: `apt-${apt.id}`,
+                  startTime: apt.startTime,
+                  endTime: apt.endTime,
+                  durationMinutes: apt.durationMinutes,
+                  appointment: apt,
+                })),
+                ...profBlocks.map(block => ({
+                  kind: 'block' as const,
+                  id: `block-${block.id}`,
+                  startTime: block.startTime,
+                  endTime: block.endTime,
+                  durationMinutes: block.durationMinutes,
+                  block,
+                })),
+              ];
+
+              const positionedItems = computeOverlappingLayout(columnItems, SLOT_HEIGHT, START_OF_DAY_MINUTES);
+
               return (
                 <div key={prof.id} className="relative h-full pointer-events-none border-r border-transparent">
-                  {profAppointments.map(apt => {
-                    const startMins = timeToMinutes(apt.startTime);
-                    const dur = Math.max(25, apt.durationMinutes);
-                    const topPixels = Math.max(0, ((startMins - START_OF_DAY_MINUTES) / 30) * SLOT_HEIGHT);
-                    const heightPixels = Math.max(40, (dur / 30) * SLOT_HEIGHT - 3);
+                  {positionedItems.map(pos => {
+                    if (pos.item.kind === 'appointment') {
+                      const apt = pos.item.appointment;
+                      const statusMeta = STATUS_CONFIG[apt.status] || STATUS_CONFIG.agendado;
+                      const isClientBirthday = clientBirthdaysMap.get(apt.clientId) || clientBirthdaysMap.get(apt.clientName.toLowerCase());
+                      const isNarrow = pos.totalColumns > 1;
 
-                    const statusMeta = STATUS_CONFIG[apt.status] || STATUS_CONFIG.agendado;
-                    const isClientBirthday = clientBirthdaysMap.get(apt.clientId) || clientBirthdaysMap.get(apt.clientName.toLowerCase());
+                      return (
+                        <div
+                          key={apt.id}
+                          onClick={(e) => handleAppointmentClick(e, apt)}
+                          style={{
+                            top: `${pos.topPixels}px`,
+                            height: `${pos.heightPixels}px`,
+                            left: `calc(${pos.leftPercent}% + 2px)`,
+                            width: `calc(${pos.widthPercent}% - 4px)`,
+                          }}
+                          className={`absolute rounded-xl ${isNarrow ? 'p-1.5 sm:p-2' : 'p-2.5'} text-white shadow-soft hover:shadow-premium transition-all pointer-events-auto cursor-pointer border-l-4 ${statusMeta.borderClass} ${statusMeta.bgClass} flex flex-col justify-between overflow-hidden group select-none z-10 hover:z-30`}
+                          title={`${apt.startTime} às ${apt.endTime || ''} - ${apt.clientName} (${apt.serviceName})${apt.isFitIn ? ' [ENCAIXE FORÇADO]' : ''}${pos.hasOverlap ? ' (Horário com sobreposição)' : ''}`}
+                        >
+                          {/* Card Top: Time & Client Name */}
+                          <div className="min-w-0">
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <div className="flex items-center gap-1 min-w-0 flex-1 truncate">
+                                <span className="text-[10px] sm:text-[11px] font-extrabold text-white/95 tracking-tight shrink-0">
+                                  {apt.startTime}
+                                </span>
+                                <span className="text-[10px] sm:text-[11px] font-extrabold text-white tracking-tight truncate">
+                                  {apt.clientName}
+                                </span>
+                              </div>
 
-                    return (
-                      <div
-                        key={apt.id}
-                        onClick={(e) => handleAppointmentClick(e, apt)}
-                        style={{
-                          top: `${topPixels}px`,
-                          height: `${heightPixels}px`,
-                        }}
-                        className={`absolute left-1 right-1 rounded-xl p-2.5 text-white shadow-soft hover:shadow-premium transition-all pointer-events-auto cursor-pointer border-l-4 ${statusMeta.borderClass} ${statusMeta.bgClass} flex flex-col justify-between overflow-hidden group select-none`}
-                      >
-                        {/* Card Top: Time & Client Name */}
-                        <div>
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[11px] font-extrabold text-white/90 tracking-tight">
-                              {apt.startTime} {apt.clientName}
-                            </span>
+                              {/* Fit-in badge if forced/fit-in */}
+                              {apt.isFitIn && (
+                                <span className="px-1 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-amber-300 text-amber-950 uppercase tracking-tighter shrink-0 shadow-2xs">
+                                  ENCAIXE
+                                </span>
+                              )}
+                            </div>
 
-                            {/* Fit-in badge if forced/fit-in */}
-                            {apt.isFitIn && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-300 text-amber-950 uppercase tracking-tighter shrink-0">
-                                ENCAIXE
-                              </span>
+                            {/* Service name */}
+                            <p className="text-[9px] sm:text-[10px] font-medium text-white/85 truncate mt-0.5" title={apt.serviceName}>
+                              {apt.serviceName}
+                            </p>
+
+                            {/* Creator / Auditor line */}
+                            {apt.createdBy && pos.heightPixels >= 58 && (
+                              <p className="text-[8px] sm:text-[9px] text-white/70 truncate flex items-center gap-1 mt-0.5">
+                                <span className="opacity-75">por:</span>
+                                <span className="font-semibold text-white/90 truncate">{apt.createdBy}</span>
+                              </p>
                             )}
                           </div>
 
-                          {/* Service name */}
-                          <p className="text-[10px] font-medium text-white/80 truncate mt-0.5">
-                            {apt.serviceName}
-                          </p>
+                          {/* Card Bottom / Badges */}
+                          <div className="flex items-center justify-between gap-1 pt-0.5 text-[8px] sm:text-[9px]">
+                            {/* Birthday Badge if client has birthday today */}
+                            {isClientBirthday ? (
+                              <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-extrabold bg-pink-500 text-white flex items-center gap-0.5 shadow-xs animate-pulse">
+                                <Gift className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">Niver!</span>
+                              </span>
+                            ) : (
+                              <span className="text-white/75 shrink-0">
+                                {apt.durationMinutes}m
+                              </span>
+                            )}
 
-                          {/* Creator / Auditor line */}
-                          {apt.createdBy && (
-                            <p className="text-[9px] text-white/70 truncate flex items-center gap-1 mt-0.5">
-                              <span className="opacity-75">por:</span>
-                              <span className="font-semibold text-white/90 truncate">{apt.createdBy}</span>
-                            </p>
-                          )}
+                            {(!isProfessional || apt.professionalId === myProfId) ? (
+                              <span className="font-bold text-white/95 shrink-0">
+                                {formatBRL(apt.price)}
+                              </span>
+                            ) : (
+                              <span className="text-white/70 flex items-center gap-0.5 font-medium shrink-0" title="Acesso somente leitura à agenda">
+                                <Eye className="w-2.5 h-2.5" />
+                                <span className="hidden sm:inline">Agenda</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
+                      );
+                    }
 
-                        {/* Card Bottom / Badges */}
-                        <div className="flex items-center justify-between gap-1 pt-1">
-                          {/* Birthday Badge if client has birthday today */}
-                          {isClientBirthday ? (
-                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-pink-500 text-white flex items-center gap-1 shadow-xs animate-pulse">
-                              <Gift className="w-2.5 h-2.5" />
-                              Aniversário!
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-white/70">
-                              {apt.durationMinutes}m
-                            </span>
-                          )}
-
-                          {(!isProfessional || apt.professionalId === myProfId) ? (
-                            <span className="text-[9px] font-bold text-white/90">
-                              {formatBRL(apt.price)}
-                            </span>
-                          ) : (
-                            <span className="text-[9px] text-white/70 flex items-center gap-0.5 font-medium" title="Acesso somente leitura à agenda">
-                              <Eye className="w-2.5 h-2.5" />
-                              Agenda
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Schedule Blocks (Bloqueios de Horário com Justificativa) */}
-                  {profBlocks.map(block => {
-                    const startMins = timeToMinutes(block.startTime);
-                    const dur = Math.max(25, block.durationMinutes);
-                    const topPixels = Math.max(0, ((startMins - START_OF_DAY_MINUTES) / 30) * SLOT_HEIGHT);
-                    const heightPixels = Math.max(38, (dur / 30) * SLOT_HEIGHT - 3);
+                    // Otherwise pos.item.kind === 'block'
+                    const block = pos.item.block;
+                    const isNarrow = pos.totalColumns > 1;
 
                     return (
                       <div
@@ -694,10 +723,12 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                           setSelectedBlock(block);
                         }}
                         style={{
-                          top: `${topPixels}px`,
-                          height: `${heightPixels}px`,
+                          top: `${pos.topPixels}px`,
+                          height: `${pos.heightPixels}px`,
+                          left: `calc(${pos.leftPercent}% + 2px)`,
+                          width: `calc(${pos.widthPercent}% - 4px)`,
                         }}
-                        className="absolute left-1 right-1 rounded-xl p-2.5 text-white shadow-md pointer-events-auto cursor-pointer border-l-4 border-l-amber-500 bg-gradient-to-r from-[#2c1d18] via-[#3d271f] to-[#241712] backdrop-blur-xs flex flex-col justify-between overflow-hidden group select-none transition-all hover:ring-2 hover:ring-amber-400 z-10"
+                        className={`absolute rounded-xl ${isNarrow ? 'p-1.5 sm:p-2' : 'p-2.5'} text-white shadow-md pointer-events-auto cursor-pointer border-l-4 border-l-amber-500 bg-gradient-to-r from-[#2c1d18] via-[#3d271f] to-[#241712] backdrop-blur-xs flex flex-col justify-between overflow-hidden group select-none transition-all hover:ring-2 hover:ring-amber-400 z-10 hover:z-30`}
                         title={`Horário Bloqueado: ${block.reason} (${block.startTime} às ${block.endTime})`}
                       >
                         {/* Diagonal stripes texture overlay */}
@@ -708,14 +739,14 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                           }}
                         />
 
-                        <div className="relative z-10">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[11px] font-extrabold text-amber-300 tracking-tight flex items-center gap-1">
+                        <div className="relative z-10 min-w-0">
+                          <div className="flex items-center justify-between gap-1 min-w-0">
+                            <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-300 tracking-tight flex items-center gap-1 shrink-0">
                               <Lock className="w-3 h-3 stroke-[2.5] text-amber-400 shrink-0" />
-                              {block.startTime} - {block.endTime}
+                              <span>{block.startTime} - {block.endTime}</span>
                             </span>
-                            <div className="flex items-center gap-1">
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-400 text-amber-950 uppercase tracking-tighter">
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-extrabold bg-amber-400 text-amber-950 uppercase tracking-tighter">
                                 BLOQUEIO
                               </span>
                               <button
@@ -735,12 +766,12 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                             </div>
                           </div>
 
-                          <p className="text-[11px] font-bold text-white truncate mt-1">
+                          <p className="text-[10px] sm:text-[11px] font-bold text-white truncate mt-1" title={block.reason}>
                             {block.reason}
                           </p>
                         </div>
 
-                        <div className="relative z-10 flex items-center justify-between text-[9px] text-amber-200/80 pt-1 border-t border-white/10">
+                        <div className="relative z-10 flex items-center justify-between text-[8px] sm:text-[9px] text-amber-200/80 pt-1 border-t border-white/10">
                           <span>{block.durationMinutes} min</span>
                           <span className="underline group-hover:text-amber-100 font-bold">Ver detalhes</span>
                         </div>

@@ -54,12 +54,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'agenda', label: 'Agenda', icon: CalendarDays },
+        { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
         { id: 'clientes', label: 'Clientes', icon: Users },
         { id: 'pacotes', label: 'Pacotes & Créditos', icon: Ticket },
         { id: 'aniversariantes', label: 'Aniversariantes', icon: Gift },
         { id: 'servicos', label: 'Serviços', icon: Sparkles },
         { id: 'profissionais', label: 'Profissionais', icon: UserCheck },
-        { id: 'atendimentos', label: 'Atendimentos', icon: Clock },
         { id: 'estoque', label: 'Estoque do Salão', icon: Package },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
         { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
