@@ -193,6 +193,7 @@ export const AppContent: React.FC = () => {
               onEditAppointment={handleEditAppointment}
               onOpenWhatsApp={handleOpenWhatsApp}
               onNavigateToAtendimentos={() => setCurrentPage('atendimentos')}
+              onOpenFinishAttendance={handleOpenFinishAttendance}
             />
           )}
 

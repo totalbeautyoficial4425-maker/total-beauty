@@ -161,6 +161,19 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   };
 
   // Form State for all services in this comanda
+  const [modalTab, setModalTab] = useState<'individual' | 'comanda'>('individual');
+  const [singleGross, setSingleGross] = useState<number>(0);
+  const [singleDiscountInput, setSingleDiscountInput] = useState<number>(0);
+  const [singleDiscountType, setSingleDiscountType] = useState<'fixed' | 'percentage'>('fixed');
+  const [singlePaymentMethod, setSinglePaymentMethod] = useState<PaymentMethod>('pix');
+  const [singlePaidAmount, setSinglePaidAmount] = useState<number>(0);
+  const [singleFinishDate, setSingleFinishDate] = useState<string>(getTodayDate());
+  const [singleFinishTime, setSingleFinishTime] = useState<string>('00:00');
+  const [singleProfessionalId, setSingleProfessionalId] = useState<string>('');
+  const [singleNotes, setSingleNotes] = useState<string>('');
+  const [singlePackageId, setSinglePackageId] = useState<string | undefined>(undefined);
+  const [singleIsPackageCovered, setSingleIsPackageCovered] = useState<boolean>(false);
+
   const [serviceItems, setServiceItems] = useState<ServiceItemState[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [comandaNotes, setComandaNotes] = useState('');
@@ -173,11 +186,36 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
   // Session guard to prevent background sync from wiping entered payments or discounts
   const sessionKeyRef = useRef<string | null>(null);
 
-  // Initialize service items when modal opens
+  // Initialize service items and single mode when modal opens
   useEffect(() => {
     if (!isOpen) {
       sessionKeyRef.current = null;
       return;
+    }
+
+    if (attendance && attendance.serviceName !== 'Comanda Consolidada') {
+      setModalTab('individual');
+      const srv = services.find(s => s.id === attendance.serviceId);
+      const gross = attendance.grossValue || srv?.price || 0;
+      const discVal = attendance.discountValue || 0;
+      const discType = attendance.discountType || 'fixed';
+      const discInput = discType === 'percentage' && gross > 0 ? (discVal / gross) * 100 : discVal;
+      const isCovered = Boolean(attendance.isPackageCovered);
+      const net = isCovered ? 0 : Math.max(0, gross - discVal);
+
+      setSingleGross(gross);
+      setSingleDiscountInput(discInput);
+      setSingleDiscountType(discType);
+      setSinglePaymentMethod(attendance.paymentMethod || 'pix');
+      setSinglePaidAmount(attendance.paidAmount > 0 ? attendance.paidAmount : net);
+      setSingleFinishDate(attendance.date || targetDate || getTodayDate());
+      setSingleFinishTime(attendance.finishedAt || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      setSingleProfessionalId(attendance.professionalId);
+      setSingleNotes(attendance.notes || '');
+      setSinglePackageId(attendance.packageId);
+      setSingleIsPackageCovered(isCovered);
+    } else {
+      setModalTab('comanda');
     }
 
     const currentKey = `${targetClientId}_${targetDate}_${attendance?.id || ''}_${existingComanda?.id || ''}`;
@@ -244,6 +282,36 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
       setIsSubmitting(false);
     }
   }, [isOpen, relatedAttendances, services, existingComanda]);
+
+  // Single Attendance Handlers (Requisito 3)
+  const handleSingleGrossChange = (newGross: number) => {
+    const valid = Math.max(0, newGross);
+    setSingleGross(valid);
+    const disc = singleDiscountType === 'percentage' ? (valid * singleDiscountInput) / 100 : singleDiscountInput;
+    const net = singleIsPackageCovered ? 0 : Math.max(0, valid - disc);
+    setSinglePaidAmount(net);
+  };
+
+  const handleSingleDiscountChange = (input: number, type: 'fixed' | 'percentage') => {
+    setSingleDiscountInput(input);
+    setSingleDiscountType(type);
+    const disc = type === 'percentage' ? (singleGross * input) / 100 : input;
+    const net = singleIsPackageCovered ? 0 : Math.max(0, singleGross - disc);
+    setSinglePaidAmount(net);
+  };
+
+  const singleCalculatedDiscount = singleDiscountType === 'percentage'
+    ? (singleGross * singleDiscountInput) / 100
+    : singleDiscountInput;
+  const singleNetValue = singleIsPackageCovered ? 0 : Math.max(0, singleGross - singleCalculatedDiscount);
+
+  const singleService = attendance ? services.find(s => s.id === attendance.serviceId) : undefined;
+  const singleCommPercent = singleService?.commissionPercentage ?? attendance?.commissionPercentage ?? 50;
+  const singleCommissionAmount = singleIsPackageCovered
+    ? 0
+    : (singlePaidAmount * singleCommPercent) / 100;
+  const singleSalonShare = Math.max(0, singlePaidAmount - singleCommissionAmount);
+  const singleApplicablePackage = attendance ? findApplicablePackage(attendance.serviceName, attendance.serviceId) : null;
 
   // Handle service gross value change (Autonomia da profissional)
   const handleServiceGrossChange = (attendanceId: string, newGross: number) => {
@@ -551,6 +619,52 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
 
     if (isSubmitting) return;
 
+    if (modalTab === 'individual' && attendance) {
+      if (singlePaidAmount < 0 || isNaN(singlePaidAmount)) {
+        setError('Informe um valor de recebimento válido.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const calcDisc = singleDiscountType === 'percentage'
+          ? (singleGross * singleDiscountInput) / 100
+          : singleDiscountInput;
+        const netVal = singleIsPackageCovered ? 0 : Math.max(0, singleGross - calcDisc);
+        const paidVal = singleIsPackageCovered ? 0 : singlePaidAmount;
+        const pStatus: 'pago' | 'parcial' | 'pendente' = 
+          singleIsPackageCovered ? 'pago' : paidVal >= netVal ? 'pago' : paidVal > 0 ? 'parcial' : 'pendente';
+
+        const res = finishAttendance(attendance.id, {
+          grossValue: singleGross,
+          discountValue: calcDisc,
+          discountType: singleDiscountType,
+          netValue: netVal,
+          paymentMethod: singlePaymentMethod,
+          paymentStatus: pStatus,
+          paidAmount: paidVal,
+          finishDate: singleFinishDate,
+          finishTime: singleFinishTime,
+          notes: singleNotes,
+          packageId: singlePackageId,
+          isPackageCovered: singleIsPackageCovered,
+        });
+
+        if (!res.success) {
+          setError(res.error || 'Erro ao finalizar atendimento.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        onClose();
+      } catch (err: any) {
+        setError(err?.message || 'Erro ao processar finalização.');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (isAlreadyFullyPaid) {
       setError('Esta comanda já foi finalizada e quitada anteriormente. Não é permitido salvar novamente para evitar duplicidade financeira.');
       return;
@@ -626,10 +740,14 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-serif-brand text-xl font-bold text-tb-brown-dark">
-                    Fechamento Unificado da Comanda
+                    {modalTab === 'individual' && attendance 
+                      ? 'Finalizar Atendimento & Recebimento' 
+                      : 'Fechamento Unificado da Comanda'}
                   </h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    {relatedAttendances.length} Serviço(s)
+                    {modalTab === 'individual' && attendance 
+                      ? attendance.serviceName 
+                      : `${relatedAttendances.length} Serviço(s)`}
                   </span>
                 </div>
                 <p className="text-xs text-tb-gray-neutral">
@@ -644,6 +762,36 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Mode Switcher Pills (when client has multiple services) */}
+          {relatedAttendances.length > 1 && (
+            <div className="px-6 pt-3 bg-tb-white border-b border-tb-rose-light/30 flex gap-2">
+              {attendance && attendance.serviceName !== 'Comanda Consolidada' && (
+                <button
+                  type="button"
+                  onClick={() => setModalTab('individual')}
+                  className={`py-2 px-4 rounded-t-xl text-xs font-bold transition-all border-b-2 ${
+                    modalTab === 'individual'
+                      ? 'border-tb-rose-primary text-tb-rose-primary bg-tb-rose-blush/30'
+                      : 'border-transparent text-tb-gray-neutral hover:text-tb-brown-dark'
+                  }`}
+                >
+                  Finalizar Este Atendimento ({attendance.serviceName})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setModalTab('comanda')}
+                className={`py-2 px-4 rounded-t-xl text-xs font-bold transition-all border-b-2 ${
+                  modalTab === 'comanda'
+                    ? 'border-tb-rose-primary text-tb-rose-primary bg-tb-rose-blush/30'
+                    : 'border-transparent text-tb-gray-neutral hover:text-tb-brown-dark'
+                }`}
+              >
+                Ver Comanda Completa ({relatedAttendances.length} serviços)
+              </button>
+            </div>
+          )}
 
           {/* Body */}
           <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
@@ -689,494 +837,279 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
               </div>
             )}
 
-            {/* Active packages banner for this client */}
-            {clientActivePackages.length > 0 && (
-              <div className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50/40 border border-emerald-300/80 rounded-2xl flex items-start gap-3 shadow-2xs">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold text-sm shadow-xs">
-                  🎁
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-emerald-950">
-                      Pacotes & Créditos Ativos da Cliente ({client?.name})
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
-                      {clientActivePackages.length} Pacote(s)
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {clientActivePackages.map(pkg => (
-                      <div key={pkg.id} className="text-[11px] px-2.5 py-1 bg-white border border-emerald-300 rounded-xl text-emerald-900 flex items-center gap-1.5 shadow-2xs">
-                        <span className="font-bold">{pkg.packageName}:</span>
-                        <span className="font-semibold text-emerald-700">
-                          {pkg.items.map(i => `${i.remainingQty}/${i.totalQty} ${i.serviceName}`).join(' • ')}
-                        </span>
-                        <span className="text-[10px] text-emerald-600">(até {pkg.expiryDate})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* ABA 1: FINALIZAR ATENDIMENTO INDIVIDUAL (REQUISITO 3) */}
+            {modalTab === 'individual' && attendance && (
+              <div className="space-y-4">
+                {/* 1. Detalhes do Atendimento */}
+                <div className="p-4 bg-tb-ivory rounded-2xl border border-tb-rose-light/80 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-tb-gray-neutral font-medium uppercase block">Cliente</span>
+                      <span className="font-bold text-sm text-tb-brown-dark">{client?.name || attendance.clientName}</span>
+                      {client?.phone && <span className="text-[11px] text-tb-gray-neutral block">{client.phone}</span>}
+                    </div>
 
-            {/* Section 1: Services included in this comanda */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-tb-rose-primary" />
-                  1. Serviços Realizados Pela Cliente Hoje
-                </h4>
-                <span className="text-[11px] text-tb-gray-neutral">
-                  Valores editáveis pela profissional e conferência de comissão
-                </span>
-              </div>
-
-              <div className="space-y-2.5">
-                {serviceItems.map(item => {
-                  const applicable = findApplicablePackage(item.serviceName, item.attendanceObj.serviceId);
-                  
-                  return (
-                    <div
-                      key={item.attendanceId}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        item.isPackageCovered
-                          ? 'bg-emerald-50/50 border-emerald-300 shadow-2xs'
-                          : item.isSelected 
-                            ? 'bg-tb-ivory border-tb-rose-light/80 shadow-2xs' 
-                            : 'bg-gray-50 border-gray-200 opacity-60'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={item.isSelected}
-                            onChange={() => handleToggleSelectService(item.attendanceId)}
-                            className="mt-1 rounded text-tb-rose-primary focus:ring-tb-rose-primary"
-                          />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-tb-brown-dark block">
-                                {item.serviceName}
-                              </span>
-                              {item.isPackageCovered && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-2xs">
-                                  🎁 Coberto por Pacote
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[11px] text-tb-brown-soft font-medium">Profissional:</span>
-                              {!isAlreadyFullyPaid ? (
-                                <select
-                                  value={item.professionalId || item.attendanceObj.professionalId}
-                                  onChange={e => handleProfessionalChange(item.attendanceId, e.target.value)}
-                                  className="text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light/90 rounded-lg px-2 py-0.5 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
-                                  title="Selecione a profissional correta para este serviço"
-                                >
-                                  {professionals.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className="font-semibold text-tb-brown-dark">{item.professionalName}</span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${
-                                item.isPackageCovered
-                                  ? 'bg-blue-50 text-blue-750 border-blue-200'
-                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              }`}>
-                                {item.isPackageCovered 
-                                  ? 'Comissão: Já quitada na venda do pacote (R$ 0,00 nesta comanda)' 
-                                  : `Repasse: ${item.commissionPercentage}% (${formatBRL(item.commissionAmount)})`}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setActiveAttendanceForConsumption(item.attendanceObj)}
-                                className="text-[10px] text-amber-800 hover:text-amber-900 font-bold bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                              >
-                                <Scale className="w-3 h-3" />
-                                Produtos / Gramatura
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRevertItem(item.attendanceId, item.serviceName)}
-                                className="text-[10px] text-rose-700 hover:text-rose-800 font-semibold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                                title="Voltar serviço para solicitação/agendamento caso tenha sido iniciado por engano"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                Voltar p/ Agendamento
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveServiceItem(item.attendanceId, item.serviceName)}
-                                className="text-[10px] text-red-700 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
-                                title="Remover este serviço da comanda"
-                              >
-                                <Trash2 className="w-3 h-3 text-red-600" />
-                                Remover da Comanda
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Pricing autonomy and individual discount */}
-                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-tb-rose-light/40">
-                          {/* Autonomia de Preço: profissional pode alterar o valor bruto diretamente */}
-                          <div className="text-right">
-                            <span className="text-[10px] text-tb-gray-neutral block font-medium" title="Autonomia: profissional pode alterar para preço diferencial">
-                              Valor Bruto (R$)
-                            </span>
-                            <div className="flex items-center gap-1 justify-end">
-                              <input
-                                type="number"
-                                step="1.00"
-                                min="0"
-                                value={item.grossValue}
-                                onChange={e => handleServiceGrossChange(item.attendanceId, parseFloat(e.target.value) || 0)}
-                                className="w-20 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-bold text-tb-brown-dark shadow-2xs focus:ring-1 focus:ring-tb-rose-primary focus:border-tb-rose-primary"
-                                title="Autonomia da profissional: altere o valor do serviço se esta cliente possuir preço diferenciado"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Discount */}
-                          {!item.isPackageCovered && (
-                            <div>
-                              <span className="text-[10px] text-tb-gray-neutral block text-right font-medium">Desconto</span>
-                              <div className="flex items-center gap-1 justify-end mt-0.5">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={item.discountInput}
-                                  onChange={e => handleServiceDiscountChange(item.attendanceId, parseFloat(e.target.value) || 0, item.discountType)}
-                                  className="w-16 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-medium text-rose-700 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
-                                  placeholder="0,00"
-                                />
-                                <div className="flex rounded-md border border-tb-rose-light overflow-hidden shrink-0 text-[10px]">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'fixed')}
-                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'fixed' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
-                                  >
-                                    R$
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'percentage')}
-                                    className={`px-1.5 py-1 font-semibold ${item.discountType === 'percentage' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
-                                  >
-                                    %
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Net Value */}
-                          <div className="text-right min-w-[70px]">
-                            <span className="text-[10px] text-tb-gray-neutral block">A Cobrar</span>
-                            <span className={`text-xs font-bold ${item.isPackageCovered ? 'text-emerald-700' : 'text-tb-rose-primary'}`}>
-                              {item.isPackageCovered ? 'R$ 0,00' : formatBRL(item.netValue)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Package credit banner for this service row */}
-                      {applicable && (
-                        <div className="mt-2.5 pt-2.5 border-t border-tb-rose-light/40 flex flex-wrap items-center justify-between gap-2 bg-white/80 p-2.5 rounded-xl border border-emerald-200 shadow-2xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">🎁</span>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-emerald-950">
-                                  {applicable.package.packageName}
-                                </span>
-                                <span className="text-[10px] font-bold px-2 py-0.2 bg-emerald-100 text-emerald-800 rounded-md border border-emerald-300">
-                                  {applicable.matchedItem.remainingQty} {applicable.matchedItem.serviceName}(s) restante(s)
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-emerald-700">
-                                Cliente possui sessões disponíveis. Ao usar, a cliente paga R$ 0,00 e o repasse da profissional é preservado.
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, true)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                                item.isPackageCovered
-                                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
-                                  : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
-                              }`}
-                            >
-                              <CheckCircle2 className={`w-3.5 h-3.5 ${item.isPackageCovered ? 'text-white' : 'text-emerald-600'}`} />
-                              <span>Utilizar crédito do pacote</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, false)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
-                                !item.isPackageCovered
-                                  ? 'bg-tb-brown-dark text-white ring-2 ring-tb-brown-soft'
-                                  : 'bg-white text-tb-brown-dark border border-tb-rose-light hover:bg-tb-ivory'
-                              }`}
-                            >
-                              <span>Cobrar serviço avulso</span>
-                            </button>
-                          </div>
-                        </div>
+                    <div>
+                      <span className="text-[10px] text-tb-gray-neutral font-medium uppercase block">Serviço Realizado</span>
+                      <span className="font-bold text-sm text-tb-rose-primary">{attendance.serviceName}</span>
+                      {singleService?.durationMinutes && (
+                        <span className="text-[11px] text-tb-gray-neutral block">{singleService.durationMinutes} minutos</span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
 
-            {/* Summary Box */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-tb-rose-blush/60 via-tb-ivory to-tb-beige-light/40 border border-tb-rose-light/70 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <span className="text-[11px] text-tb-brown-soft block">Subtotal dos Serviços: {formatBRL(subtotal)}</span>
-                <span className="text-[11px] text-rose-600 block">Descontos Concedidos: -{formatBRL(discountTotal)}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[11px] font-semibold text-tb-brown-soft block uppercase tracking-wider">
-                  Total a Cobrar da Cliente
-                </span>
-                <span className="text-2xl font-bold text-tb-brown-dark">
-                  {formatBRL(netTotal)}
-                </span>
-              </div>
-            </div>
-
-            {/* Section 2: Multiple Payment Methods & Partial Payment */}
-            <div className="space-y-3 pt-2 border-t border-tb-rose-light/40">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-tb-rose-primary" />
-                    2. Recebimento & Formas de Pagamento
-                  </h4>
-                  <p className="text-[11px] text-tb-gray-neutral">
-                    Combine múltiplas formas (ex: Dinheiro + Pix + Cartão) ou registre pagamento parcial
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPayments([{ id: 'p_1', method: 'pix', amount: netTotal, notes: '' }]);
-                    }}
-                    className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl flex items-center gap-1 transition-all shadow-2xs"
-                    title="Preenche o painel de pagamento com o valor líquido total com desconto"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    Valor Total c/ Desconto: {formatBRL(netTotal)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddPaymentRow}
-                    className="px-3 py-1.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-tb-rose-primary" />
-                    Outra Forma
-                  </button>
-                </div>
-              </div>
-
-              {/* Payments Rows */}
-              <div className="space-y-2">
-                {payments.map((p, idx) => (
-                  <div key={p.id} className="p-3 bg-tb-ivory rounded-xl border border-tb-rose-light/50 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-tb-brown-soft w-6">
-                      #{idx + 1}
-                    </span>
-
-                    {/* Method */}
-                    <div className="flex-1 min-w-[130px]">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-tb-rose-light/40">
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Profissional Responsável
+                      </label>
                       <select
-                        value={p.method}
-                        onChange={e => handleUpdatePayment(p.id, 'method', e.target.value as PaymentMethod)}
-                        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-tb-brown-dark font-medium"
+                        value={singleProfessionalId || attendance.professionalId}
+                        onChange={e => {
+                          setSingleProfessionalId(e.target.value);
+                          updateAttendanceProfessional(attendance.id, e.target.value);
+                        }}
+                        className="w-full text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-tb-rose-primary"
+                      >
+                        {professionals.filter(p => p.isActive).map(p => (
+                          <option key={p.id} value={p.id}>{p.name} — {p.specialty}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Data da Finalização
+                      </label>
+                      <input
+                        type="date"
+                        value={singleFinishDate}
+                        onChange={e => setSingleFinishDate(e.target.value)}
+                        className="w-full text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-tb-rose-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Horário da Finalização
+                      </label>
+                      <input
+                        type="time"
+                        value={singleFinishTime}
+                        onChange={e => setSingleFinishTime(e.target.value)}
+                        className="w-full text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light rounded-xl px-2.5 py-1.5 focus:ring-1 focus:ring-tb-rose-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pacote ativo da cliente (se houver) */}
+                {singleApplicablePackage && (
+                  <div className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50/40 border border-emerald-300 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🎁</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-emerald-950">
+                            {singleApplicablePackage.package.packageName}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md border border-emerald-300">
+                            {singleApplicablePackage.matchedItem.remainingQty} sessão(ões) restante(s)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700">
+                          Cliente possui crédito deste serviço no pacote.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSingleIsPackageCovered(true);
+                          setSinglePackageId(singleApplicablePackage.package.id);
+                          setSinglePaidAmount(0);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                          singleIsPackageCovered
+                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                            : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
+                        }`}
+                      >
+                        <CheckCircle2 className={`w-3.5 h-3.5 ${singleIsPackageCovered ? 'text-white' : 'text-emerald-600'}`} />
+                        <span>Usar crédito de pacote</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSingleIsPackageCovered(false);
+                          setSinglePackageId(undefined);
+                          setSinglePaidAmount(singleNetValue);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                          !singleIsPackageCovered
+                            ? 'bg-tb-brown-dark text-white ring-2 ring-tb-brown-soft'
+                            : 'bg-white text-tb-brown-dark border border-tb-rose-light hover:bg-tb-ivory'
+                        }`}
+                      >
+                        <span>Cobrar avulso</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Valores & Autonomia de Preço */}
+                <div className="p-4 bg-tb-white rounded-2xl border border-tb-rose-light space-y-4 shadow-2xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Valor Integral do Serviço (Bruto)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-xs text-tb-gray-neutral">R$</span>
+                        <input
+                          type="number"
+                          step="1.00"
+                          min="0"
+                          value={singleGross}
+                          onChange={e => handleSingleGrossChange(parseFloat(e.target.value) || 0)}
+                          className="w-full text-xs font-bold text-tb-brown-dark pl-8 pr-2 py-1.5 rounded-xl border border-tb-rose-light bg-tb-ivory focus:ring-1 focus:ring-tb-rose-primary"
+                          title="Profissional tem autonomia para alterar o valor se houver preço diferenciado"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Desconto
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={singleDiscountInput}
+                          onChange={e => handleSingleDiscountChange(parseFloat(e.target.value) || 0, singleDiscountType)}
+                          className="w-full text-xs font-semibold text-rose-700 px-2 py-1.5 rounded-xl border border-tb-rose-light bg-tb-ivory focus:ring-1 focus:ring-tb-rose-primary"
+                        />
+                        <div className="flex rounded-xl border border-tb-rose-light overflow-hidden text-xs shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleSingleDiscountChange(singleDiscountInput, 'fixed')}
+                            className={`px-2 py-1 font-bold ${singleDiscountType === 'fixed' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark'}`}
+                          >
+                            R$
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSingleDiscountChange(singleDiscountInput, 'percentage')}
+                            className={`px-2 py-1 font-bold ${singleDiscountType === 'percentage' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark'}`}
+                          >
+                            %
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-tb-ivory p-2.5 rounded-xl border border-tb-rose-light/60 flex flex-col justify-center text-right">
+                      <span className="text-[10px] text-tb-gray-neutral uppercase font-bold">Valor Líquido a Receber</span>
+                      <span className="text-xl font-extrabold text-tb-brown-dark">
+                        {singleIsPackageCovered ? 'R$ 0,00' : formatBRL(singleNetValue)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-tb-rose-light/40">
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Forma de Pagamento *
+                      </label>
+                      <select
+                        value={singlePaymentMethod}
+                        onChange={e => setSinglePaymentMethod(e.target.value as PaymentMethod)}
+                        disabled={singleIsPackageCovered}
+                        className="w-full text-xs font-bold text-tb-brown-dark bg-tb-ivory border border-tb-rose-light rounded-xl px-3 py-2 focus:ring-1 focus:ring-tb-rose-primary"
                       >
                         <option value="pix">PIX</option>
                         <option value="cartao_credito">Cartão de Crédito</option>
                         <option value="cartao_debito">Cartão de Débito</option>
                         <option value="dinheiro">Dinheiro</option>
                         <option value="transferencia">Transferência Bancária</option>
+                        {singleIsPackageCovered && <option value="pacote_credito">Crédito de Pacote</option>}
                         <option value="outros">Outros</option>
                       </select>
                     </div>
 
-                    {/* Amount */}
-                    <div className="w-28 relative">
-                      <span className="absolute left-2.5 top-1.5 text-xs text-tb-gray-neutral">R$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={p.amount}
-                        onChange={e => handleUpdatePayment(p.id, 'amount', parseFloat(e.target.value) || 0)}
-                        className="w-full text-xs pl-8 pr-2 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-right font-bold text-tb-brown-dark"
-                      />
+                    <div>
+                      <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                        Valor Recebido (R$) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-xs text-tb-gray-neutral">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={singlePaidAmount}
+                          onChange={e => setSinglePaidAmount(parseFloat(e.target.value) || 0)}
+                          disabled={singleIsPackageCovered}
+                          className="w-full text-xs font-bold text-emerald-800 pl-8 pr-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory focus:ring-1 focus:ring-tb-rose-primary"
+                        />
+                      </div>
                     </div>
-
-                    {/* Notes */}
-                    <div className="flex-1 min-w-[120px]">
-                      <input
-                        type="text"
-                        placeholder="Obs (ex: 2x no cartão, sinal...)"
-                        value={p.notes || ''}
-                        onChange={e => handleUpdatePayment(p.id, 'notes', e.target.value)}
-                        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-tb-brown-dark"
-                      />
-                    </div>
-
-                    {/* Remove button */}
-                    {payments.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePaymentRow(p.id)}
-                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Remover linha"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
-                ))}
-              </div>
 
-              {/* Status and pending display */}
-              <div className="p-3.5 bg-tb-white rounded-xl border border-tb-rose-light/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-tb-brown-dark">Total Pago Agora:</span>
-                    <span className="font-bold text-emerald-700">{formatBRL(totalPaid)}</span>
-                  </div>
-                  {pendingBalance > 0.01 && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-amber-800">Saldo Pendente:</span>
-                      <span className="font-bold text-amber-800">{formatBRL(pendingBalance)}</span>
-                      <button
-                        type="button"
-                        onClick={handleSettleRemaining}
-                        className="text-[10px] text-tb-rose-primary underline font-medium hover:text-tb-brown-dark"
-                      >
-                        Quitar total
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    paymentStatus === 'pago' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                    paymentStatus === 'parcial' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                    'bg-rose-100 text-rose-800 border border-rose-200'
-                  }`}>
-                    Situação: {paymentStatus === 'pago' ? '✓ Quitado Integralmente' : paymentStatus === 'parcial' ? '⚠ Parcialmente Pago' : '⏳ Pendente / Fiado'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* General Comanda Notes */}
-            <div>
-              <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
-                Observações Gerais da Comanda
-              </label>
-              <textarea
-                rows={2}
-                value={comandaNotes}
-                onChange={e => setComandaNotes(e.target.value)}
-                placeholder="Ex: Cliente elogiou o atendimento, retornará no próximo mês..."
-                className="w-full text-xs p-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark resize-none"
-              />
-            </div>
-
-            {/* Live Professional Commissions Calculation Preview */}
-            <div className="p-4 bg-emerald-50/80 rounded-2xl border-2 border-emerald-300 space-y-2.5">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                    <DollarSign className="w-4 h-4 stroke-[2.5]" />
-                  </div>
                   <div>
-                    <h4 className="text-xs font-bold text-emerald-950">
-                      Cálculo de Repasse às Profissionais (Pagamento Diário)
-                    </h4>
-                    <p className="text-[10px] text-emerald-800">
-                      Liberado na mesma hora no painel assim que fechar a comanda
+                    <label className="text-[10px] text-tb-gray-neutral font-medium uppercase block mb-1">
+                      Observações do Atendimento / Pagamento
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Pagamento realizado no ato, cliente elogiou o resultado..."
+                      value={singleNotes}
+                      onChange={e => setSingleNotes(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Repasse & Comissão da Profissional */}
+                <div className="p-3.5 bg-emerald-50/80 rounded-2xl border-2 border-emerald-300 flex items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-emerald-950 block">
+                      Fechamento da Profissional ({singleCommPercent}% de Comissão)
+                    </span>
+                    <span className="text-[11px] text-emerald-800">
+                      Direcionado automaticamente para o painel de fechamento individual
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-sm font-extrabold text-emerald-700 block">
+                      Repasse: {formatBRL(singleCommissionAmount)}
+                    </span>
+                    <span className="text-[10px] text-emerald-800 font-semibold">
+                      Salão: {formatBRL(singleSalonShare)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. Alerta de Comanda Unificada (se houver outros atendimentos hoje) */}
+                {relatedAttendances.length > 1 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                      <span>★</span> Comanda Unificada do Dia ({relatedAttendances.length} serviços da cliente)
+                    </p>
+                    <p>
+                      Esta cliente realizou/possui outros atendimentos hoje. A finalização deste serviço <strong>não</strong> encerra os demais. A comanda permanecerá aberta na recepção até a conclusão de todas as profissionais.
                     </p>
                   </div>
-                </div>
+                )}
 
-                <span className="text-xs font-extrabold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs">
-                  Total Repasse: {formatBRL(professionalCommissionsSummary.reduce((acc, p) => acc + p.commissionTotal, 0))}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {professionalCommissionsSummary.map((prof, idx) => (
-                  <div key={idx} className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-bold text-tb-brown-dark block">{prof.profName}</span>
-                      <span className="text-[10px] text-tb-gray-neutral block">
-                        Bruto: {formatBRL(prof.grossTotal)} • Base: {formatBRL(prof.netTotal)}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-extrabold text-emerald-700 block">
-                        +{formatBRL(prof.commissionTotal)}
-                      </span>
-                      <span className="text-[9px] font-bold text-emerald-600 uppercase">
-                        A Pagar Hoje
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Footer Actions */}
-            <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-end gap-3">
-              {isAlreadyFullyPaid ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleReopenComanda}
-                    className="px-4 py-2.5 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2"
-                    title="Reabrir esta comanda para trocar a profissional ou corrigir valores sem duplicar o caixa"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Reabrir / Corrigir Profissional
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="px-4 py-2.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl shadow-xs transition-all flex items-center gap-2"
-                  >
-                    <Receipt className="w-4 h-4 text-tb-rose-primary" />
-                    Imprimir Recibo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-6 py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft transition-all"
-                  >
-                    Fechar Visualização
-                  </button>
-                </>
-              ) : (
-                <>
+                {/* Footer Actions para modo individual */}
+                <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-end gap-3">
                   <button
                     type="button"
                     onClick={onClose}
@@ -1188,23 +1121,537 @@ export const AttendanceFinishModal: React.FC<AttendanceFinishModalProps> = ({
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2 disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <>
                         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Salvando Fechamento...
+                        Finalizando...
                       </>
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        Concluir Fechamento da Comanda
+                        Confirmar e Finalizar Atendimento
                       </>
                     )}
                   </button>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 2: FECHAMENTO UNIFICADO DA COMANDA */}
+            {(modalTab === 'comanda' || !attendance) && (
+              <div className="space-y-5">
+                {/* Active packages banner for this client */}
+                {clientActivePackages.length > 0 && (
+                  <div className="p-3 bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50/40 border border-emerald-300/80 rounded-2xl flex items-start gap-3 shadow-2xs">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold text-sm shadow-xs">
+                      🎁
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-emerald-950">
+                          Pacotes & Créditos Ativos da Cliente ({client?.name})
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                          {clientActivePackages.length} Pacote(s)
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        {clientActivePackages.map(pkg => (
+                          <div key={pkg.id} className="text-[11px] px-2.5 py-1 bg-white border border-emerald-300 rounded-xl text-emerald-900 flex items-center gap-1.5 shadow-2xs">
+                            <span className="font-bold">{pkg.packageName}:</span>
+                            <span className="font-semibold text-emerald-700">
+                              {pkg.items.map(i => `${i.remainingQty}/${i.totalQty} ${i.serviceName}`).join(' • ')}
+                            </span>
+                            <span className="text-[10px] text-emerald-600">(até {pkg.expiryDate})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 1: Services included in this comanda */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-tb-rose-primary" />
+                      1. Serviços Realizados Pela Cliente Hoje
+                    </h4>
+                    <span className="text-[11px] text-tb-gray-neutral">
+                      Valores editáveis pela profissional e conferência de comissão
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {serviceItems.map(item => {
+                      const applicable = findApplicablePackage(item.serviceName, item.attendanceObj.serviceId);
+                      
+                      return (
+                        <div
+                          key={item.attendanceId}
+                          className={`p-3.5 rounded-2xl border transition-all ${
+                            item.isPackageCovered
+                              ? 'bg-emerald-50/50 border-emerald-300 shadow-2xs'
+                              : item.isSelected 
+                                ? 'bg-tb-ivory border-tb-rose-light/80 shadow-2xs' 
+                                : 'bg-gray-50 border-gray-200 opacity-60'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={item.isSelected}
+                                onChange={() => handleToggleSelectService(item.attendanceId)}
+                                className="mt-1 rounded text-tb-rose-primary focus:ring-tb-rose-primary"
+                              />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-tb-brown-dark block">
+                                    {item.serviceName}
+                                  </span>
+                                  {item.isPackageCovered && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-600 text-white shadow-2xs">
+                                      🎁 Coberto por Pacote
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[11px] text-tb-brown-soft font-medium">Profissional:</span>
+                                  {!isAlreadyFullyPaid ? (
+                                    <select
+                                      value={item.professionalId || item.attendanceObj.professionalId}
+                                      onChange={e => handleProfessionalChange(item.attendanceId, e.target.value)}
+                                      className="text-xs font-bold text-tb-brown-dark bg-tb-white border border-tb-rose-light/90 rounded-lg px-2 py-0.5 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
+                                      title="Selecione a profissional correta para este serviço"
+                                    >
+                                      {professionals.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="font-semibold text-tb-brown-dark">{item.professionalName}</span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${
+                                    item.isPackageCovered
+                                      ? 'bg-blue-50 text-blue-750 border-blue-200'
+                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  }`}>
+                                    {item.isPackageCovered 
+                                      ? 'Comissão: Já quitada na venda do pacote (R$ 0,00 nesta comanda)' 
+                                      : `Repasse: ${item.commissionPercentage}% (${formatBRL(item.commissionAmount)})`}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveAttendanceForConsumption(item.attendanceObj)}
+                                    className="text-[10px] text-amber-800 hover:text-amber-900 font-bold bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                  >
+                                    <Scale className="w-3 h-3" />
+                                    Produtos / Gramatura
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevertItem(item.attendanceId, item.serviceName)}
+                                    className="text-[10px] text-rose-700 hover:text-rose-800 font-semibold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                    title="Voltar serviço para solicitação/agendamento caso tenha sido iniciado por engano"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    Voltar p/ Agendamento
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveServiceItem(item.attendanceId, item.serviceName)}
+                                    className="text-[10px] text-red-700 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                                    title="Remover este serviço da comanda"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-600" />
+                                    Remover da Comanda
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Pricing autonomy and individual discount */}
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-tb-rose-light/40">
+                              <div className="text-right">
+                                <span className="text-[10px] text-tb-gray-neutral block font-medium" title="Autonomia: profissional pode alterar para preço diferencial">
+                                  Valor Bruto (R$)
+                                </span>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <input
+                                    type="number"
+                                    step="1.00"
+                                    min="0"
+                                    value={item.grossValue}
+                                    onChange={e => handleServiceGrossChange(item.attendanceId, parseFloat(e.target.value) || 0)}
+                                    className="w-20 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-bold text-tb-brown-dark shadow-2xs focus:ring-1 focus:ring-tb-rose-primary focus:border-tb-rose-primary"
+                                    title="Autonomia da profissional: altere o valor do serviço se esta cliente possuir preço diferenciado"
+                                  />
+                                </div>
+                              </div>
+
+                              {!item.isPackageCovered && (
+                                <div>
+                                  <span className="text-[10px] text-tb-gray-neutral block text-right font-medium">Desconto</span>
+                                  <div className="flex items-center gap-1 justify-end mt-0.5">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={item.discountInput}
+                                      onChange={e => handleServiceDiscountChange(item.attendanceId, parseFloat(e.target.value) || 0, item.discountType)}
+                                      className="w-16 text-xs px-2 py-1 rounded-lg border border-tb-rose-light bg-tb-white text-right font-medium text-rose-700 shadow-2xs focus:ring-1 focus:ring-tb-rose-primary"
+                                      placeholder="0,00"
+                                    />
+                                    <div className="flex rounded-md border border-tb-rose-light overflow-hidden shrink-0 text-[10px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'fixed')}
+                                        className={`px-1.5 py-1 font-semibold ${item.discountType === 'fixed' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
+                                      >
+                                        R$
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleServiceDiscountChange(item.attendanceId, item.discountInput, 'percentage')}
+                                        className={`px-1.5 py-1 font-semibold ${item.discountType === 'percentage' ? 'bg-tb-rose-primary text-white' : 'bg-tb-white text-tb-brown-dark hover:bg-tb-ivory'}`}
+                                      >
+                                        %
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="text-right min-w-[70px]">
+                                <span className="text-[10px] text-tb-gray-neutral block">A Cobrar</span>
+                                <span className={`text-xs font-bold ${item.isPackageCovered ? 'text-emerald-700' : 'text-tb-rose-primary'}`}>
+                                  {item.isPackageCovered ? 'R$ 0,00' : formatBRL(item.netValue)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {applicable && (
+                            <div className="mt-2.5 pt-2.5 border-t border-tb-rose-light/40 flex flex-wrap items-center justify-between gap-2 bg-white/80 p-2.5 rounded-xl border border-emerald-200 shadow-2xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">🎁</span>
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-emerald-950">
+                                      {applicable.package.packageName}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-2 py-0.2 bg-emerald-100 text-emerald-800 rounded-md border border-emerald-300">
+                                      {applicable.matchedItem.remainingQty} {applicable.matchedItem.serviceName}(s) restante(s)
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-emerald-700">
+                                    Cliente possui sessões disponíveis. Ao usar, a cliente paga R$ 0,00 e o repasse da profissional é preservado.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, true)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                                    item.isPackageCovered
+                                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                                      : 'bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  <CheckCircle2 className={`w-3.5 h-3.5 ${item.isPackageCovered ? 'text-white' : 'text-emerald-600'}`} />
+                                  <span>Utilizar crédito do pacote</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleTogglePackageCredit(item.attendanceId, applicable.package.id, false)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                                    !item.isPackageCovered
+                                      ? 'bg-tb-brown-dark text-white ring-2 ring-tb-brown-soft'
+                                      : 'bg-white text-tb-brown-dark border border-tb-rose-light hover:bg-tb-ivory'
+                                  }`}
+                                >
+                                  <span>Cobrar serviço avulso</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Summary Box */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-tb-rose-blush/60 via-tb-ivory to-tb-beige-light/40 border border-tb-rose-light/70 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <span className="text-[11px] text-tb-brown-soft block">Subtotal dos Serviços: {formatBRL(subtotal)}</span>
+                    <span className="text-[11px] text-rose-600 block">Descontos Concedidos: -{formatBRL(discountTotal)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[11px] font-semibold text-tb-brown-soft block uppercase tracking-wider">
+                      Total a Cobrar da Cliente
+                    </span>
+                    <span className="text-2xl font-bold text-tb-brown-dark">
+                      {formatBRL(netTotal)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Section 2: Multiple Payment Methods & Partial Payment */}
+                <div className="space-y-3 pt-2 border-t border-tb-rose-light/40">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-tb-brown-dark uppercase tracking-wider flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-tb-rose-primary" />
+                        2. Recebimento & Formas de Pagamento
+                      </h4>
+                      <p className="text-[11px] text-tb-gray-neutral">
+                        Combine múltiplas formas (ex: Dinheiro + Pix + Cartão) ou registre pagamento parcial
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPayments([{ id: 'p_1', method: 'pix', amount: netTotal, notes: '' }]);
+                        }}
+                        className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl flex items-center gap-1 transition-all shadow-2xs"
+                        title="Preenche o painel de pagamento com o valor líquido total com desconto"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Valor Total c/ Desconto: {formatBRL(netTotal)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddPaymentRow}
+                        className="px-3 py-1.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-tb-rose-primary" />
+                        Outra Forma
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payments Rows */}
+                  <div className="space-y-2">
+                    {payments.map((p, idx) => (
+                      <div key={p.id} className="p-3 bg-tb-ivory rounded-xl border border-tb-rose-light/50 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-tb-brown-soft w-6">
+                          #{idx + 1}
+                        </span>
+
+                        <div className="flex-1 min-w-[130px]">
+                          <select
+                            value={p.method}
+                            onChange={e => handleUpdatePayment(p.id, 'method', e.target.value as PaymentMethod)}
+                            className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-tb-brown-dark font-medium"
+                          >
+                            <option value="pix">PIX</option>
+                            <option value="cartao_credito">Cartão de Crédito</option>
+                            <option value="cartao_debito">Cartão de Débito</option>
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="transferencia">Transferência Bancária</option>
+                            <option value="outros">Outros</option>
+                          </select>
+                        </div>
+
+                        <div className="w-28 relative">
+                          <span className="absolute left-2.5 top-1.5 text-xs text-tb-gray-neutral">R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={p.amount}
+                            onChange={e => handleUpdatePayment(p.id, 'amount', parseFloat(e.target.value) || 0)}
+                            className="w-full text-xs pl-8 pr-2 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-right font-bold text-tb-brown-dark"
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-[120px]">
+                          <input
+                            type="text"
+                            placeholder="Obs (ex: 2x no cartão, sinal...)"
+                            value={p.notes || ''}
+                            onChange={e => handleUpdatePayment(p.id, 'notes', e.target.value)}
+                            className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-tb-rose-light bg-tb-white text-tb-brown-dark"
+                          />
+                        </div>
+
+                        {payments.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePaymentRow(p.id)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Remover linha"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Status and pending display */}
+                  <div className="p-3.5 bg-tb-white rounded-xl border border-tb-rose-light/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-tb-brown-dark">Total Pago Agora:</span>
+                        <span className="font-bold text-emerald-700">{formatBRL(totalPaid)}</span>
+                      </div>
+                      {pendingBalance > 0.01 && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-amber-800">Saldo Pendente:</span>
+                          <span className="font-bold text-amber-800">{formatBRL(pendingBalance)}</span>
+                          <button
+                            type="button"
+                            onClick={handleSettleRemaining}
+                            className="text-[10px] text-tb-rose-primary underline font-medium hover:text-tb-brown-dark"
+                          >
+                            Quitar total
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        paymentStatus === 'pago' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                        paymentStatus === 'parcial' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                        'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}>
+                        Situação: {paymentStatus === 'pago' ? '✓ Quitado Integralmente' : paymentStatus === 'parcial' ? '⚠ Parcialmente Pago' : '⏳ Pendente / Fiado'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* General Comanda Notes */}
+                <div>
+                  <label className="block text-xs font-semibold text-tb-brown-dark mb-1">
+                    Observações Gerais da Comanda
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={comandaNotes}
+                    onChange={e => setComandaNotes(e.target.value)}
+                    placeholder="Ex: Cliente elogiou o atendimento, retornará no próximo mês..."
+                    className="w-full text-xs p-3 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark resize-none"
+                  />
+                </div>
+
+                {/* Live Professional Commissions Calculation Preview */}
+                <div className="p-4 bg-emerald-50/80 rounded-2xl border-2 border-emerald-300 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                        <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-emerald-950">
+                          Cálculo de Repasse às Profissionais (Pagamento Diário)
+                        </h4>
+                        <p className="text-[10px] text-emerald-800">
+                          Liberado na mesma hora no painel assim que fechar a comanda
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-xs font-extrabold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs">
+                      Total Repasse: {formatBRL(professionalCommissionsSummary.reduce((acc, p) => acc + p.commissionTotal, 0))}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {professionalCommissionsSummary.map((prof, idx) => (
+                      <div key={idx} className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-tb-brown-dark block">{prof.profName}</span>
+                          <span className="text-[10px] text-tb-gray-neutral block">
+                            Bruto: {formatBRL(prof.grossTotal)} • Base: {formatBRL(prof.netTotal)}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-extrabold text-emerald-700 block">
+                            +{formatBRL(prof.commissionTotal)}
+                          </span>
+                          <span className="text-[9px] font-bold text-emerald-600 uppercase">
+                            A Pagar Hoje
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer Actions para modo comanda */}
+                <div className="pt-3 border-t border-tb-rose-light/40 flex items-center justify-end gap-3">
+                  {isAlreadyFullyPaid ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleReopenComanda}
+                        className="px-4 py-2.5 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2"
+                        title="Reabrir esta comanda para trocar a profissional ou corrigir valores sem duplicar o caixa"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Reabrir / Corrigir Profissional
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-4 py-2.5 text-xs font-semibold bg-tb-ivory hover:bg-tb-beige-light text-tb-brown-dark border border-tb-rose-light rounded-xl shadow-xs transition-all flex items-center gap-2"
+                      >
+                        <Receipt className="w-4 h-4 text-tb-rose-primary" />
+                        Imprimir Recibo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-6 py-2.5 text-xs font-semibold bg-tb-rose-primary hover:bg-[#b57f8c] text-white rounded-xl shadow-soft transition-all"
+                      >
+                        Fechar Visualização
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={isSubmitting}
+                        className="px-4 py-2.5 text-xs font-medium text-tb-brown-soft hover:text-tb-brown-dark rounded-xl disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft hover:shadow-premium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Salvando Fechamento...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            Concluir Fechamento da Comanda
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </div>

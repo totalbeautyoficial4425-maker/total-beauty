@@ -206,3 +206,26 @@ export function formatBirthdayDayMonth(birthDate?: string): string {
   if (!parsed) return '';
   return `${String(parsed.day).padStart(2, '0')}/${String(parsed.month).padStart(2, '0')}`;
 }
+
+export function formatPaymentMethodLabel(method?: string): string {
+  if (!method) return '-';
+  switch (method) {
+    case 'pix':
+      return 'Pix';
+    case 'dinheiro':
+      return 'Dinheiro';
+    case 'cartao_credito':
+      return 'Cartão de Crédito';
+    case 'cartao_debito':
+      return 'Cartão de Débito';
+    case 'transferencia':
+      return 'Transferência';
+    case 'pacote_credito':
+      return 'Crédito de Pacote';
+    case 'outros':
+      return 'Outros';
+    default:
+      return method.toUpperCase();
+  }
+}
+

@@ -154,6 +154,10 @@ interface DataContextType {
     paymentStatus: 'pago' | 'pendente' | 'parcial';
     paidAmount: number;
     notes?: string;
+    finishDate?: string;
+    finishTime?: string;
+    packageId?: string;
+    isPackageCovered?: boolean;
   }) => { success: boolean; error?: string };
 
   // Unified Comanda & Multi-Payment
@@ -1928,7 +1932,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clientObj = clients.find(c => c.id === apt.clientId);
         serviceObj = services.find(s => s.id === apt.serviceId);
         profObj = professionals.find(p => p.id === apt.professionalId);
-        updateAppointmentStatus(appointmentId, 'em_atendimento');
+        const actor = getCurrentUserAuditInfo();
+        updateAppointmentStatus(appointmentId, 'em_atendimento', `Atendimento iniciado por ${actor.userName}`, actor.userName);
       }
     } else {
       clientObj = clients.find(c => c.id === clientId);
@@ -1940,18 +1945,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Dados da cliente ou do serviço não encontrados.' };
     }
 
+    const todayStr = getTodayDate();
+    const existingCmd = comandas.find(c => c.clientId === clientObj!.id && c.date === todayStr);
+    const comandaId = existingCmd?.id || generateId('cmd');
+
     const commPercent = serviceObj.commissionPercentage ?? 50;
+    const newAtdId = generateId('atd');
 
     const newAttendance: Attendance = {
-      id: generateId('atd'),
+      id: newAtdId,
       appointmentId,
+      comandaId,
       clientId: clientObj.id,
       clientName: clientObj.name,
       serviceId: serviceObj.id,
       serviceName: serviceObj.name,
       professionalId: profObj?.id || '',
       professionalName: profObj?.name || 'Não atribuído',
-      date: getTodayDate(),
+      date: todayStr,
       startedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       grossValue: serviceObj.price,
       discountValue: 0,
@@ -1969,6 +1980,55 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendances(nextAttendances);
     storageService.saveAttendances(nextAttendances);
 
+    // Link or create comanda for the client's visit today
+    if (existingCmd) {
+      const updatedAtdIds = Array.from(new Set([...existingCmd.attendanceIds, newAtdId]));
+      const allRelatedAtds = nextAttendances.filter(a => updatedAtdIds.includes(a.id));
+      const subtotal = allRelatedAtds.reduce((sum, a) => sum + (a.grossValue || 0), 0);
+      const discountTotal = allRelatedAtds.reduce((sum, a) => sum + (a.discountValue || 0), 0);
+      const netTotal = allRelatedAtds.reduce((sum, a) => sum + (a.netValue || 0), 0);
+      const paidTotal = allRelatedAtds.reduce((sum, a) => sum + (a.paidAmount || 0), 0);
+      const pendingTotal = Math.max(0, netTotal - paidTotal);
+      const isPaid = pendingTotal <= 0.01 && allRelatedAtds.length > 0 && allRelatedAtds.every(a => !!a.finishedAt);
+      const cmdStatus: 'pago' | 'parcial' | 'pendente' = isPaid ? 'pago' : paidTotal > 0 ? 'parcial' : 'pendente';
+
+      const updatedCmd: Comanda = {
+        ...existingCmd,
+        attendanceIds: updatedAtdIds,
+        subtotal,
+        discountTotal,
+        netTotal,
+        paidTotal,
+        pendingTotal,
+        status: cmdStatus,
+        updatedAt: new Date().toISOString(),
+      };
+      const nextCmds = comandas.map(c => c.id === existingCmd.id ? updatedCmd : c);
+      setComandas(nextCmds);
+      storageService.saveComandas(nextCmds);
+    } else {
+      const newCmd: Comanda = {
+        id: comandaId,
+        clientId: clientObj.id,
+        clientName: clientObj.name,
+        clientPhone: clientObj.phone,
+        date: todayStr,
+        attendanceIds: [newAtdId],
+        subtotal: serviceObj.price,
+        discountTotal: 0,
+        netTotal: serviceObj.price,
+        paidTotal: 0,
+        pendingTotal: serviceObj.price,
+        status: 'pendente',
+        payments: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const nextCmds = [newCmd, ...comandas];
+      setComandas(nextCmds);
+      storageService.saveComandas(nextCmds);
+    }
+
     return { success: true, attendance: newAttendance };
   };
 
@@ -1978,21 +2038,90 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Atendimento não encontrado.' };
     }
 
+    const actor = getCurrentUserAuditInfo();
+    const nowIso = new Date().toISOString();
+
     // 1. If tied to an appointment, restore appointment status back to 'agendado'
     // Preserving all appointment information (client, service, professional, date, time, notes)
+    // and logging the event in history and audit logs
     if (atd.appointmentId) {
+      const targetApt = appointments.find(a => a.id === atd.appointmentId);
+
+      const historyEvent: AppointmentHistoryEvent = {
+        id: generateId('evt'),
+        date: nowIso,
+        user: actor.userName,
+        userId: actor.userId,
+        userRole: actor.userRole,
+        userProfileLabel: actor.userProfileLabel,
+        action: 'Início de Atendimento Desfeito',
+        details: `Início de atendimento desfeito por ${actor.userName}. Agendamento retornou para "Agendado" com botão Iniciar novamente disponível.`,
+        changes: [
+          {
+            field: 'Status',
+            oldValue: 'Em Atendimento',
+            newValue: 'Agendado',
+          }
+        ]
+      };
+
+      const auditLog: AppointmentAuditLog = {
+        id: generateId('aud'),
+        appointmentId: atd.appointmentId,
+        sessionId: targetApt?.sessionId,
+        action: 'desfez_inicio',
+        actionLabel: 'Início de Atendimento Desfeito',
+        timestamp: nowIso,
+        userId: actor.userId,
+        userName: actor.userName,
+        userRole: actor.userRole,
+        userProfileLabel: actor.userProfileLabel,
+        clientId: atd.clientId,
+        clientName: atd.clientName,
+        clientPhone: targetApt?.clientPhone,
+        serviceId: atd.serviceId,
+        serviceName: atd.serviceName,
+        professionalId: atd.professionalId,
+        professionalName: atd.professionalName,
+        appointmentDate: targetApt?.date || atd.date,
+        appointmentStartTime: targetApt?.startTime || atd.startedAt,
+        appointmentEndTime: targetApt?.endTime || '',
+        durationMinutes: targetApt?.durationMinutes || 30,
+        price: atd.grossValue,
+        status: 'agendado',
+        details: `Início de atendimento desfeito por ${actor.userName}`,
+        changes: [
+          {
+            field: 'Status',
+            oldValue: 'Em Atendimento',
+            newValue: 'Agendado',
+          }
+        ],
+        createdBy: targetApt?.createdBy,
+        createdByRole: targetApt?.createdByRole,
+        createdByUserId: targetApt?.createdByUserId,
+        createdAt: targetApt?.createdAt,
+      };
+
       const nextAppointments = appointments.map(apt => {
         if (apt.id === atd.appointmentId) {
+          const existingHistory = Array.isArray(apt.changeHistory) ? apt.changeHistory : [];
           return {
             ...apt,
             status: 'agendado' as const,
-            updatedAt: new Date().toISOString()
+            updatedAt: nowIso,
+            updatedBy: actor.userName,
+            updatedByRole: actor.userRole,
+            updatedByUserId: actor.userId,
+            changeHistory: [...existingHistory, historyEvent]
           };
         }
         return apt;
       });
       setAppointments(nextAppointments);
       storageService.saveAppointments(nextAppointments);
+      storageService.addAppointmentAuditLog(auditLog);
+      setAppointmentAuditLogs(prev => [auditLog, ...prev]);
     }
 
     // 2. Remove the attendance from attendances state and storage
@@ -2175,6 +2304,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paymentStatus: 'pago' | 'pendente' | 'parcial';
       paidAmount: number;
       notes?: string;
+      finishDate?: string;
+      finishTime?: string;
+      packageId?: string;
+      isPackageCovered?: boolean;
     }
   ) => {
     const atd = attendances.find(a => a.id === attendanceId);
@@ -2184,63 +2317,237 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Este atendimento já foi finalizado e quitado anteriormente. O valor não pode ser duplicado.' };
     }
 
-    const finishedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const finishedDate = options.finishDate || atd.date || getTodayDate();
+    const finishedTime = options.finishTime || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const actor = getCurrentUserAuditInfo();
+    const nowIso = new Date().toISOString();
 
     // Calculate commission directly from the service percentage (Admin configured)
     const srv = services.find(s => s.id === atd.serviceId);
     const commPercent = srv?.commissionPercentage ?? atd.commissionPercentage ?? 50;
     
     // Commission is calculated based on received payment (if paid) or net value
-    const effectiveCommission = options.paymentStatus === 'pago'
-      ? (options.netValue * commPercent) / 100
-      : (options.paidAmount * commPercent) / 100;
+    const effectiveCommission = options.isPackageCovered
+      ? 0
+      : options.paymentStatus === 'pago'
+        ? (options.netValue * commPercent) / 100
+        : (options.paidAmount * commPercent) / 100;
+
+    // Find or create comanda for this client on this date
+    let targetComanda = comandas.find(c => 
+      c.clientId === atd.clientId && 
+      (c.date === finishedDate || (atd.comandaId && c.id === atd.comandaId) || c.attendanceIds.includes(attendanceId))
+    );
+    const comandaId = targetComanda?.id || atd.comandaId || generateId('cmd');
 
     // Update Attendance
     const updatedAttendance: Attendance = {
       ...atd,
+      comandaId,
+      date: finishedDate,
       finishedAt: finishedTime,
       grossValue: options.grossValue,
       discountValue: options.discountValue,
       discountType: options.discountType,
-      netValue: options.netValue,
+      netValue: options.isPackageCovered ? 0 : options.netValue,
       commissionPercentage: commPercent,
       commissionAmount: effectiveCommission,
-      paymentMethod: options.paymentMethod,
-      paymentStatus: options.paymentStatus,
-      paidAmount: options.paidAmount,
-      notes: options.notes,
-      updatedAt: new Date().toISOString(),
+      paymentMethod: options.isPackageCovered ? 'pacote_credito' : options.paymentMethod,
+      paymentStatus: options.isPackageCovered ? 'pago' : options.paymentStatus,
+      paidAmount: options.isPackageCovered ? 0 : options.paidAmount,
+      packageId: options.packageId || atd.packageId,
+      isPackageCovered: options.isPackageCovered || atd.isPackageCovered,
+      notes: options.notes || atd.notes,
+      updatedAt: nowIso,
     };
 
     const nextAttendances = attendances.map(a => (a.id === attendanceId ? updatedAttendance : a));
     setAttendances(nextAttendances);
     storageService.saveAttendances(nextAttendances);
 
-    // If attendance is tied to appointment, mark appointment as 'concluido'
+    // If attendance is tied to appointment, mark appointment as 'concluido' and register audit history
     if (atd.appointmentId) {
-      updateAppointmentStatus(atd.appointmentId, 'concluido');
+      const targetApt = appointments.find(a => a.id === atd.appointmentId);
+      const historyEvent: AppointmentHistoryEvent = {
+        id: generateId('evt'),
+        date: nowIso,
+        user: actor.userName,
+        userId: actor.userId,
+        userRole: actor.userRole,
+        userProfileLabel: actor.userProfileLabel,
+        action: 'Atendimento Concluído',
+        details: `Atendimento finalizado por ${actor.userName}. Serviço: ${atd.serviceName} (${atd.professionalName}). Valor: ${formatBRL(options.netValue)} via ${options.paymentMethod.toUpperCase()}.`,
+        changes: [
+          {
+            field: 'Status',
+            oldValue: 'Em Atendimento',
+            newValue: 'Concluído',
+          },
+          {
+            field: 'Forma de Pagamento',
+            oldValue: '-',
+            newValue: options.paymentMethod.toUpperCase(),
+          },
+          {
+            field: 'Valor Recebido',
+            oldValue: 'R$ 0,00',
+            newValue: formatBRL(options.paidAmount),
+          }
+        ]
+      };
+
+      const auditLog: AppointmentAuditLog = {
+        id: generateId('aud'),
+        appointmentId: atd.appointmentId,
+        sessionId: targetApt?.sessionId,
+        action: 'concluido',
+        actionLabel: 'Atendimento Concluído',
+        timestamp: nowIso,
+        userId: actor.userId,
+        userName: actor.userName,
+        userRole: actor.userRole,
+        userProfileLabel: actor.userProfileLabel,
+        clientId: atd.clientId,
+        clientName: atd.clientName,
+        clientPhone: targetApt?.clientPhone,
+        serviceId: atd.serviceId,
+        serviceName: atd.serviceName,
+        professionalId: atd.professionalId,
+        professionalName: atd.professionalName,
+        appointmentDate: targetApt?.date || finishedDate,
+        appointmentStartTime: targetApt?.startTime || atd.startedAt,
+        appointmentEndTime: targetApt?.endTime || finishedTime,
+        durationMinutes: targetApt?.durationMinutes || 30,
+        price: options.grossValue,
+        status: 'concluido',
+        details: `Atendimento finalizado por ${actor.userName} com recebimento de ${formatBRL(options.paidAmount)} via ${options.paymentMethod.toUpperCase()}`,
+        changes: [
+          {
+            field: 'Status',
+            oldValue: 'Em Atendimento',
+            newValue: 'Concluído',
+          }
+        ],
+        createdBy: targetApt?.createdBy,
+        createdByRole: targetApt?.createdByRole,
+        createdByUserId: targetApt?.createdByUserId,
+        createdAt: targetApt?.createdAt,
+      };
+
+      const nextAppointments = appointments.map(a => {
+        if (a.id === atd.appointmentId) {
+          const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
+          return {
+            ...a,
+            status: 'concluido' as const,
+            updatedAt: nowIso,
+            updatedBy: actor.userName,
+            updatedByRole: actor.userRole,
+            updatedByUserId: actor.userId,
+            changeHistory: [...existingHistory, historyEvent]
+          };
+        }
+        return a;
+      });
+      setAppointments(nextAppointments);
+      storageService.saveAppointments(nextAppointments);
+      storageService.addAppointmentAuditLog(auditLog);
+      setAppointmentAuditLogs(prev => [auditLog, ...prev]);
     }
+
+    // Consolidated Comanda Updates
+    // Gather all attendances of this client for this date to maintain the complete comanda
+    const clientDayAttendances = nextAttendances.filter(a => 
+      a.clientId === atd.clientId && 
+      (a.date === finishedDate || a.createdAt?.startsWith(finishedDate) || (targetComanda && targetComanda.attendanceIds.includes(a.id)))
+    );
+    const allAtdIds = Array.from(new Set([
+      ...(targetComanda?.attendanceIds || []),
+      ...clientDayAttendances.map(a => a.id),
+      attendanceId
+    ]));
+
+    const relatedAtds = nextAttendances.filter(a => allAtdIds.includes(a.id));
+    const subtotal = relatedAtds.reduce((sum, a) => sum + (a.grossValue || 0), 0);
+    const discountTotal = relatedAtds.reduce((sum, a) => sum + (a.discountValue || 0), 0);
+    const netTotal = relatedAtds.reduce((sum, a) => sum + (a.netValue || 0), 0);
+    const paidTotal = relatedAtds.reduce((sum, a) => sum + (a.paidAmount || 0), 0);
+    const pendingTotal = Math.max(0, netTotal - paidTotal);
+    const areAllFinished = relatedAtds.length > 0 && relatedAtds.every(a => !!a.finishedAt && a.paymentStatus === 'pago');
+    const cmdStatus: 'pago' | 'parcial' | 'pendente' = (pendingTotal <= 0.01 && areAllFinished) ? 'pago' : paidTotal > 0 ? 'parcial' : 'pendente';
+
+    // Comanda payment item for this attendance
+    const newPaymentItem: ComandaPayment = {
+      id: generateId('cmp'),
+      paymentMethod: options.isPackageCovered ? 'pacote_credito' : options.paymentMethod,
+      amount: options.isPackageCovered ? 0 : options.paidAmount,
+      date: finishedDate,
+      notes: options.notes,
+      createdAt: nowIso,
+      attendanceId: atd.id,
+      serviceName: atd.serviceName,
+      professionalName: atd.professionalName,
+    };
+
+    const existingPayments = (targetComanda?.payments || []).filter(p => p.attendanceId !== atd.id);
+    const comandaPayments = options.paidAmount > 0 || options.isPackageCovered
+      ? [...existingPayments, newPaymentItem]
+      : existingPayments;
+
+    const clientObj = clients.find(c => c.id === atd.clientId);
+    const updatedComanda: Comanda = {
+      id: comandaId,
+      clientId: atd.clientId,
+      clientName: atd.clientName,
+      clientPhone: clientObj?.phone || targetComanda?.clientPhone,
+      date: finishedDate,
+      attendanceIds: allAtdIds,
+      subtotal,
+      discountTotal,
+      netTotal,
+      paidTotal,
+      pendingTotal,
+      status: cmdStatus,
+      payments: comandaPayments,
+      notes: options.notes || targetComanda?.notes,
+      createdAt: targetComanda?.createdAt || nowIso,
+      updatedAt: nowIso,
+    };
+
+    const nextComandas = targetComanda
+      ? comandas.map(c => c.id === targetComanda!.id ? updatedComanda : c)
+      : [updatedComanda, ...comandas];
+
+    setComandas(nextComandas);
+    storageService.saveComandas(nextComandas);
 
     // Register Revenue in Financials without duplication
     const pendingAmount = Math.max(0, options.netValue - options.paidAmount);
-    
     const existingPayment = payments.find(p => p.attendanceId === attendanceId);
     let nextPayments: PaymentTransaction[];
+
+    const discPct = options.grossValue > 0 && options.discountValue > 0 
+      ? Math.round((options.discountValue / options.grossValue) * 100) 
+      : 0;
 
     if (existingPayment) {
       nextPayments = payments.map(p => {
         if (p.attendanceId === attendanceId) {
           return {
             ...p,
+            comandaId,
             grossValue: options.grossValue,
             discount: options.discountValue,
+            discountPercentage: discPct,
             netValue: options.netValue,
             paidAmount: options.paidAmount,
             pendingAmount,
             commissionPercentage: commPercent,
             commissionAmount: effectiveCommission,
-            paymentMethod: options.paymentMethod,
-            status: options.paymentStatus,
+            paymentMethod: options.isPackageCovered ? 'pacote_credito' : options.paymentMethod,
+            status: options.isPackageCovered ? 'pago' : options.paymentStatus,
+            date: finishedDate,
+            updatedAt: nowIso,
           };
         }
         return p;
@@ -2249,31 +2556,84 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPayment: PaymentTransaction = {
         id: generateId('pay'),
         attendanceId,
+        comandaId,
+        packageId: options.packageId,
         clientId: atd.clientId,
         clientName: atd.clientName,
         serviceName: atd.serviceName,
         professionalId: atd.professionalId,
         professionalName: atd.professionalName,
-        description: `Atendimento Concluído — ${atd.serviceName}`,
+        description: options.isPackageCovered
+          ? `Comanda ${comandaId.slice(-4).toUpperCase()} — ${atd.serviceName} (${atd.professionalName}) via CRÉDITO DE PACOTE`
+          : `Comanda ${comandaId.slice(-4).toUpperCase()} — ${atd.serviceName} (${atd.professionalName}) via ${options.paymentMethod.toUpperCase()}`,
         grossValue: options.grossValue,
         discount: options.discountValue,
+        discountPercentage: discPct,
         netValue: options.netValue,
         paidAmount: options.paidAmount,
         pendingAmount,
         commissionPercentage: commPercent,
         commissionAmount: effectiveCommission,
-        paymentMethod: options.paymentMethod,
-        status: options.paymentStatus,
-        date: atd.date,
+        paymentMethod: options.isPackageCovered ? 'pacote_credito' : options.paymentMethod,
+        status: options.isPackageCovered ? 'pago' : options.paymentStatus,
+        date: finishedDate,
         type: 'receita',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
       nextPayments = [newPayment, ...payments];
     }
 
     setPayments(nextPayments);
     storageService.savePayments(nextPayments);
+
+    // Package deduction if package covered
+    if (options.isPackageCovered && options.packageId) {
+      const pkgIdx = clientPackages.findIndex(p => p.id === options.packageId);
+      if (pkgIdx !== -1) {
+        const pkg = clientPackages[pkgIdx];
+        const updatedItems = pkg.items.map(it => {
+          if (it.remainingQty > 0 && (
+            it.serviceName.toLowerCase().includes(atd.serviceName.toLowerCase()) || 
+            atd.serviceName.toLowerCase().includes(it.serviceName.toLowerCase())
+          )) {
+            return {
+              ...it,
+              remainingQty: it.remainingQty - 1,
+              usedQty: it.usedQty + 1,
+            };
+          }
+          return it;
+        });
+
+        const newUsage: PackageUsageLog = {
+          id: generateId('pkg_use'),
+          date: finishedDate,
+          serviceType: atd.serviceName,
+          serviceName: atd.serviceName,
+          attendanceId: atd.id,
+          professionalId: atd.professionalId,
+          professionalName: atd.professionalName,
+          notes: `Utilizado via Comanda ${comandaId.slice(-4).toUpperCase()}`,
+          usedAt: nowIso,
+        };
+
+        const allZero = updatedItems.every(i => i.remainingQty <= 0);
+        const updatedPkg: ClientPackage = {
+          ...pkg,
+          status: allZero ? 'concluido' : 'em_andamento',
+          items: updatedItems,
+          usageHistory: [newUsage, ...pkg.usageHistory],
+          lastUsageDate: finishedDate,
+          updatedAt: nowIso,
+        };
+
+        const nextPackages = [...clientPackages];
+        nextPackages[pkgIdx] = updatedPkg;
+        setClientPackages(nextPackages);
+        storageService.saveClientPackages(nextPackages);
+      }
+    }
 
     // Recalculate client statistics
     const recalculatedClients = recalculateClientStats(nextPayments, clients);
@@ -2406,15 +2766,82 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendances(finalAttendances);
     storageService.saveAttendances(finalAttendances);
 
-    // Conclude all associated appointments in a single batch
+    // Conclude all associated appointments in a single batch with full history and audit logs
     if (appointmentIdsToComplete.size > 0) {
+      const actor = getCurrentUserAuditInfo();
+      const nowIso = new Date().toISOString();
+      const newAuditLogs: AppointmentAuditLog[] = [];
+
       setAppointments(prev => {
         const nextAppointments = prev.map(a => {
           if (appointmentIdsToComplete.has(a.id)) {
+            const existingHistory = Array.isArray(a.changeHistory) ? a.changeHistory : [];
+            const relatedAtd = finishedAttendances.find(fa => fa.appointmentId === a.id);
+            const historyEvent: AppointmentHistoryEvent = {
+              id: generateId('evt'),
+              date: nowIso,
+              user: actor.userName,
+              userId: actor.userId,
+              userRole: actor.userRole,
+              userProfileLabel: actor.userProfileLabel,
+              action: 'Atendimento Concluído',
+              details: `Atendimento concluído via Comanda Unificada por ${actor.userName}. Serviço: ${a.serviceName} (${a.professionalName}). Valor: ${formatBRL(relatedAtd?.netValue || a.price)}.`,
+              changes: [
+                {
+                  field: 'Status',
+                  oldValue: 'Em Atendimento',
+                  newValue: 'Concluído',
+                }
+              ]
+            };
+
+            const auditLog: AppointmentAuditLog = {
+              id: generateId('aud'),
+              appointmentId: a.id,
+              sessionId: a.sessionId,
+              action: 'concluido',
+              actionLabel: 'Atendimento Concluído',
+              timestamp: nowIso,
+              userId: actor.userId,
+              userName: actor.userName,
+              userRole: actor.userRole,
+              userProfileLabel: actor.userProfileLabel,
+              clientId: a.clientId,
+              clientName: a.clientName,
+              clientPhone: a.clientPhone,
+              serviceId: a.serviceId,
+              serviceName: a.serviceName,
+              professionalId: a.professionalId,
+              professionalName: a.professionalName,
+              appointmentDate: a.date,
+              appointmentStartTime: a.startTime,
+              appointmentEndTime: a.endTime,
+              durationMinutes: a.durationMinutes,
+              price: a.price,
+              status: 'concluido',
+              details: `Atendimento finalizado na comanda unificada por ${actor.userName}`,
+              changes: [
+                {
+                  field: 'Status',
+                  oldValue: 'Em Atendimento',
+                  newValue: 'Concluído',
+                }
+              ],
+              createdBy: a.createdBy,
+              createdByRole: a.createdByRole,
+              createdByUserId: a.createdByUserId,
+              createdAt: a.createdAt,
+            };
+            newAuditLogs.push(auditLog);
+
             return {
               ...a,
               status: 'concluido' as AppointmentStatus,
-              updatedAt: new Date().toISOString()
+              updatedAt: nowIso,
+              updatedBy: actor.userName,
+              updatedByRole: actor.userRole,
+              updatedByUserId: actor.userId,
+              changeHistory: [...existingHistory, historyEvent]
             };
           }
           return a;
@@ -2422,6 +2849,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storageService.saveAppointments(nextAppointments);
         return nextAppointments;
       });
+
+      if (newAuditLogs.length > 0) {
+        newAuditLogs.forEach(aud => storageService.addAppointmentAuditLog(aud));
+        setAppointmentAuditLogs(prev => [...newAuditLogs, ...prev]);
+      }
     }
 
     const newPaymentsList: ComandaPayment[] = data.payments.map(p => ({

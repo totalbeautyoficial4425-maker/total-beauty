@@ -111,7 +111,9 @@ export type AppointmentAuditAction =
   | 'editado' 
   | 'status_alterado' 
   | 'cancelado' 
-  | 'excluido';
+  | 'excluido'
+  | 'desfez_inicio'
+  | 'concluido';
 
 export interface AppointmentAuditLog {
   id: string;
@@ -285,6 +287,9 @@ export interface ComandaPayment {
   date: string;
   notes?: string;
   createdAt: string;
+  attendanceId?: string;
+  serviceName?: string;
+  professionalName?: string;
 }
 
 export interface Comanda {

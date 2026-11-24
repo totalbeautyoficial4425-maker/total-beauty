@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Appointment, AppointmentStatus, Professional, ScheduleBlock } from '../types';
+import { Appointment, AppointmentStatus, Professional, ScheduleBlock, Attendance } from '../types';
 import { formatBRL, formatDateBR, addMinutesToTime, isClientBirthdayToday, formatDateTimeBR } from '../utils/formatters';
 import { ScheduleBlockModal } from '../components/modals/ScheduleBlockModal';
 import { AppointmentHistoryModal } from '../components/modals/AppointmentHistoryModal';
@@ -44,6 +44,7 @@ interface AgendaPageProps {
   onEditAppointment: (appointment: Appointment) => void;
   onOpenWhatsApp: (clientName: string, clientPhone: string, appointment?: any) => void;
   onNavigateToAtendimentos?: () => void;
+  onOpenFinishAttendance?: (attendance: Attendance) => void;
 }
 
 type ViewMode = 'grade_profissionais' | 'dia_lista' | 'semana' | 'mes' | 'lista';
@@ -91,6 +92,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   onEditAppointment,
   onOpenWhatsApp,
   onNavigateToAtendimentos,
+  onOpenFinishAttendance,
 }) => {
   const { currentUser } = useAuth();
   const { 
@@ -885,52 +887,77 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
               </div>
             ) : (
               <div className="pt-3 border-t border-tb-rose-light/40 flex items-center gap-2">
-                {/* Start attendance button */}
+                {/* 1. BOTÃO DINÂMICO PRINCIPAL: INICIAR -> FINALIZAR -> VER RECIBO */}
                 {['agendado', 'confirmado'].includes(popoverAppointment.status) && (
                   <button
                     type="button"
                     onClick={() => {
-                      startAttendance(popoverAppointment.id);
-                      setPopoverAppointment(null);
+                      const res = startAttendance(popoverAppointment.id);
+                      if (res.success) {
+                        setPopoverAppointment(prev => prev ? { ...prev, status: 'em_atendimento' } : null);
+                        showToast('Atendimento iniciado com sucesso! O botão agora está como FINALIZAR.');
+                      } else {
+                        alert(res.error || 'Erro ao iniciar atendimento.');
+                      }
                     }}
                     className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
-                    title="Iniciar atendimento"
+                    title="Iniciar atendimento da cliente"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     Iniciar
                   </button>
                 )}
 
-                {/* Desfazer início / Reverter atendimento se iniciado por engano */}
                 {popoverAppointment.status === 'em_atendimento' && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm(`Deseja desfazer o início do atendimento de "${popoverAppointment.clientName}" e voltar para "Agendado"? O horário e agendamento permanecerão intactos na agenda.`)) {
-                        const atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
-                        if (atd) {
-                          revertAttendance(atd.id);
-                        } else {
-                          updateAppointmentStatus(popoverAppointment.id, 'agendado');
-                        }
+                      let atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
+                      if (!atd) {
+                        const res = startAttendance(popoverAppointment.id);
+                        atd = res.attendance;
+                      }
+                      if (atd && onOpenFinishAttendance) {
                         setPopoverAppointment(null);
+                        onOpenFinishAttendance(atd);
+                      } else if (onNavigateToAtendimentos) {
+                        setPopoverAppointment(null);
+                        onNavigateToAtendimentos();
                       }
                     }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs"
-                    title="Desfazer início de atendimento errôneo e voltar para agendado"
+                    className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    title="Finalizar atendimento e registrar recebimento financeiro"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Desfazer Início
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Finalizar
                   </button>
                 )}
 
-                {/* Confirm attendance */}
+                {popoverAppointment.status === 'concluido' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const atd = attendances.find(a => a.appointmentId === popoverAppointment.id);
+                      if (atd && onOpenFinishAttendance) {
+                        setPopoverAppointment(null);
+                        onOpenFinishAttendance(atd);
+                      }
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    title="Atendimento concluído — Visualizar recibo / comanda"
+                  >
+                    <Receipt className="w-3.5 h-3.5" />
+                    Ver Recibo / Comanda
+                  </button>
+                )}
+
+                {/* 2. CONFIRMAR PRESENÇA */}
                 {popoverAppointment.status === 'agendado' && (
                   <button
                     type="button"
                     onClick={() => {
                       updateAppointmentStatus(popoverAppointment.id, 'confirmado');
-                      setPopoverAppointment(null);
+                      setPopoverAppointment(prev => prev ? { ...prev, status: 'confirmado' } : null);
                     }}
                     className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/70 transition-colors shadow-2xs"
                     title="Confirmar presença"
@@ -939,7 +966,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   </button>
                 )}
 
-                {/* WhatsApp */}
+                {/* 3. WHATSAPP */}
                 <button
                   type="button"
                   onClick={() => {
@@ -952,7 +979,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   <MessageCircle className="w-4 h-4" />
                 </button>
 
-                {/* Edit */}
+                {/* 4. EDITAR */}
                 <button
                   type="button"
                   onClick={() => {
@@ -965,22 +992,45 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   <Edit className="w-4 h-4" />
                 </button>
 
-                {/* Cancel */}
-                {!['cancelado', 'concluido'].includes(popoverAppointment.status) && (
+                {/* 5. DESFAZER INÍCIO (Substitui a opção CANCELAR) */}
+                {popoverAppointment.status === 'em_atendimento' ? (
                   <button
                     type="button"
                     onClick={() => {
-                      setCancelingAppointmentId(popoverAppointment.id);
-                      setPopoverAppointment(null);
+                      if (window.confirm(
+                        `Deseja realmente desfazer o início do atendimento de "${popoverAppointment.clientName}"?\n\n` +
+                        `• O agendamento retornará para o status "Agendado".\n` +
+                        `• O botão INICIAR ficará disponível novamente.\n` +
+                        `• O horário e agendamento permanecerão intactos na agenda.\n` +
+                        `• Esta ação será registrada no histórico com seu usuário e data/hora.`
+                      )) {
+                        const atd = attendances.find(a => a.appointmentId === popoverAppointment.id && !a.finishedAt);
+                        if (atd) {
+                          revertAttendance(atd.id);
+                        } else {
+                          updateAppointmentStatus(popoverAppointment.id, 'agendado', 'Início de atendimento desfeito');
+                        }
+                        setPopoverAppointment(prev => prev ? { ...prev, status: 'agendado' } : null);
+                        showToast('Início do atendimento desfeito com sucesso! Agendamento voltou para Agendado.');
+                      }
                     }}
-                    className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60 transition-colors shadow-2xs"
-                    title="Cancelar agendamento"
+                    className="p-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 border border-rose-200 transition-colors shadow-2xs"
+                    title="Desfazer Início — Retorna para Agendado"
                   >
-                    <XCircle className="w-4 h-4" />
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="p-2 rounded-xl bg-gray-100 text-gray-300 border border-gray-200/60 cursor-not-allowed opacity-40 shadow-2xs"
+                    title="Desfazer Início (disponível apenas quando o atendimento estiver em andamento)"
+                  >
+                    <RotateCcw className="w-4 h-4" />
                   </button>
                 )}
 
-                {/* Excluir (com justificativa) */}
+                {/* 6. EXCLUIR (Com justificativa obrigatória) */}
                 <button
                   type="button"
                   onClick={() => {

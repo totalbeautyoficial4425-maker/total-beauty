@@ -23,7 +23,7 @@ import {
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Attendance, Comanda } from '../types';
-import { formatBRL, formatDateBR } from '../utils/formatters';
+import { formatBRL, formatDateBR, formatPaymentMethodLabel } from '../utils/formatters';
 import { getTodayDate, getYesterdayDate } from '../services/storage';
 import { ProductConsumptionModal } from '../components/modals/ProductConsumptionModal';
 
@@ -797,9 +797,9 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
               const isYesterday = group.date === yesterdayStr;
               const dateLabel = isToday ? 'Hoje' : isYesterday ? 'Ontem' : formatDateBR(group.date);
 
-              // Proxy attendance in case this group was loaded directly from a finalized comanda record
-              const proxyAttendance: Attendance = group.attendances[0] || {
-                id: group.comanda?.id || `atd_${group.clientId}_${group.date}`,
+              // Proxy attendance for full comanda closing/viewing
+              const proxyComandaAttendance: Attendance = {
+                id: group.comanda?.id || `cmd_${group.clientId}_${group.date}`,
                 clientId: group.clientId,
                 clientName: group.client.name,
                 serviceId: '',
@@ -808,11 +808,13 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                 professionalName: 'Salão',
                 date: group.date,
                 startedAt: '08:00',
-                finishedAt: 'Concluído',
+                finishedAt: group.isFullyPaid ? 'Concluído' : undefined,
                 grossValue: group.subtotal,
                 discountValue: group.comanda?.discountTotal || 0,
                 discountType: 'fixed',
                 netValue: group.netTotal,
+                commissionPercentage: 0,
+                commissionAmount: 0,
                 paymentStatus: group.isFullyPaid ? 'pago' : 'pendente',
                 paidAmount: group.paidTotal,
                 createdAt: group.comanda?.createdAt || new Date().toISOString(),
@@ -820,6 +822,10 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
               };
 
               const displayTotal = group.netTotal || group.subtotal;
+              const pendingBalance = Math.max(0, displayTotal - group.paidTotal);
+              const myPortionTotal = group.attendances
+                .filter(a => a.professionalId === myProfId)
+                .reduce((acc, a) => acc + (a.netValue || a.grossValue || 0), 0);
 
               return (
                 <div
@@ -827,7 +833,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                   className="p-5 rounded-3xl bg-tb-ivory/80 border-2 border-tb-rose-light/80 shadow-soft flex flex-col justify-between space-y-4"
                 >
                   {/* Comanda Header */}
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-serif-brand text-xl font-bold text-tb-brown-dark">
@@ -840,7 +846,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                         </span>
 
                         {/* Paid/Open Badge */}
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                           group.isFullyPaid 
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
                             : group.hasOpenService 
@@ -856,19 +862,48 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                       </p>
                     </div>
 
+                    {/* Prominent Totals Display */}
                     <div className="text-right shrink-0">
-                      <span className="text-[10px] text-tb-gray-neutral uppercase block font-semibold">Total Comanda</span>
-                      <span className="text-lg font-bold text-tb-brown-dark">
-                        {!isProfessional
-                          ? formatBRL(displayTotal)
-                          : formatBRL(group.attendances.filter(a => a.professionalId === myProfId).reduce((acc, a) => acc + (a.netValue || a.grossValue || 0), 0))
-                        }
-                        {isProfessional && group.attendances.some(a => a.professionalId !== myProfId) && (
-                          <span className="block text-[9px] text-tb-gray-neutral font-normal">(Sua parte)</span>
-                        )}
+                      <span className="text-[10px] text-tb-gray-neutral uppercase block font-semibold">Valor Total da Comanda</span>
+                      <span className="text-xl font-bold text-tb-brown-dark block">
+                        {formatBRL(displayTotal)}
                       </span>
+                      <div className="flex items-center gap-1.5 justify-end mt-1 flex-wrap">
+                        <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          Pago: {formatBRL(group.paidTotal)}
+                        </span>
+                        {pendingBalance > 0 && (
+                          <span className="text-[10px] font-semibold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            Pendente: {formatBRL(pendingBalance)}
+                          </span>
+                        )}
+                        {isProfessional && myPortionTotal > 0 && (
+                          <span className="text-[10px] font-bold text-tb-rose-primary bg-tb-rose-blush px-2 py-0.5 rounded-full border border-tb-rose-light">
+                            Sua parte: {formatBRL(myPortionTotal)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Registered Payments Summary Box (when payments exist) */}
+                  {group.comanda?.payments && group.comanda.payments.length > 0 && (
+                    <div className="p-2.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 space-y-1 text-xs">
+                      <div className="text-[10px] uppercase font-bold text-emerald-900 tracking-wider flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Recebimentos Registrados nesta Comanda ({formatBRL(group.paidTotal)} de {formatBRL(displayTotal)})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {group.comanda.payments.map((p, pIdx) => (
+                          <span key={p.id || pIdx} className="bg-white/90 text-emerald-950 px-2.5 py-1 rounded-xl border border-emerald-200 shadow-2xs text-[11px] flex items-center gap-1">
+                            <strong>{p.professionalName || 'Salão'}</strong>:
+                            <span className="font-bold text-emerald-800">{formatBRL(p.amount)}</span>
+                            <span className="text-[10px] text-tb-gray-neutral font-semibold uppercase">({formatPaymentMethodLabel(p.paymentMethod)})</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Services List inside this Comanda */}
                   <div className="space-y-2 bg-tb-white p-3 rounded-2xl border border-tb-rose-light/50">
@@ -879,40 +914,77 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                     ) : (
                       group.attendances.map(atd => {
                         const isMine = isProfessional && atd.professionalId === myProfId;
+                        const srvPaymentMethod = atd.paymentMethod 
+                          ? formatPaymentMethodLabel(atd.paymentMethod)
+                          : group.comanda?.payments?.find(p => p.attendanceId === atd.id)?.paymentMethod
+                          ? formatPaymentMethodLabel(group.comanda?.payments?.find(p => p.attendanceId === atd.id)?.paymentMethod)
+                          : null;
 
                         return (
                           <div
                             key={atd.id}
-                            className="p-2.5 rounded-xl bg-tb-ivory/60 border border-tb-rose-light/40 flex items-center justify-between gap-3 text-xs"
+                            className="p-3 rounded-xl bg-tb-ivory/60 border border-tb-rose-light/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
                           >
-                            <div>
+                            <div className="space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-tb-brown-dark">
+                                <span className="font-bold text-sm text-tb-brown-dark">
                                   {atd.serviceName}
                                 </span>
                                 {atd.finishedAt ? (
-                                  <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-semibold">
-                                    Concluído às {atd.finishedAt}
+                                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                                    ✓ Concluído às {atd.finishedAt}
                                   </span>
                                 ) : (
-                                  <span className="text-[9px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded font-semibold animate-pulse">
+                                  <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200 animate-pulse">
                                     Na Cadeira (Início: {atd.startedAt})
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-tb-gray-neutral mt-0.5">
-                                Profissional: <span className="font-semibold text-tb-brown-dark">{atd.professionalName}</span>
-                                {(!isProfessional || isMine) && ` • ${formatBRL(atd.netValue || atd.grossValue)}`}
-                              </p>
+
+                              <div className="flex items-center gap-2 flex-wrap text-[11px] text-tb-gray-neutral">
+                                <span>Profissional: <strong className="text-tb-brown-dark">{atd.professionalName}</strong></span>
+                                <span>•</span>
+                                <span className="font-bold text-tb-brown-dark">Valor: {formatBRL(atd.netValue || atd.grossValue)}</span>
+                                {srvPaymentMethod ? (
+                                  <>
+                                    <span>•</span>
+                                    <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                      ✓ Pago via {srvPaymentMethod} ({formatBRL(atd.paidAmount || atd.netValue)})
+                                    </span>
+                                  </>
+                                ) : atd.finishedAt ? (
+                                  <>
+                                    <span>•</span>
+                                    <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-100 text-amber-900 border border-amber-200">
+                                      ⏳ Aguardando registro de pagamento
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-[10px] text-tb-gray-neutral italic">
+                                      Aguardando término
+                                    </span>
+                                  </>
+                                )}
+                                {(!isProfessional || isMine) && atd.commissionAmount > 0 && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-tb-rose-primary font-semibold">
+                                      Comissão: {formatBRL(atd.commissionAmount)} ({atd.commissionPercentage || 50}%)
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
 
                             {/* Quick Actions for this Service */}
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
                               {/* Product Consumption Button */}
                               <button
                                 type="button"
                                 onClick={() => setAttendanceForConsumption(atd)}
-                                className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold flex items-center gap-1 transition-colors"
                                 title="Registrar produtos e gramatura gastos neste serviço"
                               >
                                 <Scale className="w-3 h-3" />
@@ -920,20 +992,20 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                               </button>
 
                               {/* Voltar para Solicitação / Reverter Início Errôneo */}
-                              {(!isProfessional || isMine) && !group.isFullyPaid && (
+                              {(!isProfessional || isMine) && !group.isFullyPaid && !atd.finishedAt && (
                                 <button
                                   type="button"
                                   onClick={() => setRevertConfirmAttendance(atd)}
-                                  className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                  className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold flex items-center gap-1 transition-colors"
                                   title="Voltar atendimento para solicitação/agendamento caso tenha sido iniciado por engano"
                                 >
                                   <RotateCcw className="w-3 h-3" />
-                                  Voltar
+                                  Desfazer Início
                                 </button>
                               )}
 
                               {/* Remover Serviço da Comanda */}
-                              {(!isProfessional || isMine) && !group.isFullyPaid && (
+                              {(!isProfessional || isMine) && !group.isFullyPaid && !atd.finishedAt && (
                                 <button
                                   type="button"
                                   onClick={() => setRemoveServiceConfirm(atd)}
@@ -941,7 +1013,6 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                                   title="Remover este serviço da comanda"
                                 >
                                   <Trash2 className="w-3 h-3 text-red-600" />
-                                  Remover
                                 </button>
                               )}
 
@@ -950,11 +1021,11 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => onOpenFinishAttendance(atd)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 transition-colors"
-                                  title="Concluir este serviço"
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+                                  title="Concluir e registrar recebimento deste serviço"
                                 >
-                                  <Check className="w-3 h-3" />
-                                  Finalizar
+                                  <Check className="w-3.5 h-3.5" />
+                                  Finalizar & Receber
                                 </button>
                               )}
                             </div>
@@ -965,9 +1036,11 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                   </div>
 
                   {/* Comanda Footer: Reopen & Pay / Receipt Buttons */}
-                  <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-tb-rose-light/40 flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs text-tb-brown-soft font-semibold">
-                      {group.attendances.length > 1 ? 'Múltiplos serviços' : 'Serviço individual'}
+                      {group.attendances.length > 1 
+                        ? `${group.attendances.length} profissionais/serviços consolidados` 
+                        : 'Serviço individual'}
                     </span>
 
                     <div className="flex items-center gap-2">
@@ -981,7 +1054,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                             if (!isConfirmed) return;
                             const res = reopenComanda(group.comanda?.id || group.attendances[0]?.comandaId || cli.id, group.date);
                             if (res.success) {
-                              onOpenFinishAttendance(proxyAttendance);
+                              onOpenFinishAttendance(proxyComandaAttendance);
                             }
                           }}
                           className="px-3 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
@@ -993,7 +1066,7 @@ export const AtendimentosPage: React.FC<AtendimentosPageProps> = ({
                       )}
 
                       <button
-                        onClick={() => onOpenFinishAttendance(proxyAttendance)}
+                        onClick={() => onOpenFinishAttendance(proxyComandaAttendance)}
                         className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-soft flex items-center gap-1.5 transition-all"
                       >
                         <Receipt className="w-4 h-4" />
