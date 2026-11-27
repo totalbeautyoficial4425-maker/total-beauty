@@ -107,6 +107,31 @@ export const cloudSyncService = {
 
     try {
       const storedVersion = localStorage.getItem(LAST_CLOUD_VERSION_KEY) || lastKnownVersion;
+      const localApts = storageService.getAppointments();
+      const localClients = storageService.getClients();
+      const hasLocalData = localApts.length > 0 && localClients.length > 0;
+
+      // FAST PATH: Ultra-lightweight 50-byte version check if device already has base data
+      if (hasLocalData && storedVersion) {
+        try {
+          const vUrl = `${SYNC_API_ENDPOINT}?version_only=true&current_version=${encodeURIComponent(storedVersion)}&t=${Date.now()}`;
+          const vRes = await fetch(vUrl, {
+            headers: {
+              'Cache-Control': 'no-cache, no-store',
+              'X-Sync-Version': storedVersion
+            }
+          });
+          if (vRes.ok) {
+            const vJson = await vRes.json();
+            if (vJson.notModified || (vJson.version && vJson.version === storedVersion)) {
+              return { success: true, hasChanges: false };
+            }
+          }
+        } catch {
+          // If lightweight check had a transient error, continue to full pull below
+        }
+      }
+
       const url = storedVersion 
         ? `${SYNC_API_ENDPOINT}?current_version=${encodeURIComponent(storedVersion)}&t=${Date.now()}`
         : `${SYNC_API_ENDPOINT}?t=${Date.now()}`;
@@ -131,9 +156,6 @@ export const cloudSyncService = {
 
       // Fast path: server verified version is unchanged
       if (resJson.notModified) {
-        const localApts = storageService.getAppointments();
-        const localClients = storageService.getClients();
-        // If local device already has data, no-op in 5ms
         if (localApts.length > 0 && localClients.length > 0) {
           return { success: true, hasChanges: false };
         }
@@ -153,7 +175,6 @@ export const cloudSyncService = {
       const localAtds = storageService.getAttendances();
       const localCmds = storageService.getComandas();
       const localPays = storageService.getPayments();
-      const localApts = storageService.getAppointments();
 
       const isLocalMissingData = 
         (localAtds.length === 0 && (cloudData.attendances?.length || 0) > 0) ||
@@ -176,6 +197,7 @@ export const cloudSyncService = {
       // 1. Appointments
       if (Array.isArray(cloudData.appointments)) {
         const merged = mergeCollections(localApts, cloudData.appointments, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.APPOINTMENTS, merged);
         if (merged.length !== localApts.length || JSON.stringify(merged) !== JSON.stringify(localApts)) {
           safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, merged);
@@ -186,6 +208,7 @@ export const cloudSyncService = {
       // 2. Attendances
       if (Array.isArray(cloudData.attendances)) {
         const merged = mergeCollections(localAtds, cloudData.attendances, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.ATTENDANCES, merged);
         if (merged.length !== localAtds.length || JSON.stringify(merged) !== JSON.stringify(localAtds)) {
           safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, merged);
@@ -196,6 +219,7 @@ export const cloudSyncService = {
       // 3. Comandas
       if (Array.isArray(cloudData.comandas)) {
         const merged = mergeCollections(localCmds, cloudData.comandas, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.COMANDAS, merged);
         if (merged.length !== localCmds.length || JSON.stringify(merged) !== JSON.stringify(localCmds)) {
           safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.COMANDAS, merged);
@@ -206,6 +230,7 @@ export const cloudSyncService = {
       // 4. Payments
       if (Array.isArray(cloudData.payments)) {
         const merged = mergeCollections(localPays, cloudData.payments, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.PAYMENTS, merged);
         if (merged.length !== localPays.length || JSON.stringify(merged) !== JSON.stringify(localPays)) {
           safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.PAYMENTS, merged);
@@ -217,6 +242,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.expenses)) {
         const local = storageService.getExpenses();
         const merged = mergeCollections(local, cloudData.expenses, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.EXPENSES, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.EXPENSES, merged);
@@ -228,6 +254,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.inventory) && cloudData.inventory.length > 0) {
         const local = storageService.getInventory();
         const merged = mergeCollections(local, cloudData.inventory);
+        storageService.setMemoryCache(STORAGE_KEYS.INVENTORY, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.INVENTORY, merged);
@@ -239,6 +266,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.consumptions)) {
         const local = storageService.getConsumptions();
         const merged = mergeCollections(local, cloudData.consumptions, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.CONSUMPTIONS, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, merged);
@@ -250,6 +278,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.clientPackages)) {
         const local = storageService.getClientPackages();
         const merged = mergeCollections(local, cloudData.clientPackages, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.CLIENT_PACKAGES, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, merged);
@@ -261,6 +290,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.scheduleBlocks)) {
         const local = storageService.getScheduleBlocks();
         const merged = mergeCollections(local, cloudData.scheduleBlocks, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.SCHEDULE_BLOCKS, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, merged);
@@ -272,6 +302,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.clients) && cloudData.clients.length > 0) {
         const local = storageService.getClients();
         const merged = mergeCollections(local, cloudData.clients, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.CLIENTS, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.CLIENTS, merged);
@@ -283,6 +314,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.services) && cloudData.services.length > 0) {
         const local = storageService.getServices();
         const merged = mergeCollections(local, cloudData.services, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.SERVICES, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.SERVICES, merged);
@@ -294,6 +326,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.professionals) && cloudData.professionals.length > 0) {
         const local = storageService.getProfessionals();
         const merged = mergeCollections(local, cloudData.professionals, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.PROFESSIONALS, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, merged);
@@ -351,6 +384,7 @@ export const cloudSyncService = {
           }
         });
 
+        storageService.setMemoryCache(STORAGE_KEYS.USERS, mergedUsers);
         if (usersModified || mergedUsers.length !== local.length || JSON.stringify(local) !== JSON.stringify(mergedUsers)) {
           safeSetItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
           idbStorage.setItem(STORAGE_KEYS.USERS, mergedUsers);
@@ -359,6 +393,7 @@ export const cloudSyncService = {
       }
 
       if (cloudData.settings && typeof cloudData.settings === 'object') {
+        storageService.setMemoryCache(STORAGE_KEYS.SETTINGS, cloudData.settings);
         safeSetItem(STORAGE_KEYS.SETTINGS, JSON.stringify(cloudData.settings));
         idbStorage.setItem(STORAGE_KEYS.SETTINGS, cloudData.settings);
       }
@@ -367,6 +402,7 @@ export const cloudSyncService = {
       if (Array.isArray(cloudData.appointmentAuditLogs)) {
         const local = storageService.getAppointmentAuditLogs();
         const merged = mergeCollections(local, cloudData.appointmentAuditLogs, deletedIdsSet);
+        storageService.setMemoryCache(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, merged);
         if (merged.length !== local.length || JSON.stringify(merged) !== JSON.stringify(local)) {
           safeSetItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, JSON.stringify(merged));
           idbStorage.setItem(STORAGE_KEYS.APPOINTMENT_AUDIT_LOGS, merged);
@@ -557,7 +593,7 @@ export const cloudSyncService = {
     }
     pendingPushTimeout = setTimeout(() => {
       this.pushToCloud();
-    }, 250);
+    }, 100);
   },
 
   /**
@@ -582,13 +618,13 @@ export const cloudSyncService = {
     // 1. Initial pull on startup
     triggerPullIfChanges();
 
-    // 2. Real-time sync heartbeat every 5 seconds across phones and computers
+    // 2. Real-time sync heartbeat every 2.5 seconds across phones and computers
     const interval = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Pause while app is completely in background to save phone battery
       }
       await triggerPullIfChanges();
-    }, 5000);
+    }, 2500);
 
     // 3. Immediate sync on BroadcastChannel message (instant multi-tab sync on same device)
     const handleBroadcast = (ev: MessageEvent) => {

@@ -25,12 +25,59 @@ import {
 import { idbStorage } from './idbStorage';
 import avecClientsData from '../data/avecClients.json';
 
+// In-memory cache mirror to guarantee instant zero-lag reads and bypass mobile LocalStorage quota limits
+const memoryCache: Record<string, any> = {};
+
+export function setMemoryCache<T>(key: string, data: T): void {
+  if (data !== undefined && data !== null) {
+    memoryCache[key] = data;
+  }
+}
+
+export function getMemoryCache<T>(key: string): T | undefined {
+  return memoryCache[key];
+}
+
+function cleanLegacyLocalStorageKeys(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const activeKeyValues = new Set(Object.values(STORAGE_KEYS));
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tb_') && !activeKeyValues.has(k as any) && !k.startsWith('tb_pwd_') && k !== 'tb_session_v2' && k !== 'tb_last_cloud_version') {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+  } catch {}
+}
+
 function safeSetItem(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch (err: any) {
     if (err?.name === 'QuotaExceededError' || err?.code === 22) {
-      console.warn(`LocalStorage quota exceeded for ${key}. Persisting via High-Capacity IndexedDB & Firebase Cloud.`);
+      console.warn(`LocalStorage quota exceeded for ${key}. Auto-cleaning legacy keys and trimming cache.`);
+      cleanLegacyLocalStorageKeys();
+      // If deleted_ids is filling up localStorage, keep only the latest 100 in localStorage
+      if (key === STORAGE_KEYS.DELETED_IDS) {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed) && parsed.length > 100) {
+            localStorage.setItem(key, JSON.stringify(parsed.slice(-100)));
+            return;
+          }
+        } catch {}
+      }
+      // Retry writing after cleanup
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Safe to ignore: high-capacity in-memory cache and IndexedDB retain all data
+      }
     } else {
       console.warn(`Error writing to localStorage for ${key}:`, err);
     }
@@ -2204,10 +2251,20 @@ export const storageService = {
     notifyDataChanged();
   },
 
+  setMemoryCache(key: string, data: any): void {
+    if (data !== undefined && data !== null) {
+      memoryCache[key] = data;
+    }
+  },
+
   getClients(): Client[] {
+    if (memoryCache[STORAGE_KEYS.CLIENTS] && Array.isArray(memoryCache[STORAGE_KEYS.CLIENTS]) && memoryCache[STORAGE_KEYS.CLIENTS].length > 0) {
+      return memoryCache[STORAGE_KEYS.CLIENTS];
+    }
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
     if (!raw) {
+      memoryCache[STORAGE_KEYS.CLIENTS] = INITIAL_CLIENTS;
       safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
       idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
       return INITIAL_CLIENTS;
@@ -2215,18 +2272,22 @@ export const storageService = {
     try {
       const parsed: Client[] = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
+        memoryCache[STORAGE_KEYS.CLIENTS] = INITIAL_CLIENTS;
         safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
         idbStorage.setItem(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
         return INITIAL_CLIENTS;
       }
+      memoryCache[STORAGE_KEYS.CLIENTS] = parsed;
       return parsed;
     } catch {
+      memoryCache[STORAGE_KEYS.CLIENTS] = INITIAL_CLIENTS;
       safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(INITIAL_CLIENTS));
       return INITIAL_CLIENTS;
     }
   },
 
   saveClients(clients: Client[]): void {
+    memoryCache[STORAGE_KEYS.CLIENTS] = clients;
     safeSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
     idbStorage.setItem(STORAGE_KEYS.CLIENTS, clients);
     syncCollectionToFirestore('clients', clients);
@@ -2234,9 +2295,13 @@ export const storageService = {
   },
 
   getServices(): Service[] {
+    if (memoryCache[STORAGE_KEYS.SERVICES] && Array.isArray(memoryCache[STORAGE_KEYS.SERVICES]) && memoryCache[STORAGE_KEYS.SERVICES].length > 0) {
+      return memoryCache[STORAGE_KEYS.SERVICES];
+    }
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.SERVICES);
     if (!raw) {
+      memoryCache[STORAGE_KEYS.SERVICES] = INITIAL_SERVICES;
       safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
       return INITIAL_SERVICES;
     }
@@ -2246,13 +2311,16 @@ export const storageService = {
       safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(INITIAL_SERVICES));
     }
     // Ensure commission percentage is present and matches official catalog
-    return services.map(s => ({
+    const resolved = services.map(s => ({
       ...s,
       commissionPercentage: OFFICIAL_SERVICE_COMMISSIONS[s.name] ?? s.commissionPercentage ?? 50,
     }));
+    memoryCache[STORAGE_KEYS.SERVICES] = resolved;
+    return resolved;
   },
 
   saveServices(services: Service[]): void {
+    memoryCache[STORAGE_KEYS.SERVICES] = services;
     safeSetItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
     idbStorage.setItem(STORAGE_KEYS.SERVICES, services);
     syncCollectionToFirestore('services', services);
@@ -2260,9 +2328,13 @@ export const storageService = {
   },
 
   getProfessionals(): Professional[] {
+    if (memoryCache[STORAGE_KEYS.PROFESSIONALS] && Array.isArray(memoryCache[STORAGE_KEYS.PROFESSIONALS]) && memoryCache[STORAGE_KEYS.PROFESSIONALS].length > 0) {
+      return memoryCache[STORAGE_KEYS.PROFESSIONALS];
+    }
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.PROFESSIONALS);
     if (!raw) {
+      memoryCache[STORAGE_KEYS.PROFESSIONALS] = INITIAL_PROFESSIONALS;
       safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(INITIAL_PROFESSIONALS));
       return INITIAL_PROFESSIONALS;
     }
@@ -2277,10 +2349,12 @@ export const storageService = {
       isActive: (p.id === 'prof_thalita' || p.username === 'thalita') ? false : p.isActive,
       commissionPercentage: p.commissionPercentage ?? 50,
     }));
+    memoryCache[STORAGE_KEYS.PROFESSIONALS] = profs;
     return profs;
   },
 
   saveProfessionals(professionals: Professional[]): void {
+    memoryCache[STORAGE_KEYS.PROFESSIONALS] = professionals;
     safeSetItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
     idbStorage.setItem(STORAGE_KEYS.PROFESSIONALS, professionals);
     syncCollectionToFirestore('professionals', professionals);
@@ -2288,16 +2362,28 @@ export const storageService = {
   },
 
   getAppointments(): Appointment[] {
+    if (memoryCache[STORAGE_KEYS.APPOINTMENTS] && Array.isArray(memoryCache[STORAGE_KEYS.APPOINTMENTS])) {
+      return memoryCache[STORAGE_KEYS.APPOINTMENTS];
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.APPOINTMENTS);
     if (!raw) {
       const initial = generateSeedAppointments();
+      memoryCache[STORAGE_KEYS.APPOINTMENTS] = initial;
       safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw);
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        memoryCache[STORAGE_KEYS.APPOINTMENTS] = parsed;
+        return parsed;
+      }
+    } catch {}
+    return [];
   },
 
   saveAppointments(appointments: Appointment[]): void {
+    memoryCache[STORAGE_KEYS.APPOINTMENTS] = appointments;
     safeSetItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
     idbStorage.setItem(STORAGE_KEYS.APPOINTMENTS, appointments);
     syncCollectionToFirestore('appointments', appointments);
@@ -2305,8 +2391,13 @@ export const storageService = {
   },
 
   getDeletedIds(): string[] {
+    if (memoryCache[STORAGE_KEYS.DELETED_IDS] && Array.isArray(memoryCache[STORAGE_KEYS.DELETED_IDS])) {
+      return memoryCache[STORAGE_KEYS.DELETED_IDS];
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.DELETED_IDS);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.DELETED_IDS] = parsed;
+    return parsed;
   },
 
   recordDeletedId(id: string): void {
@@ -2315,19 +2406,26 @@ export const storageService = {
     if (!existing.has(id)) {
       existing.add(id);
       const arr = Array.from(existing);
+      memoryCache[STORAGE_KEYS.DELETED_IDS] = arr;
       safeSetItem(STORAGE_KEYS.DELETED_IDS, JSON.stringify(arr));
       idbStorage.setItem(STORAGE_KEYS.DELETED_IDS, arr);
     }
   },
 
   getAttendances(): Attendance[] {
+    if (memoryCache[STORAGE_KEYS.ATTENDANCES] && Array.isArray(memoryCache[STORAGE_KEYS.ATTENDANCES])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.ATTENDANCES].filter((a: any) => a && a.id && !deletedIds.has(a.id) && !a.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.ATTENDANCES);
     const list: Attendance[] = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.ATTENDANCES] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(a => a && a.id && !deletedIds.has(a.id) && !(a as any).deletedAt);
   },
 
   saveAttendances(attendances: Attendance[]): void {
+    memoryCache[STORAGE_KEYS.ATTENDANCES] = attendances;
     safeSetItem(STORAGE_KEYS.ATTENDANCES, JSON.stringify(attendances));
     idbStorage.setItem(STORAGE_KEYS.ATTENDANCES, attendances);
     syncCollectionToFirestore('attendances', attendances);
@@ -2335,18 +2433,25 @@ export const storageService = {
   },
 
   getPayments(): PaymentTransaction[] {
+    if (memoryCache[STORAGE_KEYS.PAYMENTS] && Array.isArray(memoryCache[STORAGE_KEYS.PAYMENTS])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.PAYMENTS].filter((p: any) => p && p.id && !deletedIds.has(p.id) && !p.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
     if (!raw) {
       const initial = generateSeedPayments();
+      memoryCache[STORAGE_KEYS.PAYMENTS] = initial;
       safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(initial));
       return initial;
     }
     const list: PaymentTransaction[] = JSON.parse(raw);
+    memoryCache[STORAGE_KEYS.PAYMENTS] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(p => p && p.id && !deletedIds.has(p.id) && !(p as any).deletedAt);
   },
 
   savePayments(payments: PaymentTransaction[]): void {
+    memoryCache[STORAGE_KEYS.PAYMENTS] = payments;
     safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
     idbStorage.setItem(STORAGE_KEYS.PAYMENTS, payments);
     syncCollectionToFirestore('payments', payments);
@@ -2354,18 +2459,25 @@ export const storageService = {
   },
 
   getExpenses(): Expense[] {
+    if (memoryCache[STORAGE_KEYS.EXPENSES] && Array.isArray(memoryCache[STORAGE_KEYS.EXPENSES])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.EXPENSES].filter((e: any) => e && e.id && !deletedIds.has(e.id) && !e.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     if (!raw) {
       const initial = generateSeedExpenses();
+      memoryCache[STORAGE_KEYS.EXPENSES] = initial;
       safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(initial));
       return initial;
     }
     const list: Expense[] = JSON.parse(raw);
+    memoryCache[STORAGE_KEYS.EXPENSES] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(e => e && e.id && !deletedIds.has(e.id) && !(e as any).deletedAt);
   },
 
   saveExpenses(expenses: Expense[]): void {
+    memoryCache[STORAGE_KEYS.EXPENSES] = expenses;
     safeSetItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
     idbStorage.setItem(STORAGE_KEYS.EXPENSES, expenses);
     syncCollectionToFirestore('expenses', expenses);
@@ -2373,9 +2485,13 @@ export const storageService = {
   },
 
   getInventory(): InventoryItem[] {
+    if (memoryCache[STORAGE_KEYS.INVENTORY] && Array.isArray(memoryCache[STORAGE_KEYS.INVENTORY]) && memoryCache[STORAGE_KEYS.INVENTORY].length > 0) {
+      return memoryCache[STORAGE_KEYS.INVENTORY];
+    }
     ensureCleanProductionState();
     const raw = localStorage.getItem(STORAGE_KEYS.INVENTORY);
     if (!raw) {
+      memoryCache[STORAGE_KEYS.INVENTORY] = INITIAL_INVENTORY;
       safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
       idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
       return INITIAL_INVENTORY;
@@ -2383,12 +2499,15 @@ export const storageService = {
     try {
       const parsed: InventoryItem[] = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
+        memoryCache[STORAGE_KEYS.INVENTORY] = INITIAL_INVENTORY;
         safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
         idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
         return INITIAL_INVENTORY;
       }
+      memoryCache[STORAGE_KEYS.INVENTORY] = parsed;
       return parsed;
     } catch {
+      memoryCache[STORAGE_KEYS.INVENTORY] = INITIAL_INVENTORY;
       safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(INITIAL_INVENTORY));
       idbStorage.setItem(STORAGE_KEYS.INVENTORY, INITIAL_INVENTORY);
       return INITIAL_INVENTORY;
@@ -2396,6 +2515,7 @@ export const storageService = {
   },
 
   saveInventory(inventory: InventoryItem[]): void {
+    memoryCache[STORAGE_KEYS.INVENTORY] = inventory;
     safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
     idbStorage.setItem(STORAGE_KEYS.INVENTORY, inventory);
     syncCollectionToFirestore('inventory', inventory);
@@ -2403,13 +2523,19 @@ export const storageService = {
   },
 
   getConsumptions(): ProductConsumption[] {
+    if (memoryCache[STORAGE_KEYS.CONSUMPTIONS] && Array.isArray(memoryCache[STORAGE_KEYS.CONSUMPTIONS])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.CONSUMPTIONS].filter((c: any) => c && c.id && !deletedIds.has(c.id) && !c.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.CONSUMPTIONS);
     const list: ProductConsumption[] = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.CONSUMPTIONS] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(c => c && c.id && !deletedIds.has(c.id) && !(c as any).deletedAt);
   },
 
   saveConsumptions(consumptions: ProductConsumption[]): void {
+    memoryCache[STORAGE_KEYS.CONSUMPTIONS] = consumptions;
     safeSetItem(STORAGE_KEYS.CONSUMPTIONS, JSON.stringify(consumptions));
     idbStorage.setItem(STORAGE_KEYS.CONSUMPTIONS, consumptions);
     syncCollectionToFirestore('consumptions', consumptions);
@@ -2417,13 +2543,19 @@ export const storageService = {
   },
 
   getComandas(): Comanda[] {
+    if (memoryCache[STORAGE_KEYS.COMANDAS] && Array.isArray(memoryCache[STORAGE_KEYS.COMANDAS])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.COMANDAS].filter((c: any) => c && c.id && !deletedIds.has(c.id) && !c.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.COMANDAS);
     const list: Comanda[] = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.COMANDAS] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(c => c && c.id && !deletedIds.has(c.id) && !(c as any).deletedAt);
   },
 
   saveComandas(comandas: Comanda[]): void {
+    memoryCache[STORAGE_KEYS.COMANDAS] = comandas;
     safeSetItem(STORAGE_KEYS.COMANDAS, JSON.stringify(comandas));
     idbStorage.setItem(STORAGE_KEYS.COMANDAS, comandas);
     syncCollectionToFirestore('comandas', comandas);
@@ -2623,11 +2755,17 @@ export const storageService = {
   },
 
   getClientPackages(): ClientPackage[] {
+    if (memoryCache[STORAGE_KEYS.CLIENT_PACKAGES] && Array.isArray(memoryCache[STORAGE_KEYS.CLIENT_PACKAGES])) {
+      return memoryCache[STORAGE_KEYS.CLIENT_PACKAGES];
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.CLIENT_PACKAGES);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.CLIENT_PACKAGES] = parsed;
+    return parsed;
   },
 
   saveClientPackages(packages: ClientPackage[]): void {
+    memoryCache[STORAGE_KEYS.CLIENT_PACKAGES] = packages;
     safeSetItem(STORAGE_KEYS.CLIENT_PACKAGES, JSON.stringify(packages));
     idbStorage.setItem(STORAGE_KEYS.CLIENT_PACKAGES, packages);
     syncCollectionToFirestore('clientPackages', packages);
@@ -2635,13 +2773,19 @@ export const storageService = {
   },
 
   getScheduleBlocks(): ScheduleBlock[] {
+    if (memoryCache[STORAGE_KEYS.SCHEDULE_BLOCKS] && Array.isArray(memoryCache[STORAGE_KEYS.SCHEDULE_BLOCKS])) {
+      const deletedIds = new Set(this.getDeletedIds());
+      return memoryCache[STORAGE_KEYS.SCHEDULE_BLOCKS].filter((b: any) => b && b.id && !deletedIds.has(b.id) && !b.deletedAt);
+    }
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULE_BLOCKS);
     const list: ScheduleBlock[] = raw ? JSON.parse(raw) : [];
+    memoryCache[STORAGE_KEYS.SCHEDULE_BLOCKS] = list;
     const deletedIds = new Set(this.getDeletedIds());
     return list.filter(b => b && b.id && !deletedIds.has(b.id) && !(b as any).deletedAt);
   },
 
   saveScheduleBlocks(blocks: ScheduleBlock[]): void {
+    memoryCache[STORAGE_KEYS.SCHEDULE_BLOCKS] = blocks;
     safeSetItem(STORAGE_KEYS.SCHEDULE_BLOCKS, JSON.stringify(blocks));
     idbStorage.setItem(STORAGE_KEYS.SCHEDULE_BLOCKS, blocks);
     syncCollectionToFirestore('scheduleBlocks', blocks);
@@ -2674,6 +2818,7 @@ export const storageService = {
       for (const key of keys) {
         const idbVal = await idbStorage.getItem<any>(key);
         if (idbVal !== null && idbVal !== undefined) {
+          memoryCache[key] = idbVal;
           const localRaw = localStorage.getItem(key);
           if (!localRaw) {
             safeSetItem(key, JSON.stringify(idbVal));
@@ -2702,6 +2847,7 @@ export const storageService = {
                   }
                 });
                 const merged = Array.from(map.values());
+                memoryCache[key] = merged;
                 if (merged.length !== localArr.length || JSON.stringify(merged) !== JSON.stringify(localArr)) {
                   safeSetItem(key, JSON.stringify(merged));
                   await idbStorage.setItem(key, merged);

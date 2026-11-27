@@ -53,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenChangePassword,
 }) => {
   const { currentUser, logout } = useAuth();
-  const { clients, services, lowStockCount, outOfStockCount } = useData();
+  const { clients, services, lowStockCount, outOfStockCount, refreshData } = useData();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -66,6 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
     try {
       await cloudSyncService.pushToCloud();
       const res = await cloudSyncService.pullFromCloud();
+      refreshData();
       setSyncFeedback(res.hasChanges ? 'Atualizado!' : 'Sincronizado!');
       setTimeout(() => setSyncFeedback(null), 2500);
     } catch {

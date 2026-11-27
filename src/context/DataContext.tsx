@@ -933,9 +933,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentMonth = today.substring(0, 7);
     const finStartDate = settings?.financialStartDate || '2026-10-22';
 
+    const prof = professionals.find(p => 
+      p.id === professionalId || 
+      p.userId === professionalId || 
+      p.name.toLowerCase() === professionalId.toLowerCase() ||
+      (p.username && p.username.toLowerCase() === professionalId.toLowerCase())
+    );
+    const targetProfId = prof?.id || professionalId;
+    const targetProfName = prof?.name?.toLowerCase() || '';
+
     // All payments for this professional starting from financialStartDate
     const myTransactions = payments
-      .filter(p => p.professionalId === professionalId && (!p.date || p.date >= finStartDate))
+      .filter(p => {
+        if (p.date && p.date < finStartDate) return false;
+        if (p.professionalId === targetProfId || p.professionalId === professionalId) return true;
+        if (targetProfName && p.professionalName && p.professionalName.toLowerCase() === targetProfName) return true;
+        return false;
+      })
       .sort((a, b) => b.date.localeCompare(a.date));
 
     // Today's metrics (paid commissions + gross + net)
@@ -952,7 +966,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const monthGross = monthTransactions.reduce((acc, p) => acc + (p.grossValue || 0), 0);
     const monthNet = monthTransactions.reduce((acc, p) => acc + (p.netValue || 0), 0);
 
-    const prof = professionals.find(p => p.id === professionalId);
     const profComm = prof?.commissionPercentage ?? 50;
 
     // Pending commissions (attendances concluded but client hasn't fully paid)
@@ -963,7 +976,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 0);
 
     // Appointments for this professional
-    const myAppointments = appointments.filter(a => a.professionalId === professionalId);
+    const myAppointments = appointments.filter(a => {
+      if (a.professionalId === targetProfId || a.professionalId === professionalId) return true;
+      if (targetProfName && a.professionalName && a.professionalName.toLowerCase() === targetProfName) return true;
+      return false;
+    });
     const todayAppointments = myAppointments
       .filter(a => a.date === today && !['cancelado', 'nao_compareceu'].includes(a.status))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));

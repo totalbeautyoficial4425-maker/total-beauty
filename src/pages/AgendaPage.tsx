@@ -112,11 +112,13 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   } = useData();
 
   const isProfessional = currentUser?.role === 'profissional';
-  const myProfId = professionals.find(p => 
+  const myProf = professionals.find(p => 
     p.id === currentUser?.professionalId || 
     p.userId === currentUser?.id || 
-    p.name.toLowerCase() === currentUser?.name.toLowerCase()
-  )?.id;
+    p.name.toLowerCase() === currentUser?.name.toLowerCase() ||
+    (p.username && p.username.toLowerCase() === currentUser?.username?.toLowerCase())
+  );
+  const myProfId = myProf?.id || currentUser?.professionalId;
 
   // Active professionals only (Thálita is excluded)
   const activeProfessionals = useMemo(() => {
@@ -126,8 +128,27 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('grade_profissionais');
   const [selectedDate, setSelectedDate] = useState(() => getTodayDate());
 
-  // Filters
-  const [selectedProfessional, setSelectedProfessional] = useState<string>('todos');
+  // Filters - if professional, default immediately to their own agenda for mobile & desktop
+  const [selectedProfessional, setSelectedProfessional] = useState<string>(() => {
+    if (currentUser?.role === 'profissional') {
+      const match = professionals.find(p => 
+        p.id === currentUser?.professionalId || 
+        p.userId === currentUser?.id || 
+        p.name.toLowerCase() === currentUser?.name.toLowerCase() ||
+        (p.username && p.username.toLowerCase() === currentUser?.username?.toLowerCase())
+      );
+      if (match?.id) return match.id;
+      if (currentUser?.professionalId) return currentUser.professionalId;
+    }
+    return 'todos';
+  });
+
+  // Keep professional view pinned to their agenda when role is profissional
+  useEffect(() => {
+    if (isProfessional && myProfId && selectedProfessional === 'todos') {
+      setSelectedProfessional(myProfId);
+    }
+  }, [isProfessional, myProfId]);
   const [selectedStatus, setSelectedStatus] = useState<string>('todos');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -491,13 +512,44 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Quick toggle for professional users */}
+          {isProfessional && (
+            <div className="flex items-center bg-tb-ivory p-0.5 rounded-xl border border-tb-rose-light shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setSelectedProfessional(myProfId || '')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  selectedProfessional === myProfId
+                    ? 'bg-tb-rose-primary text-white shadow-xs'
+                    : 'text-tb-brown-soft hover:text-tb-brown-dark hover:bg-tb-beige-light'
+                }`}
+              >
+                Minha Agenda
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedProfessional('todos')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  selectedProfessional === 'todos'
+                    ? 'bg-tb-rose-primary text-white shadow-xs'
+                    : 'text-tb-brown-soft hover:text-tb-brown-dark hover:bg-tb-beige-light'
+                }`}
+              >
+                Todas
+              </button>
+            </div>
+          )}
+
           {/* Filter by specific professional */}
           <select
             value={selectedProfessional}
             onChange={e => setSelectedProfessional(e.target.value)}
             className="text-xs px-3 py-1.5 rounded-xl border border-tb-rose-light bg-tb-ivory text-tb-brown-dark font-medium"
           >
+            {isProfessional && myProf && (
+              <option value={myProf.id}>⭐ Minha Agenda ({myProf.name})</option>
+            )}
             <option value="todos">Todas as Profissionais ({activeProfessionals.length})</option>
             {activeProfessionals.map(p => (
               <option key={p.id} value={p.id}>
@@ -520,11 +572,16 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
             className="min-w-full"
             style={{ 
               display: 'grid',
-              gridTemplateColumns: `80px repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
+              gridTemplateColumns: displayedProfessionals.length === 1
+                ? '68px 1fr'
+                : `80px repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
             }}
           >
             {/* Header: Leftmost Time cell */}
-            <div className="sticky top-0 left-0 z-40 bg-tb-ivory p-3 border-b-2 border-r border-tb-rose-light text-center font-bold text-xs text-tb-brown-soft uppercase tracking-wider">
+            <div 
+              className="sticky top-0 left-0 z-40 bg-tb-ivory p-3 border-b-2 border-r border-tb-rose-light text-center font-bold text-xs text-tb-brown-soft uppercase tracking-wider"
+              style={{ width: displayedProfessionals.length === 1 ? '68px' : '80px' }}
+            >
               Horário
             </div>
 
@@ -560,6 +617,7 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
                   {/* Left Column: Time label */}
                   <div 
                     className="sticky left-0 z-20 bg-tb-white px-2 py-3 text-center border-b border-r border-tb-rose-light/40 text-xs font-bold text-tb-brown-soft h-[48px] flex items-center justify-center select-none shadow-2xs"
+                    style={{ width: displayedProfessionals.length === 1 ? '68px' : '80px' }}
                   >
                     {timeSlot}
                   </div>
@@ -589,10 +647,13 @@ export const AgendaPage: React.FC<AgendaPageProps> = ({
 
           {/* OVERLAY APPOINTMENT CARDS (POSITIONED PRECISELY BY TIME & DURATION) */}
           <div 
-            className="absolute top-[58px] left-[80px] right-0 bottom-0 pointer-events-none"
+            className="absolute top-[58px] right-0 bottom-0 pointer-events-none"
             style={{
+              left: displayedProfessionals.length === 1 ? '68px' : '80px',
               display: 'grid',
-              gridTemplateColumns: `repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
+              gridTemplateColumns: displayedProfessionals.length === 1
+                ? '1fr'
+                : `repeat(${displayedProfessionals.length}, minmax(180px, 1fr))`,
             }}
           >
             {displayedProfessionals.map(prof => {

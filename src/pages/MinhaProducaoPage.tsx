@@ -25,10 +25,15 @@ export const MinhaProducaoPage: React.FC = () => {
   const loggedProf = useMemo(() => {
     if (!currentUser) return null;
     if (currentUser.professionalId) {
-      return professionals.find(p => p.id === currentUser.professionalId) || null;
+      const byId = professionals.find(p => p.id === currentUser.professionalId);
+      if (byId) return byId;
     }
-    // Fallback: match by username
-    return professionals.find(p => p.username === currentUser.username) || null;
+    // Fallback: match by userId, username or name
+    return professionals.find(p => 
+      (p.userId && p.userId === currentUser.id) ||
+      (p.username && p.username.toLowerCase() === currentUser.username?.toLowerCase()) ||
+      (p.name && p.name.toLowerCase() === currentUser.name?.toLowerCase())
+    ) || null;
   }, [currentUser, professionals]);
 
   const [periodFilter, setPeriodFilter] = useState<'hoje' | 'semana' | 'mes' | 'todos'>('mes');

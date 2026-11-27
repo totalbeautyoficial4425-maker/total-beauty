@@ -3,20 +3,39 @@ import { put } from '@vercel/blob';
 
 const BLOB_FILE_NAME = 'total_beauty_db.json';
 const BLOB_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_db.json';
+const BLOB_VERSION_FILE_NAME = 'total_beauty_version.json';
+const BLOB_VERSION_PUBLIC_URL = 'https://ewrowlrdje7mt5fn.public.blob.vercel-storage.com/total_beauty_version.json';
+
+// In-memory cache across serverless invocations for ultra-fast response (< 20ms)
+let neonBlockedUntil = 0;
+let inMemoryVersion = null;
+let inMemoryUpdatedAt = null;
+let inMemoryData = null;
+let inMemoryDataExpires = 0;
+
+function checkAndHandleNeonError(err) {
+  const msg = String(err?.message || err || '');
+  if (msg.includes('402') || msg.includes('quota') || msg.includes('exceeded the quota')) {
+    // Block Neon queries for 1 hour so serverless functions respond instantly without waiting for Neon errors
+    neonBlockedUntil = Date.now() + 60 * 60 * 1000;
+    console.warn('Neon database quota reached (402). Seamlessly switching to ultra-fast Vercel Blob primary storage.');
+  }
+}
 
 function getSql() {
+  if (Date.now() < neonBlockedUntil) return null;
   const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!dbUrl) return null;
   try {
     return neon(dbUrl);
   } catch (e) {
-    console.warn('Neon connection setup failed:', e);
+    checkAndHandleNeonError(e);
     return null;
   }
 }
 
 async function ensureTable(sql) {
-  if (!sql) return;
+  if (!sql || Date.now() < neonBlockedUntil) return;
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS total_beauty_cloud_sync (
@@ -27,35 +46,23 @@ async function ensureTable(sql) {
       );
     `;
   } catch (e) {
-    console.warn('Ensure table failed (likely Neon quota exceeded):', e?.message);
+    checkAndHandleNeonError(e);
   }
 }
 
 /**
  * Load cloud database with dual-storage resilience:
- * 1. Try Neon Postgres.
- * 2. If Neon fails (e.g. 402 quota exceeded), fallback seamlessly to Vercel Blob.
+ * 1. Checks memory cache first.
+ * 2. Tries Vercel Blob (Ultra-reliable primary).
+ * 3. Tries Neon Postgres in background if available and unblocked.
  */
 async function loadDataFromCloud(sql) {
-  // 1. Try Neon Postgres if available
-  if (sql) {
-    try {
-      const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
-      if (rows.length > 0 && rows[0].data) {
-        const row = rows[0];
-        return {
-          source: 'neon',
-          data: row.data,
-          version: row.version || row.data?.version || null,
-          updatedAt: row.updated_at,
-        };
-      }
-    } catch (neonErr) {
-      console.warn('Neon load failed (using Vercel Blob fallback):', neonErr?.message);
-    }
+  // 1. Fast in-memory cache if fresh (under 2 seconds)
+  if (inMemoryData && Date.now() < inMemoryDataExpires) {
+    return inMemoryData;
   }
 
-  // 2. Fallback to Vercel Blob (Ultra-reliable, zero quota crashes)
+  // 2. Load from Vercel Blob (Indestructible primary storage)
   try {
     const ts = Date.now();
     const res = await fetch(`${BLOB_PUBLIC_URL}?t=${ts}`, {
@@ -63,29 +70,72 @@ async function loadDataFromCloud(sql) {
     });
     if (res.ok) {
       const blobData = await res.json();
-      return {
+      const ver = blobData?.version || blobData?.updatedAt || null;
+      const upAt = blobData?.updatedAt || null;
+      
+      inMemoryVersion = ver;
+      inMemoryUpdatedAt = upAt;
+      inMemoryData = {
         source: 'blob',
         data: blobData,
-        version: blobData?.version || blobData?.updatedAt || null,
-        updatedAt: blobData?.updatedAt || null,
+        version: ver,
+        updatedAt: upAt,
       };
+      inMemoryDataExpires = Date.now() + 2000;
+      return inMemoryData;
     }
   } catch (blobErr) {
     console.warn('Blob load fallback error:', blobErr?.message);
+  }
+
+  // 3. Optional fallback to Neon if Blob had network blip and Neon is not blocked
+  if (sql && Date.now() >= neonBlockedUntil) {
+    try {
+      const rows = await sql`SELECT data, version, updated_at FROM total_beauty_cloud_sync WHERE id = 'main' LIMIT 1;`;
+      if (rows.length > 0 && rows[0].data) {
+        const row = rows[0];
+        inMemoryVersion = row.version || row.data?.version || null;
+        inMemoryUpdatedAt = row.updated_at;
+        inMemoryData = {
+          source: 'neon',
+          data: row.data,
+          version: inMemoryVersion,
+          updatedAt: inMemoryUpdatedAt,
+        };
+        inMemoryDataExpires = Date.now() + 2000;
+        return inMemoryData;
+      }
+    } catch (neonErr) {
+      checkAndHandleNeonError(neonErr);
+    }
   }
 
   return { source: 'empty', data: null, version: null, updatedAt: null };
 }
 
 /**
- * Save cloud database with dual-storage resilience:
- * Always writes to Vercel Blob (guaranteed reliable), and attempts Neon in the background.
+ * Save cloud database:
+ * Always writes to Vercel Blob (guaranteed reliable), and attempts Neon in the background if unblocked.
  */
 async function saveDataToCloud(sql, payload, version) {
-  // 1. Always write to Vercel Blob as the indestructible primary/replica
+  const nowIso = payload?.updatedAt || new Date().toISOString();
+  
+  // Update in-memory cache immediately
+  inMemoryVersion = version;
+  inMemoryUpdatedAt = nowIso;
+  inMemoryData = {
+    source: 'blob',
+    data: payload,
+    version,
+    updatedAt: nowIso,
+  };
+  inMemoryDataExpires = Date.now() + 5000;
+
+  // 1. Write to Vercel Blob as the primary reliable store
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (blobToken) {
     try {
+      // Main DB file
       await put(BLOB_FILE_NAME, JSON.stringify(payload), {
         access: 'public',
         addRandomSuffix: false,
@@ -94,7 +144,16 @@ async function saveDataToCloud(sql, payload, version) {
         token: blobToken,
       });
 
-      // Redundant backup file on blob storage
+      // Lightweight version file for ultra-fast polling (< 50 bytes)
+      put(BLOB_VERSION_FILE_NAME, JSON.stringify({ version, updatedAt: nowIso }), {
+        access: 'public',
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        contentType: 'application/json',
+        token: blobToken,
+      }).catch(err => console.warn('Version blob put failed (non-fatal):', err?.message));
+
+      // Backup DB file
       put('total_beauty_db_backup.json', JSON.stringify(payload), {
         access: 'public',
         addRandomSuffix: false,
@@ -107,8 +166,8 @@ async function saveDataToCloud(sql, payload, version) {
     }
   }
 
-  // 2. Also save to Neon Postgres if available (ignoring 402/quota errors gracefully)
-  if (sql) {
+  // 2. Also save to Neon Postgres in background if unblocked
+  if (sql && Date.now() >= neonBlockedUntil) {
     try {
       await sql`
         INSERT INTO total_beauty_cloud_sync (id, data, version, updated_at)
@@ -119,7 +178,7 @@ async function saveDataToCloud(sql, payload, version) {
             updated_at = NOW();
       `;
     } catch (neonErr) {
-      console.warn('Neon save failed (Blob persisted safely):', neonErr?.message);
+      checkAndHandleNeonError(neonErr);
     }
   }
 }
@@ -232,6 +291,55 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const clientVersion = req.headers['x-sync-version'] || req.query?.current_version;
       const isVersionOnly = req.query?.version_only === 'true';
+
+      // ULTRA-FAST PATH 1: Instant in-memory check without touching Blob or DB (< 1ms)
+      if (clientVersion && inMemoryVersion && clientVersion === inMemoryVersion) {
+        return res.status(200).json({
+          success: true,
+          notModified: true,
+          version: inMemoryVersion,
+          updatedAt: inMemoryUpdatedAt
+        });
+      }
+
+      // ULTRA-FAST PATH 2: Lightweight 50-byte version-only check for mobile phones
+      if (isVersionOnly) {
+        if (inMemoryVersion) {
+          return res.status(200).json({
+            success: true,
+            version: inMemoryVersion,
+            updatedAt: inMemoryUpdatedAt
+          });
+        }
+
+        try {
+          const vRes = await fetch(`${BLOB_VERSION_PUBLIC_URL}?t=${Date.now()}`, {
+            headers: { 'Cache-Control': 'no-cache, no-store' }
+          });
+          if (vRes.ok) {
+            const vJson = await vRes.json();
+            if (vJson?.version) {
+              inMemoryVersion = vJson.version;
+              inMemoryUpdatedAt = vJson.updatedAt;
+              if (clientVersion && clientVersion === vJson.version) {
+                return res.status(200).json({
+                  success: true,
+                  notModified: true,
+                  version: vJson.version,
+                  updatedAt: vJson.updatedAt
+                });
+              }
+              return res.status(200).json({
+                success: true,
+                version: vJson.version,
+                updatedAt: vJson.updatedAt
+              });
+            }
+          }
+        } catch (vErr) {
+          // Fall through to loading full cloud state
+        }
+      }
 
       const cloudState = await loadDataFromCloud(sql);
 

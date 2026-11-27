@@ -82,7 +82,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     const prof = professionals.find(p => 
       p.id === currentUser.professionalId || 
       p.userId === currentUser.id || 
-      p.name.toLowerCase() === currentUser.name.toLowerCase()
+      p.name.toLowerCase() === currentUser.name.toLowerCase() ||
+      (p.username && p.username.toLowerCase() === currentUser.username?.toLowerCase())
     );
     const profId = prof?.id || currentUser.professionalId || '';
     const myMetrics = getProfessionalMetrics(profId);
